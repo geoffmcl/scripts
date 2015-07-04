@@ -43,13 +43,13 @@ if (defined $ENV{'COMPUTERNAME'}) {
     } else {
         # assumed in DELL01 - connect to WIN7-PC
         $HOST = "192.168.1.33"; # WIN7-PC machine
-        $PORT = 5556;
+        $PORT = 5557;
         $CONMSG = "Assumed in DELL01 connection to WIN7-PC ";
     }
 } else {
     # assumed in Ubuntu - connect to DELL01
     $HOST = "192.168.1.11"; # DELL01
-    $PORT = 5557;
+    $PORT = 5551;
     $CONMSG = "Assumed in Ubuntu DELL02 connection to DELL01 ";
 }
 
