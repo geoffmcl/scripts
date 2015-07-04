@@ -13,8 +13,9 @@ use IO::Socket;
 use Term::ReadKey;
 use Time::HiRes qw( usleep gettimeofday tv_interval );
 use Math::Trig;
-# my $perl_dir = 'C:\GTools\perl';
-my $perl_dir = cwd();
+my $cwd = cwd();
+my $os = $^O;
+my ($pgmname,$perl_dir) = fileparse($0);
 $perl_dir .= "/temp";
 # unshift(@INC, $perl_dir);
 require 'lib_utils.pl' or die "Unable to load 'lib_utils.pl'! Check location and \@INC content.\n";
@@ -22,12 +23,7 @@ require 'fg_wsg84.pl' or die "Unable to load fg_wsg84.pl ...\n";
 require "Bucket2.pm" or die "Unable to load Bucket2.pm ...\n";
 # log file stuff
 my ($LF);
-my $pgmname = $0;
-if ($pgmname =~ /(\\|\/)/) {
-    my @tmpsp = split(/(\\|\/)/,$pgmname);
-    $pgmname = $tmpsp[-1];
-}
-my $outfile = $perl_dir."\\temp.$pgmname.txt";
+my $outfile = $perl_dir."/temp.$pgmname.txt";
 open_log($outfile);
 
 my $VERS = "0.0.3 2015-06-30";
@@ -115,8 +111,6 @@ my $dbg_roll = 1;   # show 'roll' on each display
 
 ### program variables
 my @warnings = ();
-my $cwd = cwd();
-my $os = $^O;
 
 my $FGFS_IO; # Telnet IO handle
 
