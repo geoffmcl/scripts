@@ -26,7 +26,8 @@ my ($LF);
 my $outfile = $perl_dir."/temp.$pgmname.txt";
 open_log($outfile);
 
-my $VERS = "0.0.3 2015-06-30";
+my $VERS = "0.0.4 2015-07-04";
+# my $VERS = "0.0.3 2015-06-30";
 # my $VERS = "0.0.2 2012-04-03";
 # my $VERS = "0.0.1 2011-02-16";
 # defaults
@@ -689,13 +690,15 @@ sub init_runway_array() {
 sub fgfs_connect($$$) {
 	my ($host,$port,$timeout) = @_;
 	my $socket;
+    my $to = $timeout;
 	STDOUT->autoflush(1);
 	prtt("Connect $host, $port, timeout $timeout secs ");
 	while ($timeout--) {
 		if ($socket = IO::Socket::INET->new(
 				Proto => 'tcp',
 				PeerAddr => $host,
-				PeerPort => $port)) {
+				PeerPort => $port,
+                Timeout => $to)) {
 			prt(" DONE.\n");
 			$socket->autoflush(1);
 			sleep 1;
@@ -5100,6 +5103,7 @@ Exit:
 
 #########################################
 ### MAIN ###
+prt("$pgmname: version $VERS\n");
 parse_args(@ARGV);
 init_runway_array();
 $ref_circuit_hash = get_circuit_hash();
