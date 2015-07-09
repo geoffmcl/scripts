@@ -16,6 +16,7 @@ use Math::Trig;
 my $cwd = cwd();
 my $os = $^O;
 my ($pgmname,$perl_dir) = fileparse($0);
+$perl_dir .= s/(\\|\/)$//;
 $perl_dir .= "/temp";
 # unshift(@INC, $perl_dir);
 require 'lib_utils.pl' or die "Unable to load 'lib_utils.pl'! Check location and \@INC content.\n";
@@ -33,7 +34,7 @@ my $VERS = "0.0.4 2015-07-04";
 # defaults
 # my $HOST = "localhost";
 my ($HOST,$PORT,$CONMSG);
-my $connect_win7 = 0;
+my $connect_win7 = 1;
 if (defined $ENV{'COMPUTERNAME'}) {
     if (!$connect_win7 && $ENV{'COMPUTERNAME'} eq 'WIN7-PC') {
         # connect to Ubuntu in DELL02
@@ -81,7 +82,7 @@ my $short_time_stg = 1; # shorten 00:00:59 to 59s
 my $target_decent = 500; # feet per minute decent rate target
 my $set_run_lights = 1; # auto turn on RUNNING lights
 my $min_eng_rpm = 0; #400;
-my $tmp_circuit = $perl_dir."\\tempcircuit.txt";
+my $tmp_circuit = $perl_dir."/tempcircuit.txt";
 my $use_new_getcpt = 1; # try ON - oops need moer code to protect from next change
 
 my $stand_glide_degs = 3; # degrees
@@ -93,7 +94,8 @@ my $bad_latlon = 200;
 my $in_lat = $bad_latlon;
 my $in_lon = $bad_latlon;
 my $graf_file = "tempgraf.gif";
-my $graf_bat = $perl_dir."\\tempgraf.bat";
+my $graf_bat = $perl_dir."/tempgraf.bat";
+my $graf_xg  = $perl_dir."/tempgraf.xg";
 my $min_turn_diff = 6; # 5;    # was 1
 my $min_turn_diff2 = 3; # another indicator added, using indicate heading
 my $target_lat = 0; # like ${$rl}{$targ}[$OL_LAT];
@@ -655,8 +657,10 @@ sub set_runway_ends_and_patt($$$$$) {
 
     @{$rpatts} = ();
     # add notional RIGHT side circuit first
+    #                 0,      1,      2,      3,      4,      5,       6,     7,      8,    9,    10    11
     push(@{$rpatts}, [$plat11,$plon11,$plat12,$plon12,$plat13,$plon13,$plat21,$plon21,$clat,$clon,$rlen,$rhdg]);
     # then notional LEFT size circuit
+    #                 0,      1,      2,      3,      4,      5,       6,     7,      8,    9,    10    11
     push(@{$rpatts}, [$plat21,$plon21,$plat22,$plon22,$plat23,$plon23,$plat11,$plon11,$clat,$clon,$rlen,$hdgr]);
 
 }
@@ -2942,8 +2946,9 @@ sub head_for_target($$) {
         $target_lat = ${$rl}{$targ}[$OL_LAT];
         $target_lon = ${$rl}{$targ}[$OL_LON];
         fg_geo_inverse_wgs_84 ($lat,$lon,$target_lat,$target_lon,\$az1,\$az2,\$dist);
-        $az2 = get_mag_hdg_from_true($az1);
-        set_hdg_bug_force($az2);
+        set_hdg_bug_force($az1);
+        # $az2 = get_mag_hdg_from_true($az1);
+        # set_hdg_bug_force($az2);
         $curr_target = $targ;
         $head_target = 1;
 
@@ -3434,6 +3439,7 @@ sub norm_vector_length2($$) {
     return sqrt(scalar_dot_product2($vx, $vy, $vx, $vy));
 }
 
+
 sub paint_user_points($$) {
     my ($rh,$show) = @_;
     my ($tllat,$tllon,$bllat,$bllon,$brlat,$brlon,$trlat,$trlon);
@@ -3488,6 +3494,12 @@ sub paint_user_points($$) {
     my ($rrwys,$rpatts);
     my ($elat1,$elon1,$elat2,$elon2);
     my ($plat11,$plon11,$plat12,$plon12,$plat13,$plon13,$plat21,$plon21);
+    my ($plat22,$plon22,$plat23,$plon23);
+    my $rwycnt = 0;
+    my $rwylat = 0;
+    my $rwylon = 0;
+
+    my $xg = "# basic points\n";
     if ((defined ${$rh}{'runways'})&&(defined ${$rh}{'pattern'})&&(defined ${$rh}{'airport'})) {
         $rrwys = ${$rh}{'runways'};
         $rpatts = ${$rh}{'pattern'};
@@ -3502,6 +3514,9 @@ sub paint_user_points($$) {
             $elon2 = ${$rrwys}[$i][$RW_RLON];
             set_min_max(\$maxlat,\$minlat,\$maxlon,\$minlon,$elat1,$elon1);
             set_min_max(\$maxlat,\$minlat,\$maxlon,\$minlon,$elat2,$elon2);
+            $rwylat += ($elat1 + $elat2) / 2;   # add centers
+            $rwylon += ($elon1 + $elon2) / 2;
+            $rwycnt++;
         }
         for ($i = 0; $i < $pcnt; $i++) {
             $plat11 = ${$rpatts}[$i][0];
@@ -3522,6 +3537,16 @@ sub paint_user_points($$) {
     ${$rh}{'min_lat'} = $minlat;
     ${$rh}{'max_lon'} = $maxlon;
     ${$rh}{'min_lon'} = $minlon;
+    # XG generation
+    ##############################################
+    $xg .= "color gray\n";
+    $xg .= "$minlon $minlat\n";
+    $xg .= "$minlon $maxlat\n";
+    $xg .= "$maxlon $maxlat\n";
+    $xg .= "$maxlon $minlat\n";
+    $xg .= "$minlon $minlat\n";
+    $xg .= "NEXT\n";
+    ###############################################
     my $lon_factor = 2;
     $latdegs = $maxlat - $minlat;
     $londegs = ($maxlon - $minlon) * $lon_factor;
@@ -3543,7 +3568,7 @@ sub paint_user_points($$) {
     ${$rh}{'sq_wid_adj'} = $sqwid;
     ${$rh}{'sq_hgt_adj'} = $sqhgt;
     my ($w_dpp,$h_dpp,$w_ind1,$h_ind1,$w_ind2,$h_ind2,$w_ind3,$h_ind3,$w_ind4,$h_ind4,$msg);
-    my ($h_indu,$w_indu,$h_indt,$w_indt);
+    my ($h_indu,$w_indu,$h_indt,$w_indt,$i2);
     my ($x_txt,$y_txt,$txt);
     $w_dpp = ($sqwid / $londegs) * $lon_factor;
     $h_dpp = $sqhgt / $latdegs;
@@ -3556,7 +3581,9 @@ sub paint_user_points($$) {
         if ($pcnt) {
             ${$rh}{'-stroke'} = "SlateGray";
             $msg .= "-stroke SlateGray ";
+            $xg .= "# Addition of $pcnt patterns - notional L/R sides\n";
             for ($i = 0; $i < $pcnt; $i++) {
+                $i2 = $i + 1;
                 $plat11 = ${$rpatts}[$i][0];
                 $plon11 = ${$rpatts}[$i][1];
                 $plat12 = ${$rpatts}[$i][2];
@@ -3567,6 +3594,72 @@ sub paint_user_points($$) {
                 $plon21 = ${$rpatts}[$i][7];
                 $clat   = ${$rpatts}[$i][8];
                 $clon   = ${$rpatts}[$i][9];
+                if (($i + 1) < $pcnt) {
+                    $plat22 = ${$rpatts}[$i+1][2];
+                    $plon22 = ${$rpatts}[$i+1][3];
+                    $plat23 = ${$rpatts}[$i+1][4];
+                    $plon23 = ${$rpatts}[$i+1][5];
+                }
+                # @{$rpatts} = ();
+                ## add notional RIGHT side circuit first
+                ##                 0,      1,      2,      3,      4,      5,       6,     7,      8,    9,    10    11
+                # push(@{$rpatts}, [$plat11,$plon11,$plat12,$plon12,$plat13,$plon13,$plat21,$plon21,$clat,$clon,$rlen,$rhdg]);
+                ## then notional LEFT size circuit
+                ##                 0,      1,      2,      3,      4,      5,       6,     7,      8,    9,    10    11
+                # push(@{$rpatts}, [$plat21,$plon21,$plat22,$plon22,$plat23,$plon23,$plat11,$plon11,$clat,$clon,$rlen,$hdgr]);
+
+                if ($switch_circuit) {
+                    # At YGIL, this is a 15 circuit (the prevailing wind! SSE...
+                    $tllat = $plat12;
+                    $tllon = $plon12;
+                    $bllat = $plat13;
+                    $bllon = $plon13;
+                    $brlat = $plat21;
+                    $brlon = $plon21;
+                    $trlat = $plat11;
+                    $trlon = $plon11;
+                    $active_runway = '15';
+                } else {
+                    # At YGIL, this is a 33 circuit
+                    $tllat = $plat22; #-31.684063;
+                    $tllon = $plon22; #148.614120;
+                    $bllat = $plat23; #-31.723495;
+                    $bllon = $plon23; #148.633003;
+                    $brlat = $plat11; #-31.716778;
+                    $brlon = $plon11; #148.666992;
+                    $trlat = $plat21; #-31.672960;
+                    $trlon = $plon21; #148.649139;
+                    $active_runway = '33';
+                }
+
+                if ( !($i2 & 0x02) ) {
+                    # paint ONLY the even pairs
+                    next;   # These are only in pairs - LEFT/RIGHT
+                }
+
+                ####################################################
+                # XG generation
+                $xg .= "color white\n";
+                # if ($show) {
+                    $xg .= "anno $plon11 $plat11 TR\n";
+                    $xg .= "$plon11 $plat11\n";
+                    $xg .= "anno $plon12 $plat12 TL\n";
+                    $xg .= "$plon12 $plat12\n";
+                    $xg .= "anno $plon13 $plat13 BL\n";
+                    $xg .= "$plon13 $plat13\n";
+                    $xg .= "anno $plon21 $plat21 BR\n";
+                    $xg .= "$plon21 $plat21\n";
+                    $xg .= "$plon11 $plat11\n";
+                # } else {
+                #    $xg .= "# rect BL $bllon $bllat, TL $tllon $tllat, TR $trlon $trlat, BR $brlon $brlat\n";
+                #    $xg .= "$bllon $bllat\n";
+                #    $xg .= "$tllon $tllat\n";
+                #    $xg .= "$trlon $trlat\n";
+                #    $xg .= "$brlon $brlat\n";
+                #    $xg .= "$bllon $bllat\n";
+                #}
+                $xg .= "NEXT\n";
+                #####################################################
                 add_img_line($rh,$plat11,$plon11,$plat12,$plon12,1);
                 add_img_line($rh,$plat12,$plon12,$plat13,$plon13,1);
                 add_img_line($rh,$plat13,$plon13,$plat21,$plon21,1);
@@ -3592,6 +3685,35 @@ sub paint_user_points($$) {
             $elon1 = ${$rrwys}[$i][$RW_LLON];
             $elat2 = ${$rrwys}[$i][$RW_RLAT];
             $elon2 = ${$rrwys}[$i][$RW_RLON];
+            my ($hdg1,$hdg2,$dist);
+            fg_geo_inverse_wgs_84 ($elat1,$elon1,$elat2,$elon2,\$hdg1,\$hdg2,\$dist);
+            # $dist = $dist * $SG_METER_TO_FEET;
+            $hdg2 = $hdg1;
+            $hdg1 += 90;
+            $hdg1 -= 360 if ($hdg1 > 360);
+            $hdg2 -= 90;
+            $hdg2 += 360 if ($hdg2 < 0);
+            # XG generation
+            my $width = 150 * $SG_FEET_TO_METER / 2;    # maybe this is BIT large for YGIL
+            ####################################################################
+            # XG generation - runway center blue, outline red
+            $xg .= "color blue\n";
+            $xg .= "$elon1 $elat1\n";
+            $xg .= "$elon2 $elat2\n";
+            $xg .= "NEXT\n";
+            my ($clat1,$clon1,$clat2,$clon2,$clat3,$clon3,$clat4,$clon4,$eaz1,$eaz2);
+            fg_geo_direct_wgs_84( $elat1, $elon1, $hdg1, $width, \$clat1, \$clon1, \$eaz1 );
+            fg_geo_direct_wgs_84( $elat1, $elon1, $hdg2, $width, \$clat2, \$clon2, \$eaz2 );
+            fg_geo_direct_wgs_84( $elat2, $elon2, $hdg1, $width, \$clat3, \$clon3, \$eaz1 );
+            fg_geo_direct_wgs_84( $elat2, $elon2, $hdg2, $width, \$clat4, \$clon4, \$eaz2 );
+            $xg .= "color red\n";
+            $xg .= "$clon1 $clat1\n";
+            $xg .= "$clon2 $clat2\n";
+            $xg .= "$clon4 $clat4\n";
+            $xg .= "$clon3 $clat3\n";
+            $xg .= "$clon1 $clat1\n";
+            $xg .= "NEXT\n";
+            #####################################################################
             $w_ind1 = int((($elon1 - $minlon) * $w_dpp) + 0.5); # get degrees/pixels from left edge
             $h_ind1 = int((($elat1 - $minlat) * $h_dpp) + 0.5); # get degrees/pixels from bottom edge
             $h_ind1 = $sqhgt - $h_ind1;
@@ -3697,8 +3819,17 @@ sub paint_user_points($$) {
     }
     $msg .= "$graf_file\n";
     $msg .= "imdisplay $graf_file\n";
+    $msg .= "start $graf_file\n";
     write2file($msg,$graf_bat);
     prt("Written $graf_bat\n");
+    if ($rwycnt) {
+        $rwylat /= $rwycnt;
+        $rwylon /= $rwycnt;
+        $xg .= "anno $rwylon $rwylat YGIL Airport circuit $active_runway\n";
+    }
+    write2file($xg,$graf_xg);
+    prt("Written $graf_xg\n");
+
     if ($show) {
         set_lat_stg(\$maxlat);
         set_lat_stg(\$minlat);
@@ -3710,6 +3841,7 @@ sub paint_user_points($$) {
         prt("BR $minlat,$maxlon\n");
         prt("TR $maxlat,$maxlon\n");
     }
+    ### pgm_exit(1,"TEMP EXIT\n");
 }
 
 sub point_in_circuit($$$$) {
@@ -4293,8 +4425,9 @@ sub process_circuit($) {
         # already done in process_lat_lon()
         # fg_geo_inverse_wgs_84 ($lat,$lon,$targ_lat,$targ_lon,\$az1,\$az2,\$dist);
         #####################################################
+        set_hdg_bug_force($az1);
         $az2 = get_mag_hdg_from_true($az1);
-        set_hdg_bug_force($az2);
+        ### set_hdg_bug_force($az2);
         ${$rch}{'target_heading_t'} = $az1;
         ${$rch}{'target_heading_m'} = $az2;
         #####################################################
@@ -4336,10 +4469,14 @@ sub process_circuit($) {
             ${$rch}{'last_dist'} = $dist;
             $az2 = get_mag_hdg_from_true($az1);
             $done_turn_done = 0;
-            if (abs($requested_hb - $az2) > 5) { # was just 1!!!
+            if (abs($requested_hb - $az1) > 5) { # was just 1!!!
                 # only if greater than 5 degrees needed...
-                set_hdg_bug($az2);
+                set_hdg_bug($az1);
             }
+            #if (abs($requested_hb - $az2) > 5) { # was just 1!!!
+            #    # only if greater than 5 degrees needed...
+            #    set_hdg_bug($az2);
+            #}
             # turn completed - I think
             ${$rch}{'last_time'} = $ct;
             ${$rch}{'begin_time'} = $ct;
@@ -4440,7 +4577,8 @@ sub process_circuit($) {
     ################################################
     my $newhdg = get_mag_hdg_from_true($az1);
     ###set_hdg_bug($newhdg);
-    set_hdg_bug_force($newhdg);
+    ###set_hdg_bug_force($newhdg);
+    set_hdg_bug_force($az1);
     $az2 = $newhdg;
     ################################################
     ${$rch}{'target_lat'} = $ntlat; 
@@ -5109,6 +5247,7 @@ init_runway_array();
 $ref_circuit_hash = get_circuit_hash();
 # ${$rch}{'TL'} = [$az1,$az2,$dist]; etc...
 get_runways_and_pattern($ref_circuit_hash,'YGIL');
+paint_user_points($ref_circuit_hash,0);
 main_loop();
 
 pgm_exit(0,"Normal exit(0)");
