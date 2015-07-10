@@ -164,7 +164,6 @@ sub get_dist_stg_km($) {
     return $km;
 }
 
-
 # fetch the above global - which should not be referred to directly
 sub get_curr_posit() { return \%m_curr_posit; }
 sub get_curr_env() { return \%m_curr_environ; }
@@ -935,6 +934,59 @@ sub get_curr_brake_stg() {
 
 #############################################################################
 
+####################################################################
+### Lights
+my $ctl_nav_lights_prop = "/controls/lighting/nav-lights";  # bool
+my $ctl_beacon_prop = "/controls/lighting/beacon";  # bool
+my $ctl_strobe_prop = "/controls/lighting/strobe";  # bool
+my %ctrl_lighting = ();
+sub fgfs_get_ctrl_lighting() {
+    return \%ctrl_lighting;
+}
+sub fgfs_get_nav_light($) {
+    my $ref = shift;
+    fgfs_get($ctl_nav_lights_prop, $ref) or get_exit(-2);  # double
+    return 1;
+}
+sub fgfs_set_nav_light($) {
+    my $val = shift;
+    fgfs_set($ctl_nav_lights_prop, $val) or get_exit(-2);  # double
+    return 1;
+}
+
+sub fgfs_get_beacon($) {
+    my $ref = shift;
+    fgfs_get($ctl_beacon_prop, $ref) or get_exit(-2);  # double
+    return 1;
+}
+sub fgfs_set_beacon($) {
+    my $val = shift;
+    fgfs_set($ctl_beacon_prop, $val) or get_exit(-2);  # double
+    return 1;
+}
+sub fgfs_get_strobe($) {
+    my $ref = shift;
+    fgfs_get($ctl_strobe_prop, $ref) or get_exit(-2);  # double
+    return 1;
+}
+sub fgfs_set_strobe($) {
+    my $val = shift;
+    fgfs_set($ctl_strobe_prop, $val) or get_exit(-2);  # double
+    return 1;
+}
+
+sub fgfs_get_lighting() {
+    my ($nl,$bk,$sb);
+    fgfs_get_nav_light(\$nl);
+    fgfs_get_beacon(\$bk);
+    fgfs_get_strobe(\$sb);
+    my $rl = fgfs_get_ctrl_lighting();
+    ${$rl}{'time'} = time();
+    ${$rl}{'navlight'} = $nl;
+    ${$rl}{'beacon'} = $bk;
+    ${$rl}{'strobe'} = $sb;
+    return $rl;
+}
 
 
 ###############################################################################
