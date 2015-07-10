@@ -85,9 +85,12 @@ my $min_eng_rpm = 0; #400;
 my $tmp_circuit = $perl_dir."/tempcircuit.txt";
 my $use_new_getcpt = 1; # try ON - oops need moer code to protect from next change
 
+#####################################################################
+### control the size of the circuit
 my $stand_glide_degs = 3; # degrees
 my $stand_patt_alt = 1000; # feet
 my $stand_cross_nm = 2.1; # nm, but this will depend on the aircraft
+#####################################################################
 
 # from solve.pl
 my $bad_latlon = 200;
