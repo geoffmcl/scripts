@@ -42,6 +42,7 @@ my $VERS = "0.0.5 2015-07-06";
 my $load_log = 0;
 my $in_file = 'ygil-L.xg';
 my $tmp_xg_out = $temp_dir."/temp.$pgmname.xg";
+my $tmp_wp_out = $temp_dir."/tempwaypt.xg";
 my $verbosity = 0;
 my $out_file = '';
 # my $HOST = "localhost";
@@ -86,6 +87,13 @@ my $def_file = 'def_file';
 my @warnings = ();
 my $SG_NM_TO_METER = 1852;
 my $SG_METER_TO_NM = 0.0005399568034557235;
+# /** Feet to Meters */
+my $SG_FEET_TO_METER = 0.3048;
+# /** Meters to Feet */
+my $SG_METER_TO_FEET = 3.28083989501312335958;
+
+# forward
+sub get_hdg_diff($$);
 
 sub VERB1() { return $verbosity >= 1; }
 sub VERB2() { return $verbosity >= 2; }
@@ -210,6 +218,15 @@ sub get_type($) {
 }
 
 my ($mreh_circuithash,$ref_circuit_hash);
+my ($g_elat1,$g_elon1,$g_elat2,$g_elon2,$g_rwy_az1);
+
+sub got_runway_coords() {
+    if (defined $g_elat1 && defined $g_elon1 && defined $g_elat2 && defined $g_elon2) {
+        return 1;
+    }
+    return 0;
+}
+
 sub show_ref_circuit_hash() {
     if (!defined $mreh_circuithash) {
         return undef;
@@ -239,6 +256,27 @@ sub show_ref_circuit_hash() {
         prt("Color $type ($key) - $cnt sets, $tot_pts points\n");
         prt("$msg\n");
     }
+    if (got_runway_coords()) {
+        $elat1 = $g_elat1;
+        $elon1 = $g_elon1;
+        $elat2 = $g_elat2;
+        $elon2 = $g_elon2;
+        my ($az1,$az2,$distm,$distf);
+        fg_geo_inverse_wgs_84 ($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$distm);
+        $g_rwy_az1 = $az1;
+        $distf = int($SG_METER_TO_FEET * $distm);
+        set_lat_stg(\$elat1);
+        set_lon_stg(\$elon1);
+        set_lat_stg(\$elat2);
+        set_lon_stg(\$elon2);
+        my $rwy1 = int($az1 / 10);
+        $rwy1 = '0'.$rwy1 if ($rwy1 < 10);
+        set_decimal1_stg(\$az1);
+        prt("Runway: $distf ft, $rwy1~ $elat1,$elon1 $elat2,$elon2 $az1\n");
+    } else {
+        prt("Warning: Did NOT set a RUNWAY!!!\n");
+    }
+    ### pgm_exit(1,"TEMP EXIT\n");
     return $rch;
 }
 
@@ -256,6 +294,17 @@ sub get_circuit_xg() {
     $xg .= "$br_lon $br_lat\n";
     $xg .= "$tr_lon $tr_lat\n";
     $xg .= "NEXT\n";
+    if (got_runway_coords()) {
+        my ($elat1,$elon1,$elat2,$elon2);
+        $elat1 = $g_elat1;
+        $elon1 = $g_elon1;
+        $elat2 = $g_elat2;
+        $elon2 = $g_elon2;
+        $xg .= "color blue\n";
+        $xg .= "$elon1 $elat1\n";
+        $xg .= "$elon2 $elat2\n";
+        $xg .= "NEXT\n";
+    }
     return $xg;
 }
 
@@ -283,6 +332,7 @@ sub process_in_file($) {
     my @points = ();
     my %h = ();
     my $circ_cnt = 0;
+    my $cl_cnt = 0;
     ###write_circuit_xg($tmpxg);
     foreach $line (@lines) {
         chomp $line;
@@ -357,6 +407,16 @@ sub process_in_file($) {
                     $br_lon = $lon;
                 }
                 $circ_cnt++;
+            } elsif ($type eq 'center line') {
+                if ($cl_cnt & 0x01) {
+                    $g_elat2 = $lat;
+                    $g_elon2 = $lon;
+                } else {
+                    $g_elat1 = $lat;
+                    $g_elon1 = $lon;
+                }
+                $cl_cnt++;
+
             }
 
         }
@@ -511,7 +571,7 @@ sub show_position($) {
     } elsif ((defined $hb) && length($hb)) {
         $hb = "?$hb?!";
     } else {
-        fgfs_set_hdg_bug($mag);
+        #### fgfs_set_hdg_bug($mag);
     }
     set_int_stg(\$alt);
     set_lat_stg(\$lat);
@@ -585,7 +645,7 @@ sub show_position($) {
     }
     if ($show_msg) {
         my $rch = $ref_circuit_hash;
-        if (defined ${$rch}{'target_eta'}) {
+        if ($circuit_mode && $circuit_flag && defined ${$rch}{'target_eta'}) {
             if ($turn eq 's') {
                 # in stable level flight - check for course change
                 $eta = ${$rch}{'target_eta'};
@@ -610,6 +670,9 @@ sub show_position($) {
                         }
                     }
                 }
+                if (${$rch}{'wp_mode'}) {
+                    $eta = "wp mode";
+                }
             }
         }
         $hdg  = ${$rp}{'hdg'};
@@ -618,13 +681,120 @@ sub show_position($) {
         $mag  = ${$rp}{'mag'};  # is this really magnetic - # /orientation/heading-magnetic-deg
         set_hdg_stg(\$hdg);
         set_hdg_stg(\$mag);
-        prt("$ctm: $agl hdg=".$hdg."t/".$mag."m/${tmp}i,b=$hb $msg $eta\n");
+        prt("$ctm: $agl hdg=".$hdg."t/".$mag."m/${tmp}i/${hb}b $msg $eta\n");
     }
 
     $sp_prev_msg = $msg;    # save last message
     
 }
 
+sub show_takeoff($) {
+    my ($rp) = @_;
+    my ($ilon,$ilat,$ialt,$ihdg,$iagl,$ihb,$imag,$iaspd,$igspd,$iind);
+    $ilon = ${$rp}{'lon'};
+    $ilat = ${$rp}{'lat'};
+    $ialt = ${$rp}{'alt'};
+    $ihdg = ${$rp}{'hdg'};
+    $iagl = ${$rp}{'agl'};
+    $ihb  = ${$rp}{'bug'};
+    # this should be the runway heading - NEEDS TO BE CHECKED
+    $imag = ${$rp}{'mag'};  # /orientation/heading-magnetic-deg
+    $iaspd = ${$rp}{'aspd'}; # Knots
+    $igspd = ${$rp}{'gspd'}; # Knots
+    my $prev_hdg = $ind_hdg_degs;
+    update_hdg_ind(); # this is changing fast in a TURN
+    my $diff = $prev_hdg - $ind_hdg_degs;
+    my $turn = 's';
+    if (($diff < -1.0)||($diff > 1.0)) {
+        $turn = 'InTurn';
+    } else {
+        $turn = 's';
+    }
+
+    # 1 - is engine running?
+    my $re = fgfs_get_engines();
+    my $run = ${$re}{'running'};
+    my $rpm = ${$re}{'rpm'};
+    my $thr = ${$re}{'throttle'};
+    my $mag = ${$re}{'magn'}; # int 3=BOTH 2=LEFT 1=RIGHT 0=OFF
+    my $mix = ${$re}{'mix'}; # $ctl_eng_mix_prop = "/control/engines/engine/mixture";  # double 0=0% FULL Lean, 1=100% FULL Rich
+    my $idle = $thr;
+    my $rl = fgfs_get_lighting();
+    my ($navL,$beak,$strb);
+    # fgfs_get_nav_light(\$nl);
+    # fgfs_get_beacon(\$bk);
+    # fgfs_get_strobe(\$sb);
+    # my $rl = fgfs_get_ctrl_lighting();
+    # ${$rl}{'time'} = time();
+    $navL = ${$rl}{'navlight'};
+    $beak = ${$rl}{'beacon'};
+    $strb = ${$rl}{'strobe'};
+    $iind = $ind_hdg_degs;
+    ### set_decimal1_stg(\$tmp);
+    set_hdg_stg(\$iind);
+
+    my ($rf,$iai,$iait,$iel,$ielt,$irud,$irudt,$iflp,$flap);
+    $rf = fgfs_get_flight();
+    # get_flt_ailerons(\$ai);
+    # get_flt_ailerons_trim(\$ait);
+    # get_flt_elevator(\$el);
+    # get_flt_elevator_trim(\$elt);
+    # get_flt_rudder(\$rud);
+    # get_flt_rudder_trim(\$rudt);
+    # get_flt_flaps(\$flp);
+    # ${$rf}{'time'} = time();
+    $iai  = ${$rf}{'ai'};    # 1 = right, -0.9 = left
+    $iait = ${$rf}{'ait'};
+    $iel  = ${$rf}{'el'};    # 1 = down, to -1(-0.9) = up (climb)
+    $ielt = ${$rf}{'elt'};
+    $irud = ${$rf}{'rud'};   # 1 = right, to -1(0.9) left
+    $irudt= ${$rf}{'rudt'};
+    $iflp = ${$rf}{'flap'};  # 0 = none, 0.333 = 5 degs, 0.666 = 10, 1 = full extended
+    $flap = "0";
+    if ($iflp >= 0.3) {
+        if ($iflp >= 0.6) {
+            if ($iflp >= 0.9) {
+                $flap = 'full'
+            } else {
+                $flap = '10';
+            }
+        } else {
+            $flap = '5';
+        }
+    }
+    # mess for display...
+    $iai   = int($iai * 10) / 10;
+    $iait  = int($iait * 10) / 10;
+    $iel   = int($iel * 10) / 10;
+    $ielt  = int($ielt * 10) / 10;
+    $irud  = int($irud * 10) / 10;
+    $irudt = int($irudt * 10) / 10;
+    set_decimal1_stg(\$iai);
+    set_decimal1_stg(\$iait);
+    set_decimal1_stg(\$iel);
+    set_decimal1_stg(\$ielt);
+    set_decimal1_stg(\$irud);
+    set_decimal1_stg(\$iflp);
+    set_decimal1_stg(\$irudt);
+
+    set_int_stg(\$rpm);
+    set_decimal1_stg(\$thr);
+    set_int_stg(\$ialt);    # = ${$rp}{'alt'};
+    set_hdg_stg(\$ihdg);    # = ${$rp}{'hdg'};
+    set_hdg_stg(\$iagl);    # = ${$rp}{'agl'};
+    set_hdg_stg(\$ihb);     #  = ${$rp}{'bug'};
+    set_hdg_stg(\$imag);    # = ${$rp}{'mag'};  # /orientation/heading-magnetic-deg
+    #### $iaspd = ${$rp}{'aspd'}; # Knots
+    set_int_stg(\$igspd);   # = ${$rp}{'gspd'}; # Knots
+    set_int_stg(\$ialt);
+    set_int_stg(\$iagl);
+    prtt("$iagl/$ialt flt a=$iai/$iait e=$iel/$ielt r=$irud/$irudt, f=$iflp($flap) ".
+        "- $rpm/$thr/$igspd - ${imag}m/${ihdg}t/${iind}i/${ihb}b\n");
+    ###prtt("Flt e=$iel a=$iai/$irud - $rpm/$thr/$igspd - ${imag}m/${ihdg}t/${iind}i/${ihb}b\n");
+
+
+
+}
 
 #######################################################################
 ########### WAIT for engine start ####### need motor for flight #######
@@ -743,7 +913,8 @@ sub wait_for_alt_hold() {
             $ctm += $dtm;
             $rp = fgfs_get_position();
             show_position($rp);
-            prtt("Cycle waiting for altitude hold... $ctm secs\n") if (!$ok);
+            ##prtt("Cycle waiting for altitude hold... $ctm secs\n") if (!$ok);
+            show_takeoff($rp);
             $btm = $ntm;
         }
     }
@@ -882,7 +1053,17 @@ sub get_circuit_hash() {
     $h{'suggest_hdg'} = 0;
     $h{'suggest_chg'} = 0;
     $h{'target_secs'} = 0;
+    $h{'target_eta'} = 'none';
+    $h{'eta_update'} = 0;
+    $h{'eta_trend'} = '=';
     $h{'targ_first'}  = 0;
+    $h{'target_runway'} = 0;
+    # wp mode to get to a runway say...
+    $h{'wp_mode'} = 0;
+    $h{'wp_cnt'} = 0;
+    $h{'wp_off'} = 0;
+    $h{'wp_flag'} = 0;
+    $h{'wpts'} = [];    # array of waypoints
     return \%h;
 }
 
@@ -934,52 +1115,65 @@ sub get_next_pointset($$$$$) {
 
 #######################################################################################
 # A good attempt at choosing a circuit target
+# just get closest point on the circuit
 #######################################################################################
 sub get_closest_ptset($$$$$$) {
     my ($rch,$slat,$slon,$rpt,$rlat,$rlon) = @_;
     ### set_distances_bearings($rch,$slat,$slon,"Initial position");
+    my ($dist,$az1,$az2);
+    my ($dist2,$az12,$az22);
     my $pt = "TL";
-    my $dist = ${$rch}{'tl_dist'};  # distance to top-left
     my $tlat = ${$rch}{'tl_lat'};
     my $tlon = ${$rch}{'tl_lon'};
-    if (${$rch}{'bl_dist'} < $dist) {  # distance to bottom left
-        # BOTTOM LEFT
-        $dist = ${$rch}{'bl_dist'};
+    my $nlat = $tlat;
+    my $nlon = $tlon;
+    # set first DISTANCE
+    fg_geo_inverse_wgs_84 ($slat,$slon,$tlat,$tlon,\$az1,\$az2,\$dist);
+
+    # get next point
+    $tlat = ${$rch}{'bl_lat'};
+    $tlon = ${$rch}{'bl_lon'};
+    fg_geo_inverse_wgs_84 ($slat,$slon,$tlat,$tlon,\$az12,\$az22,\$dist2);
+    if ($dist2 < $dist) {
         $pt = "BL";
-        $tlat = ${$rch}{'bl_lat'};
-        $tlon = ${$rch}{'bl_lon'};
+        $dist = $dist2;
+        $nlat = $tlat;
+        $nlon = $tlon;
     }
-    if (${$rch}{'br_dist'} < $dist) {  # distance to bottom right
-        # BOTTOM RIGHT
-        $dist = ${$rch}{'br_dist'};
+    $tlat = ${$rch}{'br_lat'};
+    $tlon = ${$rch}{'br_lon'};
+    fg_geo_inverse_wgs_84 ($slat,$slon,$tlat,$tlon,\$az12,\$az22,\$dist2);
+    if ($dist2 < $dist) {
         $pt = "BR";
-        $tlat = ${$rch}{'br_lat'};
-        $tlon = ${$rch}{'br_lon'};
+        $dist = $dist2;
+        $nlat = $tlat;
+        $nlon = $tlon;
     }
-    if (${$rch}{'tr_dist'} < $dist) {  # distance to top right
-        # TOP RIGHT
-        $dist = ${$rch}{'tr_dist'};
+    $tlat = ${$rch}{'tr_lat'};
+    $tlon = ${$rch}{'tr_lon'};
+    fg_geo_inverse_wgs_84 ($slat,$slon,$tlat,$tlon,\$az12,\$az22,\$dist2);
+    if ($dist2 < $dist) {
         $pt = "TR";
-        $tlat = ${$rch}{'tr_lat'};
-        $tlon = ${$rch}{'tr_lon'};
+        $dist = $dist2;
+        $nlat = $tlat;
+        $nlon = $tlon;
     }
     ${$rpt} = $pt;
-    ${$rlat} = $tlat;
-    ${$rlon} = $tlon;
+    ${$rlat} = $nlat;
+    ${$rlon} = $nlon;
 }
 
 #####################################################
 ##### SET A TARGET TO ONE OF APEX OF THE CIRCUIT ####
 #####################################################
 # This will return the next target when joining a circuit from in or out of current circuit
-sub set_next_in_circuit_targ($$$$) {
-    my ($rch,$slat,$slon,$pt) = @_;
-    my ($nlat,$nlon,$nxps);
+sub set_next_in_circuit_targ($$$$$) {
+    my ($rch,$rp,$slat,$slon,$pt) = @_;
+    my ($nlat,$nlon,$nxps,$msg);
     ## get next ptset
     $nxps = get_next_pointset($rch,$pt,\$nlat,\$nlon,0);
     ${$rch}{'target_lat'} = $nlat;   # $targ_lat;
     ${$rch}{'target_lon'} = $nlon;   # $targ_lon;
-
     ### This seems the BEST ;=))
     ### my ($clat,$clon);
     ### $clat = ($tlat + $nlat) / 2;
@@ -990,7 +1184,6 @@ sub set_next_in_circuit_targ($$$$) {
     my ($distm,$az1,$az2);
     # get info, from HERE to TARGET
     fg_geo_inverse_wgs_84 ($slat,$slon,$nlat,$nlon,\$az1,\$az2,\$distm);
-
     ${$rch}{'user_lat'} = $slat;
     ${$rch}{'user_lon'} = $slon;
     # ${$rch}{'target_lat'} = $clat;   # $targ_lat;
@@ -1000,6 +1193,9 @@ sub set_next_in_circuit_targ($$$$) {
     ${$rch}{'targ_ptset'} = $nxps;   # current chosen point = TARGET point
     ${$rch}{'prev_ptset'} = $pt;   # previous to get TARGET TRACK
 
+    update_hdg_ind();
+    my $diff = get_hdg_diff($ind_hdg_degs,$az1);
+
     #    Suggest HEAD for
     # prt("Suggest head for $clat,$clon, on $az1, $distnm, prev $pt, next $nxps\n");
     my $distnm = get_dist_stg_nm($distm);
@@ -1007,8 +1203,6 @@ sub set_next_in_circuit_targ($$$$) {
 
     ##set_hdg_stg(\$az1);
     set_decimal1_stg(\$az1);
-    set_lat_stg(\$nlat);
-    set_lon_stg(\$nlon);
     my $targ = 'NEXT';
     my $prev = "prev $pt";
 
@@ -1018,6 +1212,7 @@ sub set_next_in_circuit_targ($$$$) {
             $targ = 'First';
             ${$rch}{'targ_first'} = 1;
             $prev = "prev usr pt";
+            $pt = '';
         } else {
             $targ = 'Next';
         }
@@ -1027,18 +1222,43 @@ sub set_next_in_circuit_targ($$$$) {
     }
 
     ### TODO add ETA...
-    ###prtt("\n$targ target $nlat,$nlon, on $az1, $distnm $distkm, prev $pt, next $nxps\n");
-    prtt("\n$targ target $nxps, on $az1, $distnm $distkm, $prev\n");
+    my $gspd = ${$rp}{'gspd'}; # Knots
+    my $secs = int(( $distm / (($gspd * $SG_NM_TO_METER) / 3600)) + 0.5);
+    my $eta = " ETA:".secs_HHMMSS2($secs); # display as hh:mm:ss
+    ${$rch}{'target_secs1'} = $secs;
 
+    $msg = '';
+    set_hdg_stg(\$diff);
+    ${$rch}{'target_runway'} = 0;
+    if ( ($nxps eq 'TR') && ($pt eq 'BR') ) {
+        $msg .= "to RUNWAY";
+        if (got_runway_coords() && defined $g_rwy_az1) {
+            my $diff = get_hdg_diff(${$rch}{'target_hdg'},$g_rwy_az1);
+            if (($diff < -15) || ($diff > 15)) {
+                $msg .= " ok";
+            } else {
+                set_decimal1_stg(\$diff);
+                $msg .= " $diff";
+            }
+        }
+
+        ${$rch}{'target_runway'} = 1;
+    }
+    ##################
+    ##### TARGET #####
+    prtt("\n$targ target $nxps, on $az1 ($diff), $distnm $distkm, $prev $msg $eta\n");
+    #set_lat_stg(\$nlat);
+    #set_lon_stg(\$nlon);
+    ###prtt("\n$targ target $nlat,$nlon, on $az1, $distnm $distkm, prev $pt, next $nxps\n");
+    ###################
 }
 
-sub get_next_in_circuit_targ($$$) {
-    my ($rch,$slat,$slon) = @_;
+sub get_next_in_circuit_targ($$$$) {
+    my ($rch,$rp,$slat,$slon) = @_;
     ### my $rch = $ref_circuit_hash;
-    # get_closest_ptset($$$$$$)
     my ($pt,$tlat,$tlon);
     get_closest_ptset($rch,$slat,$slon,\$pt,\$tlat,\$tlon);
-    set_next_in_circuit_targ($rch,$slat,$slon,$pt);
+    set_next_in_circuit_targ($rch,$rp,$slat,$slon,$pt);
 }
 
 sub choose_first_target($$) {
@@ -1048,7 +1268,7 @@ sub choose_first_target($$) {
     $lat  = ${$rp}{'lat'};
     $alt  = ${$rp}{'alt'};
     ${$rch}{'targ_first'} = 1;
-    get_next_in_circuit_targ($rch,$lat,$lon);
+    get_next_in_circuit_targ($rch,$rp,$lat,$lon);
 }
 
 
@@ -1097,8 +1317,8 @@ sub set_suggested_hdg($$) {
 
     my $lon  = ${$rp}{'lon'};
     my $lat  = ${$rp}{'lat'};
-    my $tlat  = ${$rch}{'target_lat'};
-    my $tlon  = ${$rch}{'target_lon'};
+    my $tlat = ${$rch}{'target_lat'};
+    my $tlon = ${$rch}{'target_lon'};
     my ($az1,$az2);
     fg_geo_inverse_wgs_84($lat,$lon,$tlat,$tlon,\$az1,\$az2,\$dist);
     # display a turn commencing
@@ -1114,6 +1334,242 @@ sub set_suggested_hdg($$) {
     set_hdg_stg(\$shdg);
     prtt("TURN from $chdg to $shdg ($diff) degs, to targ... $eta\n");
 }
+
+sub set_wpts_to_rwy($$) {
+    my ($rch,$rp) = @_;
+    if (!got_runway_coords()) {
+        return;
+    }
+
+    my ($lat,$lon);
+    my ($elat1,$elon1,$elat2,$elon2);
+    my ($az1,$az2,$distm);
+    my ($tllat,$tllon,$bllat,$bllon,$brlat,$brlon,$trlat,$trlon);
+    $elat1 = $g_elat1;
+    $elon1 = $g_elon1;
+    $elat2 = $g_elat2;
+    $elon2 = $g_elon2;
+    fg_geo_inverse_wgs_84 ($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$distm);
+    # ================================================
+    $tllat = ${$rch}{'tl_lat'};
+    $tllon = ${$rch}{'tl_lon'};
+    $bllat = ${$rch}{'bl_lat'};
+    $bllon = ${$rch}{'bl_lon'};
+    $brlat = ${$rch}{'br_lat'};
+    $brlon = ${$rch}{'br_lon'};
+    $trlat = ${$rch}{'tr_lat'};
+    $trlon = ${$rch}{'tr_lon'};
+    # ================================================
+    $lon  = ${$rp}{'lon'};
+    $lat  = ${$rp}{'lat'};
+    # this is the leg BR to TR for 33 circuit
+    # $brlat = ${$rch}{'br_lat'};
+    # $brlon = ${$rch}{'br_lon'};
+    my ($az11,$az21,$dist1,$az12,$az22,$dist2);
+    my $thdg = ${$rch}{'target_hdg'};
+    my $diff = get_hdg_diff($az1,$thdg);
+    if (($diff < -15) || ($diff > 15)) {
+        set_hdg_stg(\$az1);
+        set_hdg_stg(\$thdg);
+        set_decimal1_stg(\$diff);
+        prt("Target hdg $thdg gt 30 ($diff) away from runway $az1... no solution...\n");
+        return;
+    }
+
+    fg_geo_inverse_wgs_84 ($brlat,$brlon,$elat1,$elon1,\$az11,\$az21,\$dist1);
+    fg_geo_inverse_wgs_84 ($brlat,$brlon,$elat2,$elon2,\$az12,\$az22,\$dist2);
+    if ($dist2 < $dist1) {
+        $dist1 = $dist2;
+        $az11 = $az12;
+        $az21 = $az22;
+        $elat1 = $elat2;
+        $elon1 = $elon2;
+        prt("Note switched to other end...\n");
+    }
+    ############################################
+    ### Divide the segment BR to $elat1,$elon1
+    fg_geo_inverse_wgs_84 ($brlat,$brlon,$elat1,$elon1,\$az11,\$az21,\$dist1);
+    my $dist4 = $dist1 / 4;
+    my ($wp_lat,$wp_lon,$wp_az1,$cnt);
+    fg_geo_direct_wgs_84($brlat,$brlon, $az11, $dist4, \$wp_lat, \$wp_lon, \$wp_az1 );
+    my @wpts = ();
+    push(@wpts, [ $wp_lat, $wp_lon ]);
+    fg_geo_direct_wgs_84($brlat,$brlon, $az11, ($dist4 * 2), \$wp_lat, \$wp_lon, \$wp_az1 );
+    push(@wpts, [ $wp_lat, $wp_lon ]);
+    fg_geo_direct_wgs_84($brlat,$brlon, $az11, ($dist4 * 3), \$wp_lat, \$wp_lon, \$wp_az1 );
+    push(@wpts, [ $wp_lat, $wp_lon ]);
+    push(@wpts, [ $elat1, $elon1 ]);
+    my $ra = ${$rch}{'wpts'};    # array of waypoints
+    @{$ra} = @wpts;
+    $cnt = scalar @wpts;
+    ${$rch}{'wp_cnt'} = $cnt;
+    ${$rch}{'wp_off'} = 0;
+    ${$rch}{'wp_flag'} = 0;
+
+    my $xg = get_circuit_xg();
+    my ($i,$ra2);
+    $xg .= "color red\n";
+    $xg .= "$brlon $brlat\n";
+    $xg .= "NEXT\n";
+    for ($i = 0; $i < $cnt; $i++) {
+        $ra2 = ${$ra}[$i]; 
+        $wp_lat = ${$ra2}[0];
+        $wp_lon = ${$ra2}[1];
+        $xg .= "$wp_lon $wp_lat\n";
+        $xg .= "NEXT\n";
+    }
+    ##$xg .= "$elon1 $elat1\n";
+    ##$xg .= "NEXT\n";
+    write2file($xg,$tmp_wp_out);
+    prt("Generated $cnt wps to target... written $tmp_wp_out\n");
+    prtt("\nEnter WAYPOINT mode - follow $cnt wps...\n");
+    ${$rch}{'wp_mode'} = 1;
+    ${$rch}{'wp_start'} = time();
+    ${$rch}{'wp_last'} = ${$rch}{'wp_start'};
+}
+
+sub do_wpts_to_rwy($$) {
+    my ($rch,$rp) = @_;
+    my $flg = ${$rch}{'wp_flag'};
+    my $off = ${$rch}{'wp_off'};
+    my $cnt = ${$rch}{'wp_cnt'};
+    my ($ra2,$wp_lat,$wp_lon,$diff);
+    if ($cnt == 0) {
+        ${$rch}{'wp_mode'} = 0;
+        return;
+    }
+    # extract current POSIIION values
+    my $lon  = ${$rp}{'lon'};
+    my $lat  = ${$rp}{'lat'};
+    my $alt  = ${$rp}{'alt'};
+    my $agl  = ${$rp}{'agl'};
+    my $gspd = ${$rp}{'gspd'}; # Knots
+    my $ra = ${$rch}{'wpts'};    # array of waypoints
+    my $gonxt = 0;
+    if ($off < $cnt) {
+        $ra2 = ${$ra}[$off];
+    } else {
+        $ra2 = ${$ra}[$off-1];
+    }
+    $wp_lat = ${$ra2}[0];
+    $wp_lon = ${$ra2}[1];
+    my $ct = time();
+    my ($az1,$az2,$dist,$tlat,$tlon,$secs,$eta);
+    my ($taz1,$taz2,$tdist,$tsecs,$teta);
+    if ($flg == 0) {
+        # first entry, start up first target
+        fg_geo_inverse_wgs_84($lat,$lon,$wp_lat,$wp_lon,\$az1,\$az2,\$dist);
+        $secs = int(( $dist / (($gspd * $SG_NM_TO_METER) / 3600)) + 0.5);
+        fgfs_set_hdg_bug($az1);
+        ${$rch}{'wp_targ_lat'} = $wp_lat;
+        ${$rch}{'wp_targ_lon'} = $wp_lon;
+        ${$rch}{'wp_targ_hdg'} = $az1;
+        ${$rch}{'wp_targ_dist'} = $dist;
+        ${$rch}{'wp_targ_secs'} = $secs;
+        ${$rch}{'wp_flag'} = 1;
+        ${$rch}{'wp_off'} = 1;
+        $ra2 = ${$ra}[-1];  # get LAST target
+        $tlat = ${$ra2}[0];
+        $tlon = ${$ra2}[1];
+        fg_geo_inverse_wgs_84($lat,$lon,$tlat,$tlon,\$taz1,\$taz2,\$tdist);
+        $tsecs = int(( $tdist / (($gspd * $SG_NM_TO_METER) / 3600)) + 0.5);
+        ${$rch}{'end_targ_lat'}  = $tlat;
+        ${$rch}{'end_targ_lon'}  = $tlon;
+        ${$rch}{'end_targ_hdg'}  = $taz1;
+        ${$rch}{'end_targ_dist'} = $tdist;
+        ${$rch}{'end_targ_secs'} = $tsecs;
+
+        # display mess up
+        $dist = get_dist_stg_km($dist);
+        set_hdg_stg(\$az1);
+        $teta = "".secs_HHMMSS2($tsecs);
+        $eta = "eta:".secs_HHMMSS2($secs);
+        prtt("WP: Set first of $cnt wps, h=$az1, d=$dist, $eta $teta\n");
+        return;
+    } else {
+        $tlat = ${$rch}{'wp_targ_lat'};
+        $tlon = ${$rch}{'wp_targ_lon'};
+        # course correction
+        fg_geo_inverse_wgs_84($lat,$lon,$tlat,$tlon,\$az1,\$az2,\$dist);
+        $secs = int(( $dist / (($gspd * $SG_NM_TO_METER) / 3600)) + 0.5);
+        $eta = "eta:".secs_HHMMSS2($secs);
+        if ($secs < 15) {
+            $gonxt = 1;
+        }
+
+        if ( !$gonxt && ($dist < ${$rch}{'wp_targ_dist'})) {
+            # stay on this track
+            ${$rch}{'wp_targ_dist'} = $dist;
+            $diff = get_hdg_diff(${$rch}{'wp_targ_hdg'},$az1);
+            if (abs($diff) > 1) {
+                fgfs_set_hdg_bug($az1);
+                ${$rch}{'wp_targ_hdg'} = $az1;
+                set_hdg_stg(\$az1);
+                ${$rch}{'wp_last'} = $ct;
+                $dist = get_dist_stg_km($dist);
+                set_decimal1_stg(\$diff);
+                prtt("WP: Continue $off of $cnt, at $dist, adj hdg $az1 ($diff) $eta\n");
+
+            } elsif ($ct != ${$rch}{'wp_last'}) {
+                ${$rch}{'wp_last'} = $ct;
+                $ra2 = ${$ra}[-1];  # get LAST target
+                $tlat = ${$ra2}[0];
+                $tlon = ${$ra2}[1];
+                fg_geo_inverse_wgs_84($lat,$lon,$tlat,$tlon,\$taz1,\$taz2,\$tdist);
+                $tsecs = int(( $tdist / (($gspd * $SG_NM_TO_METER) / 3600)) + 0.5);
+                ${$rch}{'end_targ_lat'}  = $tlat;
+                ${$rch}{'end_targ_lon'}  = $tlon;
+                ${$rch}{'end_targ_hdg'}  = $taz1;
+                ${$rch}{'end_targ_dist'} = $tdist;
+                ${$rch}{'end_targ_secs'} = $tsecs;
+
+                $dist = get_dist_stg_km($dist);
+                $teta = "".secs_HHMMSS2($tsecs);
+                prtt("WP: Continue $off of $cnt, at $dist $eta $teta\n");
+
+            }
+            return;
+        }
+
+        ############################################################################
+        $off++;
+        fg_geo_inverse_wgs_84($lat,$lon,$wp_lat,$wp_lon,\$az1,\$az2,\$dist);
+        fgfs_set_hdg_bug($az1);
+        $eta = "eta:".secs_HHMMSS2($secs);
+        $secs = int(( $dist / (($gspd * $SG_NM_TO_METER) / 3600)) + 0.5);
+        ${$rch}{'wp_targ_lat'} = $wp_lat;
+        ${$rch}{'wp_targ_lon'} = $wp_lon;
+        ${$rch}{'wp_targ_hdg'} = $az1;
+        ${$rch}{'wp_targ_dist'} = $dist;
+        ${$rch}{'wp_targ_secs'} = $secs;
+        ${$rch}{'wp_flag'} |= 2;
+        ${$rch}{'wp_off'} = $off;
+        $dist = get_dist_stg_km($dist);
+        if ($off <= $cnt) {
+            if ($ct != ${$rch}{'wp_last'}) {
+                ${$rch}{'wp_last'} = $ct;
+                $ra2 = ${$ra}[-1];  # get LAST target
+                $tlat = ${$ra2}[0];
+                $tlon = ${$ra2}[1];
+                fg_geo_inverse_wgs_84($lat,$lon,$tlat,$tlon,\$taz1,\$taz2,\$tdist);
+                $tsecs = int(( $tdist / (($gspd * $SG_NM_TO_METER) / 3600)) + 0.5);
+                ${$rch}{'end_targ_lat'}  = $tlat;
+                ${$rch}{'end_targ_lon'}  = $tlon;
+                ${$rch}{'end_targ_hdg'}  = $taz1;
+                ${$rch}{'end_targ_dist'} = $tdist;
+                ${$rch}{'end_targ_secs'} = $tsecs;
+                $teta = "".secs_HHMMSS2($tsecs);
+                $off--;
+                prtt("WP: Next wp $off of $cnt, at $dist $eta $teta\n");
+            }
+            return;
+        }
+        $off--;
+        prtt("WP: Last $off of $cnt, at $dist $eta\n\n");
+    }
+    ${$rch}{'wp_mode'} = 0;
+}
+
 
 # $circuit_mode is ON
 # $mag_deviation = ($curr_hdg - $curr_mag);
@@ -1151,44 +1607,66 @@ sub process_circuit($) {
         fg_geo_inverse_wgs_84($lat,$lon,$tlat,$tlon,\$az1,\$az2,\$dist);
         $secs = int(( $dist / (($gspd * $SG_NM_TO_METER) / 3600)) + 0.5);
         my $psecs = ${$rch}{'target_secs'};
-        ${$rch}{'target_secs'} = $secs;
-        my $trend = '=';
-        if ($secs < $psecs) {
-            $trend = '-';
-        } elsif ($psecs > $secs) {
-            $trend = "++";
+        ###${$rch}{'target_secs'} = $secs;
+        my $ct = time();
+        my $trend = ${$rch}{'eta_trend'};
+        if (${$rch}{'eta_update'} == $ct) {
+            # less than a second - no update
+        } else {
+            ${$rch}{'target_secs'} = $secs;
+            ${$rch}{'eta_update'} = $ct;
+            $trend = '=';
+            if ($secs < $psecs) {
+                $trend = '-';
+            } elsif ($psecs > $secs) {
+                $trend = "++";
+            }
+            ${$rch}{'eta_trend'} = $trend;
+            ${$rch}{'target_eta'} = "ETA:".secs_HHMMSS2($secs).$trend; # display as hh:mm:ss
         }
-        ${$rch}{'target_eta'} = "ETA:".secs_HHMMSS2($secs).$trend; # display as hh:mm:ss
+        ###${$rch}{'target_eta'} = "ETA:".secs_HHMMSS2($secs).$trend; # display as hh:mm:ss
     }
 
+    # FIRST TIME HERE
     if ($circuit_flag == 0) {
         choose_first_target($rch,$rp);
         $circuit_flag = 1;
         # set intital course to target
         fgfs_set_hdg_bug(${$rch}{'target_hdg'});
+        $m_stable_cnt = 0;
+        return;
     }
 
     if ($circuit_flag) {
         if ($m_stable_cnt > 1) {  # less than 2 degrees between previous ind hdg
-            if (${$rch}{'suggest_chg'}) {
-                if (${$rch}{'target_secs'} < 20) {
-                    # only 20 secs to target - choose next target
-                    my ($ntlat,$ntlon);
-                    my $ptset = ${$rch}{'targ_ptset'};  # passing this target, head for next
-                    ##my $nxt_ps = get_next_pointset($rch,$ptset,\$ntlat,\$ntlon,0);
-                    set_next_in_circuit_targ($rch,$lat,$lon,$ptset);
-                    fgfs_set_hdg_bug(${$rch}{'target_hdg'});
+            if (${$rch}{'wp_mode'}) {
+                 do_wpts_to_rwy($rch,$rp);
+            } elsif (${$rch}{'target_secs'} < 22 ) { # was 20
+                # only XX secs to target - choose next target
+                my ($ntlat,$ntlon);
+                my $ptset = ${$rch}{'targ_ptset'};  # passing this target, head for next
+                ##my $nxt_ps = get_next_pointset($rch,$ptset,\$ntlat,\$ntlon,0);
+                set_next_in_circuit_targ($rch,$rp,$lat,$lon,$ptset);
+                fgfs_set_hdg_bug(${$rch}{'target_hdg'});
+                if (${$rch}{'target_runway'}) {
+                    if (${$rch}{'target_runway'} == 1) {
+                        ${$rch}{'target_runway'} = 2;
+                        set_wpts_to_rwy($rch,$rp);
+                    } else {
 
-                } else {
-                    set_suggested_hdg($rch,$rp);
-                    return;
+                    }
+
                 }
+
+            } elsif (${$rch}{'suggest_chg'}) {
+                set_suggested_hdg($rch,$rp);
             }
         }
     }
 
 }
 
+my $do_init_pset = 0;
 
 sub main_loop() {
 
@@ -1212,6 +1690,12 @@ sub main_loop() {
     }
     my $ok = 1;
     my ($char,$val,$rp);
+    if ($do_init_pset) {
+        my $rch = $ref_circuit_hash;
+        $rp = fgfs_get_position();
+        get_next_in_circuit_targ($rch,$rp,${$rp}{'lat'},${$rp}{'lon'});
+    }
+
     while ($ok) {
         $rp = fgfs_get_position();
         show_position($rp);
