@@ -1745,7 +1745,7 @@ sub parse_args {
         if ($arg =~ /^-/) {
             $sarg = substr($arg,1);
             $sarg = substr($sarg,1) while ($sarg =~ /^-/);
-            if (($sarg =~ /^h/i)||($sarg eq '?')) {
+            if (($sarg =~ /^help/i)||($sarg eq '?')) {
                 give_help();
                 pgm_exit(0,"Help exit(0)");
             } elsif ($sarg =~ /^v/) {
@@ -1828,7 +1828,7 @@ sub give_help {
     prt("$pgmname: version $VERS\n");
     prt("Usage: $pgmname [options] in-file\n");
     prt("Options:\n");
-    prt(" --help   (-h or -?) = This help, and exit 0.\n");
+    prt(" --help         (-?) = This help, and exit 0.\n");
     prt(" --verb[n]      (-v) = Bump [or set] verbosity. def=$verbosity\n");
     prt(" --load         (-l) = Load LOG at end. ($outfile)\n");
     prt(" --out <file>   (-o) = Write output to this file.\n");
