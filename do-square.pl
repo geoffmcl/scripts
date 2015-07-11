@@ -27,7 +27,7 @@ my $cwd = cwd();
 my $os = $^O;
 my ($pgmname,$perl_dir) = fileparse($0);
 my $temp_dir = $perl_dir . "/temp";
-# unshift(@INC, $perl_dir);
+unshift(@INC, $perl_dir);
 require 'lib_utils.pl' or die "Unable to load 'lib_utils.pl'! Check location and \@INC content.\n";
 require 'lib_fgio.pl' or die "Unable to load 'lib_fgio.pl'! Check location and \@INC content.\n";
 require 'fg_wsg84.pl' or die "Unable to load fg_wsg84.pl ...\n";
