@@ -25,6 +25,7 @@ use Cwd;
 my $cwd = cwd();
 my $os = $^O;
 my ($pgmname,$perl_dir) = fileparse($0);
+unshift(@INC, $perl_dir);
 my $temp_dir = $perl_dir . "/temp";
 require 'lib_utils.pl' or die "Unable to load 'lib_utils.pl' Check paths in \@INC...\n";
 require 'fg_wsg84.pl' or die "Unable to load fg_wsg84.pl ...\n";
@@ -733,6 +734,7 @@ sub give_help {
     prt(" --rev           (-r) = Reverse the calculation. (def=off)\n");
     prt(" --speed         (-s) = Set the speed, in knots. (def=$g_ias)\n");
     prt(" --air APT1:APT2 (-a) = Distance between airports, as 2 or more ICAO.\n");
+    prt(" --xchange       (-x) = Exchange lat and lon\n");
     prt("   Uses file $aptdat ".((-f $aptdat) ? "ok" : "NOT FOUND *** FIX ME ***")."\n");
     prt(" -v[N]                = Bump or set verbosity. (def=$verbosity).\n");
     prt("The lat/lon can be input as comma separated pairs.\n");
@@ -823,9 +825,11 @@ sub parse_args {
             } elsif ($sarg =~ /^x/) {
                 $xchg = 1;
             } else {
-                pgm_exit(1,"ERROR: Invalid argument [$arg]! Try -?\n");
+                give_help();
+                pgm_exit(1,"ERROR: Invalid argument [$arg]!\n");
             }
         } else {
+            # assume 4 bare args, or two comma sepearated pairsn...
             if ($cnt == 0) {
                 if ($arg =~ /,/) {
                     @arr1 = split(',',$arg);
@@ -880,12 +884,11 @@ sub parse_args {
             prt("Setting DEFAULT $g_lat1,$g_lon1 $g_lat2,$g_lon2\n");
             $verbosity = 5;
         }
-
     }
 
 
     if ($xchg) {
-        prt("Exchanging lat and lon...\n") if (VERB5());
+        prt("Exchanging lat and lon...\n") if (VERB1());
         my $tmp = $g_lat1;
         $g_lat1 = $g_lon1;
         $g_lon1 = $tmp;
@@ -900,17 +903,18 @@ sub parse_args {
         $got_icao = 1;
     }
 
+    if ($rev) {
+        my $tmp = $g_lat1;
+        $g_lat1 = $g_lat2;
+        $g_lat2 = $tmp;
+        $tmp = $g_lon1;
+        $g_lon1 = $g_lon2;
+        $g_lon2 = $tmp;
+        prt("Reversed direction...\n") if (VERB1());
+    }
     if (in_world($g_lat1,$g_lon1) &&
         in_world($g_lat2,$g_lon2) ) {
-        if ($rev) {
-            my $tmp = $g_lat1;
-            $g_lat1 = $g_lat2;
-            $g_lat2 = $tmp;
-            $tmp = $g_lon1;
-            $g_lon1 = $g_lon2;
-            $g_lon2 = $tmp;
-        }
-        prt("Input (lat,lon) $g_lat1,$g_lon1 to $g_lat2,$g_lon2\n") if (VERB5());
+        prt("Input (lat,lon) $g_lat1,$g_lon1 to $g_lat2,$g_lon2\n") if (VERB1());
         $do_global_vals = 1;
     } elsif (!$got_icao) {
         #in_world_show($g_lat1,$g_lon1);
