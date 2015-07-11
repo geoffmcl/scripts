@@ -1204,7 +1204,7 @@ sub set_next_in_circuit_targ($$$$$) {
     ##set_hdg_stg(\$az1);
     set_decimal1_stg(\$az1);
     my $targ = 'NEXT';
-    my $prev = "prev $pt";
+    my $prev = "$pt-$nxps $az1";
 
     # ${$rch}{'targ_first'} = 1;
     if (defined ${$rch}{'targ_first'}) {
@@ -1221,7 +1221,7 @@ sub set_next_in_circuit_targ($$$$$) {
         $targ = "????";
     }
 
-    ### TODO add ETA...
+    ### add ETA...
     my $gspd = ${$rp}{'gspd'}; # Knots
     my $secs = int(( $distm / (($gspd * $SG_NM_TO_METER) / 3600)) + 0.5);
     my $eta = " ETA:".secs_HHMMSS2($secs); # display as hh:mm:ss
@@ -1230,6 +1230,7 @@ sub set_next_in_circuit_targ($$$$$) {
     $msg = '';
     set_hdg_stg(\$diff);
     ${$rch}{'target_runway'} = 0;
+    ${$rch}{'target_downwind'} = 0;
     if ( ($nxps eq 'TR') && ($pt eq 'BR') ) {
         $msg .= "to RUNWAY";
         if (got_runway_coords() && defined $g_rwy_az1) {
@@ -1243,6 +1244,8 @@ sub set_next_in_circuit_targ($$$$$) {
         }
 
         ${$rch}{'target_runway'} = 1;
+    } elsif ( ($nxps eq 'BL') && ($pt eq 'TL') ) {
+        ${$rch}{'target_downwind'} = 1;
     }
     ##################
     ##### TARGET #####
