@@ -1772,6 +1772,31 @@ sub parse_args {
                 $sarg = $av[0];
                 $out_file = $sarg;
                 prt("Set out file to [$out_file].\n") if ($verb);
+            } elsif (($sarg =~ /^port$/i)||($sarg eq 'p')) {
+                need_arg(@av);
+                shift @av;
+                $sarg = $av[0];
+                $PORT = $sarg;
+                prt("Set PORT to [$PORT]\n");
+                if ( !($sarg =~ /^\d+$/) ) {
+                    prtw("WARNING: Port is NOT all numeric!\n");
+                }
+            } elsif (($sarg =~ /^host$/i)||($sarg eq 'h')) {
+                need_arg(@av);
+                shift @av;
+                $sarg = $av[0];
+                $HOST = $sarg;
+                prt("Set HOST to [$HOST]\n");
+            } elsif (($sarg =~ /^delay$/i)||($sarg eq 'd')) {
+                need_arg(@av);
+                shift @av;
+                $sarg = $av[0];
+                if ($sarg =~ /^\d+$/) {
+                    $DELAY = $sarg;
+                    prt("Set DELAY to [$DELAY]\n");
+                } else {
+                    pgm_exit(1,"ERROR: Invalid argument [$arg $sarg]! Dealy can ONLY be an integer!\n");
+                }
             } else {
                 pgm_exit(1,"ERROR: Invalid argument [$arg]! Try -?\n");
             }
@@ -1798,13 +1823,25 @@ sub parse_args {
 }
 
 sub give_help {
+    my $msg = '';
+    prt("\n");
     prt("$pgmname: version $VERS\n");
     prt("Usage: $pgmname [options] in-file\n");
     prt("Options:\n");
-    prt(" --help  (-h or -?) = This help, and exit 0.\n");
-    prt(" --verb[n]     (-v) = Bump [or set] verbosity. def=$verbosity\n");
-    prt(" --load        (-l) = Load LOG at end. ($outfile)\n");
-    prt(" --out <file>  (-o) = Write output to this file.\n");
+    prt(" --help   (-h or -?) = This help, and exit 0.\n");
+    prt(" --verb[n]      (-v) = Bump [or set] verbosity. def=$verbosity\n");
+    prt(" --load         (-l) = Load LOG at end. ($outfile)\n");
+    prt(" --out <file>   (-o) = Write output to this file.\n");
+    prt(" --host <name>  (-h) = Set host name, or IP address. (def=$HOST)\n");
+    prt(" --port <num>   (-p) = Set port. (def=$PORT)\n");
+    prt(" --delay <secs> (-d) = Set delay in seconds between sampling. ($DELAY)\n");
+    prt("\n");
+    $msg = (( -f $in_file) ? "ok" : "NOT FOUND");
+    prt(" The input xg file establishes a circuit to fly, (def $in_file $msg)\n");
+    prt(" Establish a TELNET connection to an instance of fgfs running on a host:port\n");
+    prt(" Will wait for engine running, and after that altitude hold.\n");
+    prt(" Accepts keyboard input to run scenarios, ESC key to exit\n");
+    prt("\n");
 }
 
-# eof - template.pl
+# eof - do-square.pl
