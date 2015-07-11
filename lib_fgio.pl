@@ -264,6 +264,53 @@ sub fgfs_show_gear_wow() {
 }
 
 
+#############################################################################
+### some indicated speeds
+my $ins_aspd_ind = "/instrumentation/airspeed-indicator/indicated-speed-kt";
+my $ins_apds_tru = "/instrumentation/airspeed-indicator/true-speed-kt";
+my %m_ind_airspeed = ();
+sub get_ind_airspeed() { return \%m_ind_airspeed; }
+sub fgfs_get_ind_spdkt($) {
+    my $ref = shift;
+    fgfs_get($ins_aspd_ind, $ref) or get_exit(-2); # bool
+    return 1;
+}
+sub fgfs_get_ind_truekt($) {
+    my $ref = shift;
+    fgfs_get($ins_apds_tru, $ref) or get_exit(-2); # bool
+    return 1;
+}
+
+sub fgfs_get_ind_apsd() {
+    my $rh = get_ind_airspeed();
+    my ($spd,$tkt);
+    fgfs_get_ind_spdkt(\$spd);
+    fgfs_get_ind_truekt(\$tkt);
+    ${$rh}{'ind_airspeed'} = $spd;
+    ${$rh}{'ind_truespeed'} = $tkt;
+    ${$rh}{'time'} = time();
+    return $rh;
+}
+
+sub get_ind_spdkt_stg() {
+    my $rh = fgfs_get_ind_apsd();
+    if (! defined ${$rh}{'time'}) {
+        return "";
+    }
+    my ($spd,$tkt);
+    # fgfs_get_ind_spdkt(\$spd);
+    # fgfs_get_ind_truekt(\$tkt);
+    $spd = ${$rh}{'ind_airspeed'};
+    $tkt = ${$rh}{'ind_truespeed'};
+    # mess for display
+    set_decimal1_stg(\$spd);
+    set_decimal1_stg(\$tkt);
+    return "$spd/$tkt kt";
+}
+
+
+#############################################################################
+
 my $hdg_bug_stg = "/autopilot/settings/heading-bug-deg";
 
 #############################################################################
@@ -271,10 +318,6 @@ my $hdg_off_stg = "/instrumentation/heading-indicator/offset-deg";
 my $hdg_ind_stg = "/instrumentation/heading-indicator/indicated-heading-deg"; # this should control autopilot HDG 
 my $alt_ind_stg = "/instrumentation/altimeter/indicated-altitude-ft";
 my $alt_inhg_stg = "/instrumentation/altimeter/setting-inhg";
-
-my $ins_aspd_ind = "/instrumentation/airspeed-indicator/indicated-speed-kt";
-my $ins_apds_tru = "/instrumentation/airspeed-indicator/true-speed-kt";
-
 
 # fgfs - class FlightProperties - FlightProperties.cxx .hxx
 my $get_V_north = "/velocities/speed-north-fps";

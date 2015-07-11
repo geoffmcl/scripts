@@ -22,7 +22,8 @@ use Cwd;
 use IO::Socket;
 use Term::ReadKey;
 use Time::HiRes qw( usleep gettimeofday tv_interval );
-use Math::Trig;
+#use Math::Trig;
+use Math::Trig qw(great_circle_distance great_circle_direction deg2rad rad2deg);
 my $cwd = cwd();
 my $os = $^O;
 my ($pgmname,$perl_dir) = fileparse($0);
@@ -47,7 +48,7 @@ my $verbosity = 0;
 my $out_file = '';
 # my $HOST = "localhost";
 my ($fgfs_io,$HOST,$PORT,$CONMSG,$TIMEOUT,$DELAY);
-my $connect_win7 = 1;
+my $connect_win7 = 0;
 if (defined $ENV{'COMPUTERNAME'}) {
     if (!$connect_win7 && $ENV{'COMPUTERNAME'} eq 'WIN7-PC') {
         # connect to Ubuntu in DELL02
@@ -200,6 +201,11 @@ my %apt_locations = (
 
 sub get_locations() { return \%apt_locations; }
 
+my $PI = 3.1415926535;
+# my $D2R = math.pi / 180;               # degree to radian
+my $D2R = $PI / 180;               # degree to radian
+my $R2D = 180.0 / $PI;
+
 ###################################################################
 
 sub get_type($) {
@@ -225,6 +231,49 @@ sub got_runway_coords() {
         return 1;
     }
     return 0;
+}
+
+sub getprop($) {
+    my $prop = shift;
+    my ($val);
+    fgfs_get($prop,\$val);
+    return $val;
+}
+
+# var f8Ep=getprop("/instrumentation/airspeed-indicator/true-speed-kt");
+# var VZeb=func(course_deg,f8Ep,add_carrier_motion){
+sub compute_course($$) {
+    my ($course_deg, $taspdkt) = @_;
+    my $f8Ep = $taspdkt;
+    my %IijX = ();
+
+    $IijX{'course_deg'} = $course_deg;
+    my $aJ4U = $course_deg;
+    my $JKSr = 0;
+    my $Kf9Y = $course_deg * $D2R;
+    my $wfn = getprop("/environment/wind-from-heading-deg");
+    my $ynQo = $wfn * $D2R;
+    my $kbJn = getprop("/environment/wind-speed-kt");
+    $IijX{'wind-from'} = $wfn;
+    $IijX{'wind-speed'} = $kbJn;
+    my $Pk2F = ($kbJn/$f8Ep)*sin($ynQo-$Kf9Y);
+    if(abs($Pk2F) > 1.0 ){
+        # got it
+     } else {
+        $aJ4U = ($Kf9Y + asin($Pk2F) * $R2D);
+        if($aJ4U < 0){
+            $aJ4U += 360.0;
+        } 
+        if($aJ4U > 360){
+            $aJ4U -= 360.0;
+        }
+        $JKSr = $f8Ep * sqrt(1-$Pk2F*$Pk2F)- $kbJn * cos($ynQo -$Kf9Y);
+        if($JKSr < 0){
+        }
+    }
+    $IijX{'heading'} = $aJ4U;
+    $IijX{'groundspeed'} = $JKSr;
+    return \%IijX;
 }
 
 sub show_ref_circuit_hash() {
@@ -898,7 +947,20 @@ sub wait_for_alt_hold() {
         if ($ah eq 'true') {
             prtt("Got altitude hold ($ah)...\n");
             $rp = fgfs_get_position();
-            prtt("Position on acquiring altitude hold...\n");
+            my $msg =  get_ind_spdkt_stg();
+            my $re = fgfs_get_engines();
+            my $rpm = ${$re}{'rpm'};
+            my $thr = ${$re}{'throttle'};
+            my $mixt = ${$re}{'mix'}; # $ctl_eng_mix_prop = "/control/engines/engine/mixture";  # double 0=0% FULL Lean, 1=100% FULL Rich
+            set_int_stg(\$rpm);
+            $thr = int($thr * 100);
+            if ($mixt > 0.9) {
+                $mixt = 'full';
+            } else {
+                set_decimal1_stg(\$mixt);
+            }
+            $msg .= " Eng rpm $rpm ($thr%/$mixt)";
+            prtt("On altitude hold... speeds $msg\n");
             show_position($rp);
             $ok = 1;
             $got_alt_hold = 1;
