@@ -272,6 +272,10 @@ my $hdg_ind_stg = "/instrumentation/heading-indicator/indicated-heading-deg"; # 
 my $alt_ind_stg = "/instrumentation/altimeter/indicated-altitude-ft";
 my $alt_inhg_stg = "/instrumentation/altimeter/setting-inhg";
 
+my $ins_aspd_ind = "/instrumentation/airspeed-indicator/indicated-speed-kt";
+my $ins_apds_tru = "/instrumentation/airspeed-indicator/true-speed-kt";
+
+
 # fgfs - class FlightProperties - FlightProperties.cxx .hxx
 my $get_V_north = "/velocities/speed-north-fps";
 my $get_V_east = "/velocities/speed-east-fps";
