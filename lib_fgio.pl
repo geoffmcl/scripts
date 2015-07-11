@@ -345,12 +345,14 @@ sub fgfs_connect($$$) {
 	my $socket;
 	STDOUT->autoflush(1);
     $timeout = 1 if ($timeout <= 0);
+    my $to = $timeout;
 	prtt("Connect $host, $port, timeout $timeout secs ") if ($lib_fgio_verbosity);
 	while ($timeout--) {
 		if ($socket = IO::Socket::INET->new(
 				Proto => 'tcp',
 				PeerAddr => $host,
-				PeerPort => $port)) {
+				PeerPort => $port,
+				Timeout => $to ) ) {
 			prt(" done.\n") if ($lib_fgio_verbosity);
 			$socket->autoflush(1);
 			sleep 1;
