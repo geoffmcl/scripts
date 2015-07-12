@@ -15,6 +15,12 @@
 # 03/04/2012 - More changes
 # 16/07/2011 - Try to add flying a course around YGIL, using the autopilot
 # 15/02/2011 (c) Geoff R. McLane http://geoffair.net/mperl - GNU GPL v2 (or +)
+#
+# A Circuit - consists of 5 'legs'
+# Runway Takeoff -> Crosswind -> Downwind -> Base -> Upwind or Final to land runway
+# Here they are notionally called - TR -> TL -> BL -> BR and Final-runway-Takeoff BR -> TR
+# The original was based on a YGIL 33 takeoff, using a left-hand pattern at 100 ft agl
+# 
 use strict;
 use warnings;
 use File::Basename;  # split path ($name,$dir,$ext) = fileparse($file [, qr/\.[^.]*/] )
@@ -94,7 +100,6 @@ my $SG_FEET_TO_METER = 0.3048;
 my $SG_METER_TO_FEET = 3.28083989501312335958;
 
 # forward
-sub get_hdg_diff($$);
 
 sub VERB1() { return $verbosity >= 1; }
 sub VERB2() { return $verbosity >= 2; }
@@ -236,8 +241,13 @@ sub got_runway_coords() {
 sub getprop($) {
     my $prop = shift;
     my ($val);
-    fgfs_get($prop,\$val);
+    fgfs_get($prop, \$val) or get_exit(-2); # double
     return $val;
+}
+
+sub fgfs_get_sim_time() {
+    my $tm = getprop("/sim/time/elapsed-sec");  # double
+    return $tm;
 }
 
 # var f8Ep=getprop("/instrumentation/airspeed-indicator/true-speed-kt");
@@ -248,6 +258,7 @@ sub compute_course($$) {
     my %IijX = ();
 
     $IijX{'course_deg'} = $course_deg;
+    $IijX{'true_speed_kt'} = $f8Ep;
     my $aJ4U = $course_deg;
     my $JKSr = 0;
     my $Kf9Y = $course_deg * $D2R;
@@ -257,18 +268,17 @@ sub compute_course($$) {
     $IijX{'wind-from'} = $wfn;
     $IijX{'wind-speed'} = $kbJn;
     my $Pk2F = ($kbJn/$f8Ep)*sin($ynQo-$Kf9Y);
-    if(abs($Pk2F) > 1.0 ){
-        # got it
-     } else {
-        $aJ4U = ($Kf9Y + asin($Pk2F) * $R2D);
-        if($aJ4U < 0){
-            $aJ4U += 360.0;
-        } 
-        if($aJ4U > 360){
-            $aJ4U -= 360.0;
+    if(abs($Pk2F)>1.0){
+    } else {
+        $aJ4U=($Kf9Y + asin($Pk2F)) * $R2D;
+        if($aJ4U<0){
+            $aJ4U+=360.0;
         }
-        $JKSr = $f8Ep * sqrt(1-$Pk2F*$Pk2F)- $kbJn * cos($ynQo -$Kf9Y);
-        if($JKSr < 0){
+        if($aJ4U>360){
+            $aJ4U-=360.0;
+        }
+        $JKSr = $f8Ep * sqrt(1-$Pk2F*$Pk2F) - $kbJn * cos($ynQo-$Kf9Y);
+        if($JKSr<0){
         }
     }
     $IijX{'heading'} = $aJ4U;
@@ -559,7 +569,7 @@ sub update_hdg_ind() {
 }
 
 # sub fgfs_get_altimeter()
-sub get_altimeter_stg() {
+sub set_altimeter_stg() {
     my ($ai,$hg,$off,$ind);
     fgfs_get_alt_ind(\$ai);
     fgfs_get_alt_inhg(\$hg);
@@ -628,7 +638,7 @@ sub show_position($) {
     $cpos = "$lat,$lon,$alt";
     if ($aspd < $min_fly_speed) {
         # ON GROUND has different concerns that say position
-        get_altimeter_stg();
+        set_altimeter_stg();
         $agl = "OG ";
         if ($alt_msg_chg) {
             $alt_msg_chg = 0;
@@ -737,6 +747,9 @@ sub show_position($) {
     
 }
 
+###########################################################
+## Has a BUG - some variable not numeric - set_hdg_stg
+###############
 sub show_takeoff($) {
     my ($rp) = @_;
     my ($ilon,$ilat,$ialt,$ihdg,$iagl,$ihb,$imag,$iaspd,$igspd,$iind);
@@ -752,7 +765,8 @@ sub show_takeoff($) {
     $igspd = ${$rp}{'gspd'}; # Knots
     my $prev_hdg = $ind_hdg_degs;
     update_hdg_ind(); # this is changing fast in a TURN
-    my $diff = $prev_hdg - $ind_hdg_degs;
+    $iind = $ind_hdg_degs;
+    my $diff = get_hdg_diff($prev_hdg,$iind);
     my $turn = 's';
     if (($diff < -1.0)||($diff > 1.0)) {
         $turn = 'InTurn';
@@ -768,6 +782,8 @@ sub show_takeoff($) {
     my $mag = ${$re}{'magn'}; # int 3=BOTH 2=LEFT 1=RIGHT 0=OFF
     my $mix = ${$re}{'mix'}; # $ctl_eng_mix_prop = "/control/engines/engine/mixture";  # double 0=0% FULL Lean, 1=100% FULL Rich
     my $idle = $thr;
+
+    # 2 what lights are on/off
     my $rl = fgfs_get_lighting();
     my ($navL,$beak,$strb);
     # fgfs_get_nav_light(\$nl);
@@ -778,9 +794,6 @@ sub show_takeoff($) {
     $navL = ${$rl}{'navlight'};
     $beak = ${$rl}{'beacon'};
     $strb = ${$rl}{'strobe'};
-    $iind = $ind_hdg_degs;
-    ### set_decimal1_stg(\$tmp);
-    set_hdg_stg(\$iind);
 
     my ($rf,$iai,$iait,$iel,$ielt,$irud,$irudt,$iflp,$flap);
     $rf = fgfs_get_flight();
@@ -827,21 +840,26 @@ sub show_takeoff($) {
     set_decimal1_stg(\$irudt);
 
     set_int_stg(\$rpm);
-    set_decimal1_stg(\$thr);
+    #set_decimal1_stg(\$thr);
+    $thr = int($thr * 100);
     set_int_stg(\$ialt);    # = ${$rp}{'alt'};
-    set_hdg_stg(\$ihdg);    # = ${$rp}{'hdg'};
-    set_hdg_stg(\$iagl);    # = ${$rp}{'agl'};
-    set_hdg_stg(\$ihb);     #  = ${$rp}{'bug'};
-    set_hdg_stg(\$imag);    # = ${$rp}{'mag'};  # /orientation/heading-magnetic-deg
+    set_int_stg(\$iagl);    # = ${$rp}{'agl'};
+
+    #set_hdg_stg(\$ihdg);    # = ${$rp}{'hdg'};
+    #set_hdg_stg(\$ihb);     # = ${$rp}{'bug'};
+    #set_hdg_stg(\$imag);    # = ${$rp}{'mag'};  # /orientation/heading-magnetic-deg
+    #set_hdg_stg(\$iind);
+
     #### $iaspd = ${$rp}{'aspd'}; # Knots
     set_int_stg(\$igspd);   # = ${$rp}{'gspd'}; # Knots
     set_int_stg(\$ialt);
     set_int_stg(\$iagl);
+
     prtt("$iagl/$ialt flt a=$iai/$iait e=$iel/$ielt r=$irud/$irudt, f=$iflp($flap) ".
-        "- $rpm/$thr/$igspd - ${imag}m/${ihdg}t/${iind}i/${ihb}b\n");
+        "- $rpm/$thr\%/$igspd \n");
+    #prtt("$iagl/$ialt flt a=$iai/$iait e=$iel/$ielt r=$irud/$irudt, f=$iflp($flap) ".
+    #    "- $rpm/$thr/$igspd - ${imag}m/${ihdg}t/${iind}i/${ihb}b\n");
     ###prtt("Flt e=$iel a=$iai/$irud - $rpm/$thr/$igspd - ${imag}m/${ihdg}t/${iind}i/${ihb}b\n");
-
-
 
 }
 
@@ -853,7 +871,11 @@ sub wait_for_engine() {
     my ($running,$rpm);
     my ($run2,$rpm2);
     my ($throt,$thpc,$throt2,$thpc2);
-    my ($magn,$cmag,$mixt);
+    my ($magn,$cmag,$mixt,$msg);
+    my $showstart = 1;
+    my $last_msg = '';
+    my $show_msg = 0;
+
     prtt("Checking $engine_count engine(s) running...\n");
     $btm = time();
     $ctm = 0;
@@ -883,9 +905,9 @@ sub wait_for_engine() {
             $throt2 = ${$re}{'throttle2'};
             if (($running eq 'true') && ($run2 eq 'true') &&
                 ($rpm > $min_eng_rpm) && ($rpm2 > $min_eng_rpm)) {
-                $thpc = (int($throt * 100) / 10);
+                $thpc = int($throt * 100);
                 $rpm = int($rpm + 0.5);
-                $thpc2 = (int($throt2 * 100) / 10);
+                $thpc2 = int($throt2 * 100);
                 $rpm2 = int($rpm2 + 0.5);
                 prtt("Run1=$running, rpm=$rpm, throt=$thpc\%, mags $cmag, mix $mixt ...\n");
                 prtt("Run2=$run2, rpm=$rpm2, throt=$thpc2\% ...\n");
@@ -895,7 +917,7 @@ sub wait_for_engine() {
         } else {
             # ONE engine
             if (($running eq 'true') && ($rpm > $min_eng_rpm)) {
-                $thpc = (int($throt * 100) / 10);
+                $thpc = int($throt * 100);
                 $rpm = int($rpm + 0.5);
                 prtt("Run=$running, rpm=$rpm, throt=$thpc\%, mags $cmag, mix $mixt ...\n");
                 $ok = 1;
@@ -907,16 +929,33 @@ sub wait_for_engine() {
         }
         $ntm = time();
         $dtm = $ntm - $btm;
-        if ($dtm > $DELAY) {
+        $msg = get_flight_stg(fgfs_get_flight());
+        $show_msg = 0;
+        if ($msg ne $last_msg) {
+            $last_msg = $msg;
+            prtt("$msg\n");
+            $show_msg = 1;
+        }
+        if ($show_msg || ($dtm > $DELAY)) {
             $ctm += $dtm;
             # show_flight(get_curr_flight());
-            show_flight(fgfs_get_flight());
+            # show_flight(fgfs_get_flight());
+            set_int_stg(\$rpm);
             if ($engine_count == 2) {
                 prtt("Waiting for $engine_count engines to start... $ctm secs (run1=$running rpm1=$rpm, run2=$run2 rpm2=$rpm2)\n");
             } else {
                 prtt("Waiting for $engine_count engine to start... $ctm secs (run=$running rpm=$rpm)\n");
             }
             $btm = $ntm;
+            if ($showstart) {
+                prt("\n");
+                prt("Start Engine Checklist\n");
+                prt("\n");
+                $msg = start_engine_checklist();
+                prt("$msg\n");
+                prt("\n");
+                $showstart = 0;
+            }
         }
     }
     my $rp = fgfs_get_position();
@@ -983,12 +1022,25 @@ sub wait_for_alt_hold() {
     return 0;
 }
 
+sub reset_circuit_legs($) {
+    my $rch = shift;
+    # switch off which part of the circuit we are in
+    ${$rch}{'target_takeoff'}  = 0;
+    ${$rch}{'target_cross'}    = 0;
+    ${$rch}{'target_downwind'} = 0;
+    ${$rch}{'target_base'}     = 0;
+    ${$rch}{'target_final'}    = 0;
+    ${$rch}{'target_runway'}   = 0;
+}
+
 sub set_circuit_values($$) {
     my ($rch,$show) = @_;
     my ($az1,$az2,$dist);
     my ($dwd,$dwa,$bsd,$bsa,$rwd,$rwa,$crd,$cra);
     my ($tllat,$tllon,$bllat,$bllon,$brlat,$brlon,$trlat,$trlon);
     my ($elat1,$elon1);  # nearest end
+
+    reset_circuit_legs($rch);
 
     fg_geo_inverse_wgs_84 (${$rch}{'tl_lat'},${$rch}{'tl_lon'},${$rch}{'bl_lat'},${$rch}{'bl_lon'},\$az1,\$az2,\$dist);
     ${$rch}{'tl_az1'} = $az1;
@@ -1119,7 +1171,6 @@ sub get_circuit_hash() {
     $h{'eta_update'} = 0;
     $h{'eta_trend'} = '=';
     $h{'targ_first'}  = 0;
-    $h{'target_runway'} = 0;
     # wp mode to get to a runway say...
     $h{'wp_mode'} = 0;
     $h{'wp_cnt'} = 0;
@@ -1229,6 +1280,8 @@ sub get_closest_ptset($$$$$$) {
 ##### SET A TARGET TO ONE OF APEX OF THE CIRCUIT ####
 #####################################################
 # This will return the next target when joining a circuit from in or out of current circuit
+# Sequence assumed TL -> BL -> BR -> TR -> TL
+# ###########################################
 sub set_next_in_circuit_targ($$$$$) {
     my ($rch,$rp,$slat,$slon,$pt) = @_;
     my ($nlat,$nlon,$nxps,$msg);
@@ -1268,7 +1321,6 @@ sub set_next_in_circuit_targ($$$$$) {
     my $targ = 'NEXT';
     my $prev = "$pt-$nxps $az1";
 
-    # ${$rch}{'targ_first'} = 1;
     if (defined ${$rch}{'targ_first'}) {
         if (${$rch}{'targ_first'} <= 1) {
             $targ = 'First';
@@ -1291,9 +1343,12 @@ sub set_next_in_circuit_targ($$$$$) {
 
     $msg = '';
     set_hdg_stg(\$diff);
-    ${$rch}{'target_runway'} = 0;
-    ${$rch}{'target_downwind'} = 0;
-    if ( ($nxps eq 'TR') && ($pt eq 'BR') ) {
+
+    reset_circuit_legs($rch);
+    ####################################################################
+    # BR -> TR = final - runway - 
+    if ( ($pt eq 'BR') && ($nxps eq 'TR') ) {
+        # BR -> TR - headed to runway, decending for landing, speed, flaps...
         $msg .= "to RUNWAY";
         if (got_runway_coords() && defined $g_rwy_az1) {
             my $diff = get_hdg_diff(${$rch}{'target_hdg'},$g_rwy_az1);
@@ -1305,9 +1360,23 @@ sub set_next_in_circuit_targ($$$$$) {
             }
         }
 
-        ${$rch}{'target_runway'} = 1;
-    } elsif ( ($nxps eq 'BL') && ($pt eq 'TL') ) {
+        ${$rch}{'target_runway'} = 1;   # enter wp mode - just follow some way points...
+
+    ####################################################################
+    # TL -> BL = downwind
+    } elsif ( ($pt eq 'TL') && ($nxps eq 'BL') ) {
+        # TL -> BL - long downwind leg, do landing checks, 
         ${$rch}{'target_downwind'} = 1;
+        $msg .= "to downwind";
+    ####################################################################
+    # BL -> BR = base
+    } elsif ( ($pt eq 'BL') && ($nxps eq 'BR') ) {
+        ${$rch}{'target_base'} = 1;
+        $msg .= "to base";
+    # TR -> TL = cross
+    } elsif ( ($pt eq 'TR') && ($nxps eq 'TL') ) {
+        ${$rch}{'target_cross'} = 1;
+        $msg .= "to cross";
     }
     ##################
     ##### TARGET #####
@@ -1318,6 +1387,30 @@ sub set_next_in_circuit_targ($$$$$) {
     ###################
 }
 
+##############################################################
+### This is ONE simple idea, but NOT very good
+# 
+### Assumes a patern layout
+#      cross
+#   TL       TR
+#    ---------
+# d  |       | takeoff
+# o  |       |
+# w  ...
+# n  |       |
+# w  |       | final
+#    ---------
+#   BL        BR
+#      base
+#
+# From far outside the circuit
+# If approaching from the upwind side, choose TR if distant, TL if close in... actual RL
+# is to cross pattern (at 3-4000ft), headed for half way between TL and BL, and turn left to join circuit
+# If approaching from the crosswind leg, choose TL if distant, of BL if close
+# If approaching from downwind, choose BL, joining circuit smoothly if poss.
+# If approaching from base, choose BR if min turn to final, else BL
+#
+
 sub get_next_in_circuit_targ($$$$) {
     my ($rch,$rp,$slat,$slon) = @_;
     ### my $rch = $ref_circuit_hash;
@@ -1326,7 +1419,7 @@ sub get_next_in_circuit_targ($$$$) {
     set_next_in_circuit_targ($rch,$rp,$slat,$slon,$pt);
 }
 
-sub choose_first_target($$) {
+sub choose_best_target($$) {
     my ($rch,$rp) = @_;
     my ($lat,$lon,$alt);
     $lon  = ${$rp}{'lon'};
@@ -1335,30 +1428,6 @@ sub choose_first_target($$) {
     ${$rch}{'targ_first'} = 1;
     get_next_in_circuit_targ($rch,$rp,$lat,$lon);
 }
-
-
-sub GetHeadingError($$) {
-    my ($initial,$final) = @_;
-    if ($initial > 360 || $initial < 0 || $final > 360 || $final < 0) {
-        pgm_exit(1,"Internal ERROR: GetHeadingError invalid params $initial $final\n");
-    }
-
-    my $diff = $final - $initial;
-    my $absDiff = abs($diff);
-    if ($absDiff <= 180) {
-        # Edit 1:27pm
-        return $absDiff == 180 ? $absDiff : $diff;
-    } elsif ($final > $initial) {
-        return $absDiff - 360;
-    }
-    return 360 - $absDiff;
-}
-
-sub get_hdg_diff($$) {
-    my ($chdg,$nhdg) = @_;
-    return GetHeadingError($chdg,$nhdg);
-}
-
 
 
 sub set_suggested_hdg($$) {
@@ -1498,7 +1567,7 @@ sub do_wpts_to_rwy($$) {
     my $flg = ${$rch}{'wp_flag'};
     my $off = ${$rch}{'wp_off'};
     my $cnt = ${$rch}{'wp_cnt'};
-    my ($ra2,$wp_lat,$wp_lon,$diff);
+    my ($ra2,$wp_lat,$wp_lon,$diff,$ah,$gotah,$msg);
     if ($cnt == 0) {
         ${$rch}{'wp_mode'} = 0;
         return;
@@ -1508,7 +1577,14 @@ sub do_wpts_to_rwy($$) {
     my $lat  = ${$rp}{'lat'};
     my $alt  = ${$rp}{'alt'};
     my $agl  = ${$rp}{'agl'};
+    my $hb   = ${$rp}{'bug'};
     my $gspd = ${$rp}{'gspd'}; # Knots
+    $gotah = 0;
+    fgfs_get_K_ah(\$ah);
+    if ($ah eq 'true') {
+        $gotah = 1;
+    }
+
     my $ra = ${$rch}{'wpts'};    # array of waypoints
     my $gonxt = 0;
     if ($off < $cnt) {
@@ -1521,18 +1597,30 @@ sub do_wpts_to_rwy($$) {
     my $ct = time();
     my ($az1,$az2,$dist,$tlat,$tlon,$secs,$eta);
     my ($taz1,$taz2,$tdist,$tsecs,$teta);
+    my $sethb = 0;
     if ($flg == 0) {
         # first entry, start up first target
         fg_geo_inverse_wgs_84($lat,$lon,$wp_lat,$wp_lon,\$az1,\$az2,\$dist);
         $secs = int(( $dist / (($gspd * $SG_NM_TO_METER) / 3600)) + 0.5);
-        fgfs_set_hdg_bug($az1);
-        ${$rch}{'wp_targ_lat'} = $wp_lat;
-        ${$rch}{'wp_targ_lon'} = $wp_lon;
-        ${$rch}{'wp_targ_hdg'} = $az1;
+        $diff = get_hdg_diff($hb,$az1);
+        if (abs($diff) < 5) {
+            fgfs_set_hdg_bug($az1);
+            $sethb = 1;
+        } elsif ($secs > 15) {
+            fgfs_set_hdg_bug($az1);
+            $sethb = 1;
+        }
+        ${$rch}{'wp_targ_lat'}  = $wp_lat;
+        ${$rch}{'wp_targ_lon'}  = $wp_lon;
+        ${$rch}{'wp_targ_hdg'}  = $az1;
         ${$rch}{'wp_targ_dist'} = $dist;
         ${$rch}{'wp_targ_secs'} = $secs;
+        ${$rch}{'wp_set_hb'}    = $sethb;
+        ${$rch}{'wp_init_agl'}  = $agl;
         ${$rch}{'wp_flag'} = 1;
-        ${$rch}{'wp_off'} = 1;
+        ${$rch}{'wp_off'} = 1;  # move to first wp
+
+        #####################################
         $ra2 = ${$ra}[-1];  # get LAST target
         $tlat = ${$ra2}[0];
         $tlon = ${$ra2}[1];
@@ -1543,18 +1631,21 @@ sub do_wpts_to_rwy($$) {
         ${$rch}{'end_targ_hdg'}  = $taz1;
         ${$rch}{'end_targ_dist'} = $tdist;
         ${$rch}{'end_targ_secs'} = $tsecs;
+        #####################################
 
         # display mess up
         $dist = get_dist_stg_km($dist);
         set_hdg_stg(\$az1);
         $teta = "".secs_HHMMSS2($tsecs);
         $eta = "eta:".secs_HHMMSS2($secs);
+        $az1 .= '*' if ($sethb);
         prtt("WP: Set first of $cnt wps, h=$az1, d=$dist, $eta $teta\n");
         return;
     } else {
+        # get TARGET WP
         $tlat = ${$rch}{'wp_targ_lat'};
         $tlon = ${$rch}{'wp_targ_lon'};
-        # course correction
+        # check course correction
         fg_geo_inverse_wgs_84($lat,$lon,$tlat,$tlon,\$az1,\$az2,\$dist);
         $secs = int(( $dist / (($gspd * $SG_NM_TO_METER) / 3600)) + 0.5);
         $eta = "eta:".secs_HHMMSS2($secs);
@@ -1568,15 +1659,18 @@ sub do_wpts_to_rwy($$) {
             $diff = get_hdg_diff(${$rch}{'wp_targ_hdg'},$az1);
             if (abs($diff) > 1) {
                 fgfs_set_hdg_bug($az1);
+                $sethb = 1;
                 ${$rch}{'wp_targ_hdg'} = $az1;
                 set_hdg_stg(\$az1);
                 ${$rch}{'wp_last'} = $ct;
                 $dist = get_dist_stg_km($dist);
                 set_decimal1_stg(\$diff);
-                prtt("WP: Continue $off of $cnt, at $dist, adj hdg $az1 ($diff) $eta\n");
+                $msg = "WP: Cont. $off of $cnt, at $dist, adj hdg $az1 ($diff) $eta";
 
             } elsif ($ct != ${$rch}{'wp_last'}) {
                 ${$rch}{'wp_last'} = $ct;
+                ##############################################
+                # update end 
                 $ra2 = ${$ra}[-1];  # get LAST target
                 $tlat = ${$ra2}[0];
                 $tlon = ${$ra2}[1];
@@ -1587,18 +1681,24 @@ sub do_wpts_to_rwy($$) {
                 ${$rch}{'end_targ_hdg'}  = $taz1;
                 ${$rch}{'end_targ_dist'} = $tdist;
                 ${$rch}{'end_targ_secs'} = $tsecs;
+                ##############################################
 
                 $dist = get_dist_stg_km($dist);
                 $teta = "".secs_HHMMSS2($tsecs);
-                prtt("WP: Continue $off of $cnt, at $dist $eta $teta\n");
-
+                $msg = "WP: Cont $off of $cnt, at $dist $eta $teta";
             }
+            if (!$gotah) {
+                # are we DECENDING...
+                $msg .= get_decent_msg($rp);
+            }
+            prtt("$msg\n");
             return;
         }
 
         ############################################################################
         $off++;
         fg_geo_inverse_wgs_84($lat,$lon,$wp_lat,$wp_lon,\$az1,\$az2,\$dist);
+
         fgfs_set_hdg_bug($az1);
         $eta = "eta:".secs_HHMMSS2($secs);
         $secs = int(( $dist / (($gspd * $SG_NM_TO_METER) / 3600)) + 0.5);
@@ -1635,6 +1735,78 @@ sub do_wpts_to_rwy($$) {
     ${$rch}{'wp_mode'} = 0;
 }
 
+sub show_decent_checks() {
+    my $txt = decent_checks();
+    my $msg = "\nDecent Checklist\n";
+    $msg .= $txt;
+    $msg .= "\n";
+    prt("$msg\n");
+}
+
+sub get_decent_msg($) {
+    my $rp = shift;
+    my $rf = fgfs_get_flight();
+    my $msg = '';
+    my $agl  = ${$rp}{'agl'};
+    my $hb   = ${$rp}{'bug'};
+    my $gspd = ${$rp}{'gspd'}; # Knots
+    my $aspd = ${$rp}{'aspd'}; # Knots
+    my $iflp = ${$rf}{'flap'};  # 0 = none, 0.333 = 5 degs, 0.666 = 10, 1 = full extended
+    my $flap = "none";
+    if ($iflp >= 0.3) {
+        if ($iflp >= 0.6) {
+            if ($iflp >= 0.9) {
+                $flap = 'full'
+            } else {
+                $flap = '10';
+            }
+        } else {
+            $flap = '5';
+        }
+    }
+    my $vspd = get_ind_vspd_ftm();
+    set_int_stg(\$vspd);
+    set_int_stg(\$agl);
+    set_int_stg(\$aspd);
+    set_int_stg(\$gspd);
+    $msg .= " ias=$aspd/$gspd, $agl ft, $vspd fpm, flaps $flap";
+    return $msg;
+}
+
+my $last_decent_stats = 0;
+sub show_decent_stats($$) {
+    my ($rch,$rp) = @_;
+    my $ctm = time();
+    my $dtm = $ctm - $last_decent_stats;
+    my $show_msg = 0;
+    my ($ah,$gotah,$msg);
+    $msg = '';
+    if ($show_msg || ($dtm > $DELAY)) {
+        $last_decent_stats = $ctm;
+        # extract current POSIIION values
+        my $lon  = ${$rp}{'lon'};
+        my $lat  = ${$rp}{'lat'};
+        my $alt  = ${$rp}{'alt'};
+        my $agl  = ${$rp}{'agl'};
+        my $hb   = ${$rp}{'bug'};
+        my $gspd = ${$rp}{'gspd'}; # Knots
+        my $aspd = ${$rp}{'aspd'}; # Knots
+        $gotah = 0;
+        fgfs_get_K_ah(\$ah);
+        if ($ah eq 'true') {
+            $gotah = 1;
+        }
+       if ($gotah) {
+           # FLYING AT A CONSTANT HEIGHT
+
+       } else {
+            # are we DECENDING/CLIMBING...
+            $msg = "ah=off ";
+            $msg .= get_decent_msg($rp);
+       }
+    }
+    prtt("$msg\n") if (length($msg));
+}
 
 # $circuit_mode is ON
 # $mag_deviation = ($curr_hdg - $curr_mag);
@@ -1694,7 +1866,7 @@ sub process_circuit($) {
 
     # FIRST TIME HERE
     if ($circuit_flag == 0) {
-        choose_first_target($rch,$rp);
+        choose_best_target($rch,$rp);
         $circuit_flag = 1;
         # set intital course to target
         fgfs_set_hdg_bug(${$rch}{'target_hdg'});
@@ -1720,15 +1892,26 @@ sub process_circuit($) {
                     } else {
 
                     }
-
+                } elsif (${$rch}{'target_base'}) {
+                    if (${$rch}{'target_base'} == 1) {
+                        # init for this leg
+                        show_decent_checks();
+                        ${$rch}{'target_base'} = 2;
+                    }
+                    show_decent_stats($rch,$rp);
+                } elsif (${$rch}{'target_downwind'}) {
+                    show_decent_stats($rch,$rp);
+                } elsif (${$rch}{'target_cross'}) {
+                    show_decent_stats($rch,$rp);
                 }
-
             } elsif (${$rch}{'suggest_chg'}) {
                 set_suggested_hdg($rch,$rp);
+            } else {
+                # NOT wp mode, NOT choose new target, NOT suggested change, so...
+                show_decent_stats($rch,$rp);
             }
         }
     }
-
 }
 
 my $do_init_pset = 0;
@@ -1907,6 +2090,55 @@ sub give_help {
     prt(" Will wait for engine running, and after that altitude hold.\n");
     prt(" Accepts keyboard input to run scenarios, ESC key to exit\n");
     prt("\n");
+}
+
+sub landing_checks() {
+    my $txt = <<EOF;
+Speed Normal... 60-70 KIAS (Short/Soft 55) 
+GUMPS check... Complete
+Fuel Selector... Both
+Landing Light... On
+Seat Belts... On
+Flaps... As Required
+Mixture... Rich (Below 3000’ MSL)
+Autopilot... Off
+Carburetor Heat... As Required
+EOF
+    return $txt;
+}
+
+sub decent_checks() {
+    my $txt = <<EOF;
+Seats & Belts... Secure
+Fuel Selector... Both
+Mixture... Enrich
+Engine Instruments... Check
+Avionics... Set
+NAV/GPS Switch... Set
+Aircraft Lights... As Required
+Pitot Heat... As Required 
+EOF
+    return $txt;
+}
+
+sub start_engine_checklist() {
+    my $txt = <<EOF;
+Throttle... Open 1/4 Inch
+Mixture... Idle Cutoff
+Propeller Area... CLEAR
+Master Switch... On
+Flashing Beacon... On
+ If Engine is Cold:
+  Auxiliary Fuel Pump Switch... On
+  Mixture... Set to Full Rich then Idle Cutoff
+  Auxiliary Fuel Pump Switch... Off
+Ignition Switch... Start
+Mixture... Advance to Rich when engine starts
+Throttle... 1,000 RPM Max
+Oil Pressure... Check
+Mixture... Lean For Taxi 
+EOF
+    return $txt;
 }
 
 # eof - do-square.pl
