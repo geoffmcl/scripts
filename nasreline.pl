@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 # NAME: nasreline.pl
-# AIM:
+# AIM: Given a nasal file, try to reline it...
 use strict;
 use warnings;
 use File::Basename;  # split path ($name,$dir,$ext) = fileparse($file [, qr/\.[^.]*/] )
@@ -24,6 +24,7 @@ my $out_file = '';
 my $PATH_SEP = '/';
 my $tmpout = $temp_dir."/tempreline.nas";
 my $ind_char = '    ';  # 4 space indenting
+my $show_quoted_items = 0;
 
 # ### DEBUG ###
 my $debug_on = 1;
@@ -79,13 +80,14 @@ sub process_in_file($) {
     close INF;
     my $lncnt = scalar @lines;
     prt("Processing $lncnt lines, from [$inf]...\n");
-    my ($line,$inc,$lnn,$i,$len,$ch,$indent,$inquot,$qc,$addnl);
+    my ($line,$inc,$lnn,$i,$len,$ch,$indent,$inquot,$qc,$addnl,$i2,$quot);
     $lnn = 0;
     $indent = 0;
     my @brackets = ();
     my @braces = ();
     my $ncode = ''; # new code line, with indent addedd
     my @nlines = ();
+    my @quotes = ();
     foreach $line (@lines) {
         chomp $line;
         $lnn++;
@@ -101,11 +103,17 @@ sub process_in_file($) {
             if ($inquot) {
                 if ($ch eq $qc) {
                     $inquot = 0;
+                    if ( !($quot =~ /^\s*$/) ) {
+                        push(@quotes,$quot);
+                    }
+                } else {
+                    $quot .= $ch;
                 }
             } else {
                 if ($ch eq '"') {
                     $inquot = 1;
                     $qc = $ch;
+                    $quot = '';
                 } elsif ($ch eq '(') {
                     push(@brackets,$lnn);
                 } elsif ($ch eq ')') {
@@ -116,9 +124,43 @@ sub process_in_file($) {
                     push(@braces,$lnn);
                     $indent++;
                     $ncode .= $ch;
+                    $i2 = $i + 1;
+                    # preview the following content, looking for ';'
+                    for (; $i2 < $len; $i2++) {
+                        $ch = substr($line,$i2,1);
+                        if ($ch =~ /\s/) {
+                            # allow spaces
+                        } elsif ($ch eq '}') {
+                            # allow close
+                        } else {
+                            last;
+                        }
+                    }
+                    if ($ch eq ';') {
+                        $i2 = $i + 1;
+                        for (; $i2 < $len; $i2++) {
+                            $ch = substr($line,$i2,1);
+                            if ($ch =~ /\s/) {
+                                $ncode .= $ch;
+                                $i = $i2;
+                            } elsif ($ch eq '}') {
+                                $ncode .= $ch;
+                                $i = $i2;
+                                if (@braces) {
+                                    pop @braces;
+                                }
+                                $indent-- if ($indent);
+                            } elsif ($ch eq ';') {
+                                $ncode .= $ch;
+                                $i = $i2;
+                            } else {
+                                last;
+                            }
+                        }
+                    }
                     push(@nlines,$ncode);
                     $ncode = $ind_char x $indent;
-                    $ch = '';   # dealt with cahr
+                    $ch = '';   # dealt with char
                 } elsif ($ch eq '}') {
                     if (@braces) {
                         pop @braces;
@@ -165,10 +207,27 @@ sub process_in_file($) {
             }
             $ncode .= $ch;
         }
+        $inquot = 0;    # would be BAD if still in QUOTES
     }
     $line = join("\n",@nlines)."\n";
     write2file($line,$tmpout);
     prt("Written relined nasal to $tmpout\n");
+    $len = scalar @quotes;
+    my %dupes = ();
+    if ($len) {
+        prt("List of $len quoted text items...\n");
+        $len = 0;
+        foreach $line (sort @quotes) {
+            if (defined $dupes{$line}) {
+                $dupes{$line}++;
+            } else {
+                $dupes{$line} = 1;
+                prt("$line\n") if ($show_quoted_items);
+                $len++;
+            }
+        }
+        prt("Done list of $len unique quoted text items...\n");
+    }
 }
 
 #########################################
