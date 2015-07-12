@@ -98,6 +98,28 @@ my $show_set_dec_error = 0;
 
 my $wait_ms_get = 50;
 
+sub GetHeadingError($$) {
+    my ($initial,$final) = @_;
+    if ($initial > 360 || $initial < 0 || $final > 360 || $final < 0) {
+        pgm_exit(1,"Internal ERROR: GetHeadingError invalid params $initial $final\n");
+    }
+
+    my $diff = $final - $initial;
+    my $absDiff = abs($diff);
+    if ($absDiff <= 180) {
+        # Edit 1:27pm
+        return $absDiff == 180 ? $absDiff : $diff;
+    } elsif ($final > $initial) {
+        return $absDiff - 360;
+    }
+    return 360 - $absDiff;
+}
+
+sub get_hdg_diff($$) {
+    my ($chdg,$nhdg) = @_;
+    return GetHeadingError($chdg,$nhdg);
+}
+
 sub set_wait_ms_get($) {
     my $ms = shift;
     my $ret = $wait_ms_get;
@@ -308,6 +330,23 @@ sub get_ind_spdkt_stg() {
     return "$spd/$tkt kt";
 }
 
+#############################################################################
+### some indicated vertical speeds
+####################/instrumentation/airspeed-indicator/indicated-speed-kt
+my $ins_vspd_fpm = "/instrumentation/vertical-speed-indicator/indicated-speed-fpm";
+my $ins_vspd_kt  = "/instrumentation/vertical-speed-indicator/indicated-speed-kts";
+my $ins_vspd_mps = "/instrumentation/vertical-speed-indicator/indicated-speed-mps";
+sub fgfs_get_ind_vspd_ftm($) {
+    my $ref = shift;
+    fgfs_get($ins_vspd_fpm, $ref) or get_exit(-2); # bool
+    return 1;
+}
+
+sub get_ind_vspd_ftm() {
+    my ($val);
+    fgfs_get_ind_vspd_ftm(\$val);
+    return $val;
+}
 
 #############################################################################
 
@@ -1789,18 +1828,10 @@ sub fgfs_set_flight_zero() {
     set_flt_flaps(0.0);
 }
 
-sub show_flight($) {
+sub get_flight_stg($) {
     my ($rf) = @_;
-    return if (!defined ${$rf}{'time'});
-    my $ctm = lu_get_hhmmss_UTC(${$rf}{'time'});
+    return "" if (!defined ${$rf}{'time'});
     my ($ai,$ait,$el,$elt,$flp,$rud,$rudt,$flap);
-    #get_flt_ailerons(\$ai);
-    #get_flt_ailerons_trim(\$ait);
-    #get_flt_elevator(\$el);
-    #get_flt_elevator_trim(\$elt);
-    #get_flt_rudder(\$rud);
-    #get_flt_rudder_trim(\$rudt);
-    #my $rf = get_curr_flight();
     $ai  = ${$rf}{'ai'};    # 1 = right, -0.9 = left
     $ait = ${$rf}{'ait'};
     $el  = ${$rf}{'el'};    # 1 = down, to -1(-0.9) = up (climb)
@@ -1808,7 +1839,6 @@ sub show_flight($) {
     $rud = ${$rf}{'rud'};   # 1 = right, to -1(0.9) left
     $rudt= ${$rf}{'rudt'};
     $flp = ${$rf}{'flap'};  # 0 = none, 0.333 = 5 degs, 0.666 = 10, 1 = full extended
-
     $flap = "none";
     if ($flp >= 0.3) {
         if ($flp >= 0.6) {
@@ -1822,7 +1852,6 @@ sub show_flight($) {
         }
     }
 
-
     # mess for display...
     set_decimal1_stg(\$ai);
     set_decimal1_stg(\$ait);
@@ -1831,8 +1860,15 @@ sub show_flight($) {
     set_decimal1_stg(\$rud);
     set_decimal1_stg(\$flp);
     set_decimal1_stg(\$rudt);
+    return "FltCtrls a=$ai/$ait e=$el/$elt r=$rud/$rudt, f=$flp($flap)";
+}
 
-    prtt("FltCtrls a=$ai/$ait e=$el/$elt r=$rud/$rudt, f=$flp($flap)\n");
+sub show_flight($) {
+    my ($rf) = @_;
+    return if (!defined ${$rf}{'time'});
+    # my $ctm = lu_get_hhmmss_UTC(${$rf}{'time'});
+    my $msg = get_flight_stg($rf);
+    prtt("$msg\n");
 
 }
 
