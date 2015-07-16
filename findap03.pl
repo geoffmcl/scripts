@@ -46,8 +46,10 @@ my ($pgmname,$perl_dir) = fileparse($0);
 my $temp_dir = $perl_dir . "/temp";
 unshift(@INC, $perl_dir);
 my $PATH_SEP = '/';
+my $CDATROOT="/media/Disk2/FG/fg22/fgdata"; # 20150716 - 3.5++
 if ($os =~ /win/i) {
     $PATH_SEP = "\\";
+    $CDATROOT="F:/fgdata"; # 20140127 - 3.1
 }
 unshift(@INC, $perl_dir);
 ###require 'logfile.pl' or die "Error: Unable to locate logfile.pl ...\n";
@@ -56,10 +58,6 @@ require 'fg_wsg84.pl' or die "Unable to load fg_wsg84.pl ...\n";
 require "Bucket2.pm" or die "Unable to load Bucket2.pm ...\n";
 require 'lib_fgio.pl' or die "Unable to load 'lib_fgio.pl' Check paths in \@INC...\n";
 
-my $CDATROOT="F:/fgdata"; # 20140127 - 3.1
-###my $CDATROOT="C:/FG/fgdata"; # 20130408 - 2.10
-###my $CDATROOT="C:/FGCVS/FlightGear/data";
-###my $CDATROOT="C:/FGCVS/FlightGear/data";
 my $DSCNROOT = 'D:\Scenery\terrascenery\data\Scenery';
 my $DAPTROOT = 'D:\Scenery\terrascenery\data\Scenery\Airports';
 
@@ -2518,7 +2516,7 @@ sub coord_dist_sq {
 sub get_fix_sample() {
     my $stg = <<EOF;
 I
-600 Version - data cycle 2009.12, build 20091080, metadata FixXP700.  Copyright © 2009, Robin A. Peel (robin\@xsquawkbox.net).
+600 Version - data cycle 2009.12, build 20091080, metadata FixXP700.  Copyright (c) 2009, Robin A. Peel (robin\@xsquawkbox.net).
  52.013889 -000.052778 ASKEY
  50.052778  008.533611 ASKIK
  54.503333  031.086667 ASKIL
@@ -2580,7 +2578,7 @@ sub search_fix_file($) {
 sub get_awy_sample() {
     my $stg = <<EOF;
 I
-640 Version - data cycle 2009.12, build 20091080, metadata AwyXP700.  Copyright © 2009, Robin A. Peel (robin\@xsquawkbox.net). 
+640 Version - data cycle 2009.12, build 20091080, metadata AwyXP700.  Copyright (c) 2009, Robin A. Peel (robin\@xsquawkbox.net). 
 ASKER  38.273889  038.774722 ERH    38.463333  038.112222 1 115 285 W73
 ASKER  38.273889  038.774722 GAZ    36.950278  037.473333 1 255 285 W701
 ASKIK  50.052778  008.533611 DONIS  49.930556  008.859444 1 120 240 Z74
@@ -3566,7 +3564,7 @@ Airport Line. eg '1 5355 1 0 KABQ Albuquerque Intl Sunport'
 1	   - this as an airport header line. 16 is a seaplane/floatplane base, 17 a heliport.
 5355   - Airport elevation (in feet above MSL).  
 1	   - Airport has a control tower (1=yes, 0=no).
-0	   - Display X-Plane’s default airport buildings (1=yes, 0=no).
+0	   - Display X-Plane's default airport buildings (1=yes, 0=no).
 KABQ   - Identifying code for the airport (the ICAO code, if one exists).
 Albuquerque Intl Sunport - Airport name.
 
@@ -3574,13 +3572,13 @@ Runway or taxiway at an airport.
 10          Identifies this as a data line for a runway or taxiway segment. 
 35.044209   Latitude (in decimal degrees) of runway or taxiway segment center. 
 -106.598557 Longitude (in decimal degrees) of runway or taxiway segment center.  
-08x         Runway number (eg “25x” or “24R”).  If there is no runway suffix (eg. “L”, “R”, “C” or "S"), 
-            then an “x” is used.  “xxx” identifies the entry as a taxiway.  
+08x         Runway number (eg 25x or 24R).  If there is no runway suffix (eg. L, R, C or "S"), 
+            then an x is used.  xxx identifies the entry as a taxiway.  
             Helipads at the same airport are numbered sequentially as "H1x", H2x".  
 90.439      True (not magnetic) heading of the runway in degrees.  Must be between 0.00 and 360.00.   
 13749       Runway or taxiway segment length in feet. 
 1000.0000   Length of displaced threshold (1,000 feet) for runway 08 and for the reciprocal runway 26 (0 feet).  
-            The length of the reciprocal runway’s displaced threshold is expressed as the fractional part of 
+            The length of the reciprocal runway's displaced threshold is expressed as the fractional part of 
             this number.  Take the runway 26 displaced threshold length  (in feet) and divide it by 10,000, 
             then add it to the displaced threshold length for runway 08.  For example, for displaced threshold 
             lengths of 543 feet and 1234 feet, the code would be 543.1234.
@@ -3600,10 +3598,10 @@ Runway or taxiway at an airport.
             The  final  three ("231") define the lighting for the runway as seen when approached from the 
             opposite end (26 in our example). 
             In order, these codes represent:
-            Runway end “A” (08):  Visual approach path (VASI / PAPI etc.) lighting.  Here, code 2 corresponds to a VASI.
-            Runway end “A” (08):  Runway lighting. Here, code 5 corresponds to TDZ lighting, which also implies centre-line 
+            Runway end A (08):  Visual approach path (VASI / PAPI etc.) lighting.  Here, code 2 corresponds to a VASI.
+            Runway end A (08):  Runway lighting. Here, code 5 corresponds to TDZ lighting, which also implies centre-line 
             lighting, REIL and edge lighting.
-            Runway end “A” (08):  Approach lighting.  Here, code 2 corresponds to SSALS.
+            Runway end A (08):  Approach lighting.  Here, code 2 corresponds to SSALS.
             Other runway end (26):  Visual approach path (VASI / PAPI etc.) lighting. Here, code 2 corresponds to a VASI.
             Other runway end (26):  Runway lighting. Here, code 3 corresponds to REIL, which also implies edge lighting.
             Other runway end (26):  Approach lighting. Here, code 1 implies  no approach lighting.
@@ -3770,3 +3768,4 @@ EOF
 }
 
 # eof - findap03.pl
+
