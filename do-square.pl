@@ -54,12 +54,15 @@ my $outfile = $temp_dir."/temp.$pgmname.txt";
 open_log($outfile);
 
 # user variables
-my $VERS = "0.0.5 2015-07-06";
+my $VERS = "0.0.6 2015-07-16"; # begin tracker xg function
+### "0.0.5 2015-07-06";
 my $load_log = 0;
 my $in_file = 'ygil.xg';
 ### my $in_file = 'ygil-L.xg';
 my $tmp_xg_out = $temp_dir."/temp.$pgmname.xg";
 my $tmp_wp_out = $temp_dir."/tempwaypt.xg";
+my $tmp_trk_out = $temp_dir."/tmptrk.xg";	# keep movements of aircraft
+
 my $verbosity = 0;
 my $out_file = '';
 # my $HOST = "localhost";
@@ -380,6 +383,37 @@ sub show_ref_circuit_hash() {
     return $rch;
 }
 
+###############################################################
+### keep a tracker xg file
+my %tracker_hash = ();
+my $min_trk_dist = 50;	# meters
+sub get_tracker() {
+	my $rt = \%tracker_hash;
+	if (! defined ${$rt}{'time'}) {
+		${$rt}{'time'} = 0;
+		${$rt}{'lat'} = 0;
+		${$rt}{'lon'} = 0;
+	}
+	return $rt;
+}
+
+sub add2tracker($$$) {
+	my ($rp,$nlat,$nlon) = @_;
+	my $rt = get_tracker();
+	return if (! defined ${$rt}{'time'});
+	my $ct = time();
+	if ($ct != ${$rt}{'time'}) {
+		my $lat = ${$rt}{'lat'};
+		my $lon = ${$rt}{'lat'};
+		my ($az1,$az2,$distm);
+        fg_geo_inverse_wgs_84 ($lat,$lon,$nlat,$nlon,\$az1,\$az2,\$distm);
+		if {$distm > $min_trk_dist) {
+			# write to TRACKER file
+		}
+	}
+}
+	
+########################################################
 ## XG generation
 sub get_circuit_xg() {
     my $xg = "annon $a_gil_lon $a_gil_lat ICAO $icao, circuit $circuit\n";
