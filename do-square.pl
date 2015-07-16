@@ -51,7 +51,8 @@ open_log($outfile);
 # user variables
 my $VERS = "0.0.5 2015-07-06";
 my $load_log = 0;
-my $in_file = 'ygil-L.xg';
+my $in_file = 'ygil.xg';
+### my $in_file = 'ygil-L.xg';
 my $tmp_xg_out = $temp_dir."/temp.$pgmname.xg";
 my $tmp_wp_out = $temp_dir."/tempwaypt.xg";
 my $verbosity = 0;
@@ -226,6 +227,8 @@ sub get_type($) {
         $type = 'bbox';
     } elsif ($color eq 'white') {
         $type = 'circuit';
+    } elsif ($color eq 'green') {
+        $type = 'rcircuit';
     } elsif ($color eq 'blue') {
         $type = 'center line';
     } elsif ($color = 'red') {
@@ -236,7 +239,7 @@ sub get_type($) {
 
 my ($mreh_circuithash,$ref_circuit_hash);
 my ($g_elat1,$g_elon1,$g_elat2,$g_elon2,$g_rwy_az1);
-
+my @g_center_lines = ();
 sub got_runway_coords() {
     if (defined $g_elat1 && defined $g_elon1 && defined $g_elat2 && defined $g_elon2) {
         return 1;
@@ -407,6 +410,8 @@ sub write_circuit_xg($) {
     prt("Circuit XG written to '$file'\n");
 }
 
+# Expect a somewhat special xg describing an airport, its runways,
+# and the left and right circuits around those runways
 sub process_in_file($) {
     my ($inf) = @_;
     if (! open INF, "<$inf") {
@@ -438,6 +443,9 @@ sub process_in_file($) {
                 $type = 'bbox';
             } elsif ($color eq 'white') {
                 $type = 'circuit';
+                $circ_cnt = 0;
+            } elsif ($color eq 'green') {
+                $type = 'rcircuit';
                 $circ_cnt = 0;
             } elsif ($color eq 'blue') {
                 $type = 'center line';
@@ -499,6 +507,22 @@ sub process_in_file($) {
                     $br_lon = $lon;
                 }
                 $circ_cnt++;
+            } elsif ( $type eq 'rcircuit') {
+                # get the CIRCUIT described in the .xg
+                if ($circ_cnt == 0) {
+                    $tr_lat = $lat;
+                    $tr_lon = $lon;
+                } elsif ($circ_cnt == 1) {
+                    $tl_lat = $lat;
+                    $tl_lon = $lon;
+                } elsif ($circ_cnt == 2) {
+                    $bl_lat = $lat;
+                    $bl_lon = $lon;
+                } elsif ($circ_cnt == 3) {
+                    $br_lat = $lat;
+                    $br_lon = $lon;
+                }
+                $circ_cnt++;
             } elsif ($type eq 'center line') {
                 if ($cl_cnt & 0x01) {
                     $g_elat2 = $lat;
@@ -508,6 +532,9 @@ sub process_in_file($) {
                     $g_elon1 = $lon;
                 }
                 $cl_cnt++;
+                if (($cl_cnt % 2) == 0) {
+                    push(@g_center_lines,[$g_elat1,$g_elon1,$g_elat2,$g_elon2]);
+                }
 
             }
 
