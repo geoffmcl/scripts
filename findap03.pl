@@ -39,6 +39,7 @@ use strict;
 use warnings;
 use File::Basename;  # split path ($name,$dir,$ext) = fileparse($file [, qr/\.[^.]*/] )
 use Time::HiRes qw( gettimeofday tv_interval );
+use Math::Trig;
 use Cwd;
 my $cwd = cwd();
 my $os = $^O;
@@ -600,27 +601,201 @@ sub get_ll_stg($$) {
     return $stg;
 }
 
-sub rwy_xg_stg($$$$$) {
-    my ($elat1,$elon1,$elat2,$elon2,$widm) = @_;
-    my $hwidm = $widm / 2;
-    my ($az1,$az2,$s,$az3,$az4);
-    my ($lon1,$lon2,$lon3,$lon4,$lat1,$lat2,$lat3,$lat4);
-    my $xg = "color red\n";
+#####################################################################
+### control the size of the circuit
+my $stand_glide_degs = 3; # degrees
+my $stand_patt_alt = 1000; # feet
+my $stand_cross_nm = 2.1; # nm, but this will depend on the aircraft
+#####################################################################
+### constants
+my $SGD_PI = 3.1415926535;
+my $SGD_DEGREES_TO_RADIANS = $SGD_PI / 180.0;
+my $SGD_RADIANS_TO_DEGREES = 180.0 / $SGD_PI;
+# /** Feet to Meters */
+my $SG_FEET_TO_METER = 0.3048;
+# /** Meters to Feet */
+my $SG_METER_TO_FEET = 3.28083989501312335958;
+my $SG_NM_TO_METER = 1852;
+my $SG_METER_TO_NM = 0.0005399568034557235;
+my $use_full_msg = 0;
+
+sub get_mid_point($$$$$$) {
+    my ($elat1,$elon1,$elat2,$elon2,$rclat,$rclon) = @_;
+    my ($az1,$az2,$s,$az5,$clat,$clon);
     my $res = fg_geo_inverse_wgs_84($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$s);
+    $res = fg_geo_direct_wgs_84($elat1,$elon1, $az1, ($s / 2), \$clat, \$clon, \$az5);
+    ${$rclat} = $clat;
+    ${$rclon} = $clon;
+}
+
+sub rwy_xg_stg($$$$$$$) {
+    my ($elat1,$elon1,$elat2,$elon2,$widm,$rwy1,$rwy2) = @_;
+    my $hwidm = $widm / 2;
+    my ($az1,$az2,$s,$az3,$az4,$az5);
+    my ($lon1,$lon2,$lon3,$lon4,$lat1,$lat2,$lat3,$lat4);
+    my ($clat,$clon);
+    #################################################
+    # center line of runway
+    my $xg = "color blue\n";
+    $xg .= "$elon1 $elat1\n";
+    $xg .= "$elon2 $elat2\n";
+    $xg .= "NEXT\n";
+
+    #################################################
+    # outline of runway, with width
+    $xg .= "color red\n";
+    my $res = fg_geo_inverse_wgs_84($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$s);
+    $res = fg_geo_direct_wgs_84($elat1,$elon1, $az1, ($s / 2), \$clat, \$clon, \$az5);
+    my $rwlen2 = $s;
     $az3 = $az1 + 90;
     $az3 -= 360 if ($az3 >= 360);
     $az4 = $az1 - 90;
     $az4 += 360 if ($az4 < 0);
-    $res = fg_geo_direct_wgs_84($elat1,$elon1, $az3, $hwidm, \$lat1, \$lon1, \$az2);
+    $res = fg_geo_direct_wgs_84($elat1,$elon1, $az3, $hwidm, \$lat1, \$lon1, \$az5);
     $xg .= "$lon1 $lat1\n";
-    $res = fg_geo_direct_wgs_84($elat1,$elon1, $az4, $hwidm, \$lat2, \$lon2, \$az2);
+    $res = fg_geo_direct_wgs_84($elat1,$elon1, $az4, $hwidm, \$lat2, \$lon2, \$az5);
     $xg .= "$lon2 $lat2\n";
-    $res = fg_geo_direct_wgs_84($elat2,$elon2, $az4, $hwidm, \$lat3, \$lon3, \$az2);
+    $res = fg_geo_direct_wgs_84($elat2,$elon2, $az4, $hwidm, \$lat3, \$lon3, \$az5);
     $xg .= "$lon3 $lat3\n";
-    $res = fg_geo_direct_wgs_84($elat2,$elon2, $az3, $hwidm, \$lat4, \$lon4, \$az2);
+    $res = fg_geo_direct_wgs_84($elat2,$elon2, $az3, $hwidm, \$lat4, \$lon4, \$az5);
     $xg .= "$lon4 $lat4\n";
     $xg .= "$lon1 $lat1\n";
     $xg .= "NEXT\n";
+
+    # We have the RUNWAY ends - now extend out to first turn to crosswind leg, and turn to final
+    # but by how MUCH - ok decide from runway end, out to where it is a 3 degree glide from 1000 feet
+    my $dist = ($stand_patt_alt * $SG_FEET_TO_METER) / tan($stand_glide_degs * $SGD_DEGREES_TO_RADIANS);
+    my ($plat11,$plon11,$plat12,$plon12,$plat13,$plon13,$paz1);
+    my ($plat21,$plon21,$plat22,$plon22,$plat23,$plon23,$paz2);
+    my ($hdg1L,$hdg1R,$crossd);
+    # get the outer end of the circuit
+    fg_geo_direct_wgs_84( $clat, $clon, $az1, $rwlen2+$dist, \$plat11, \$plon11, \$paz1 );
+    fg_geo_direct_wgs_84( $clat, $clon, $az2, $rwlen2+$dist, \$plat21, \$plon21, \$paz2 );
+    $hdg1L = $az1 - 90;
+    $hdg1L += 360 if ($hdg1L < 0);
+    $hdg1R = $az1 + 90;
+    $hdg1R -= 360 if ($hdg1R > 360);
+    $crossd = $stand_cross_nm * $SG_NM_TO_METER;
+    # ON $rhdg to $elat1, $elon1 to ... turn point, go LEFT and to get NEXT points, this end
+    fg_geo_direct_wgs_84( $plat11, $plon11, $hdg1L, $crossd, \$plat12, \$plon12, \$paz1 );
+    fg_geo_direct_wgs_84( $plat21, $plon21, $hdg1L, $crossd, \$plat13, \$plon13, \$paz1 );
+
+    # from the turn point, go LEFT and RIGHT to get NEXT points, this other end
+    fg_geo_direct_wgs_84( $plat21, $plon21, $hdg1R, $crossd, \$plat22, \$plon22, \$paz2 );
+    fg_geo_direct_wgs_84( $plat11, $plon11, $hdg1R, $crossd, \$plat23, \$plon23, \$paz2 );
+
+    my ($l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon);
+    my ($r_tl_lat,$r_tl_lon,$r_bl_lat,$r_bl_lon,$r_br_lat,$r_br_lon,$r_tr_lat,$r_tr_lon);
+    my ($m_lat,$m_lon);
+
+    #################################################
+    # RIGHT CIRCUIT
+    # At YGIL, this is a 15 circuit (the prevailing wind! SSE...
+    $r_tl_lat = $plat12;
+    $r_tl_lon = $plon12;
+    $r_bl_lat = $plat13;
+    $r_bl_lon = $plon13;
+    $r_br_lat = $plat21;
+    $r_br_lon = $plon21;
+    $r_tr_lat = $plat11;
+    $r_tr_lon = $plon11;
+    # RIGHT CIRCUIT
+    $xg .= "color green\n";
+    $xg .= "anno $r_tr_lon $r_tr_lat R-TR\n";
+    $xg .= "$r_tr_lon $r_tr_lat\n";
+
+    get_mid_point($r_tr_lat,$r_tr_lon,$r_tl_lat,$r_tl_lon,\$m_lat,\$m_lon); # TR->TL - cross
+    if ($use_full_msg) {
+        $xg .= "anno $m_lon $m_lat cross TR->TL\n";
+    } else {
+        $xg .= "anno $m_lon $m_lat cross\n";
+    }
+
+    $xg .= "anno $r_tl_lon $r_tl_lat R-TL\n";
+    $xg .= "$r_tl_lon $r_tl_lat\n";
+
+    get_mid_point($r_tl_lat,$r_tl_lon,$r_bl_lat,$r_bl_lon,\$m_lat,\$m_lon); # TL->BL - downwind
+    if ($use_full_msg) {
+        $xg .= "anno $m_lon $m_lat downwind TL->BL\n";
+    } else {
+        $xg .= "anno $m_lon $m_lat downwind\n";
+    }
+
+    $xg .= "anno $r_bl_lon $r_bl_lat R-BL\n";
+    $xg .= "$r_bl_lon $r_bl_lat\n";
+
+    get_mid_point($r_bl_lat,$r_bl_lon,$r_br_lat,$r_br_lon,\$m_lat,\$m_lon); # BL->BR - base
+    if ($use_full_msg) {
+        $xg .= "anno $m_lon $m_lat base BL->BR\n";
+    } else {
+        $xg .= "anno $m_lon $m_lat base\n";
+    } 
+
+    $xg .= "anno $r_br_lon $r_br_lat R-BR\n";
+    $xg .= "$r_br_lon $r_br_lat\n";
+
+    # on final
+    # get_mid_point($r_br_lat,$r_br_lon,$r_tr_lat,$r_tr_lon,\$m_lat,\$m_lon); # BR->TR - runway
+    get_mid_point($r_br_lat,$r_br_lon,$elat2,$elon2,\$m_lat,\$m_lon); # BR->RWY - final
+    $xg .= "anno $m_lon $m_lat final $rwy1\n";
+
+    $xg .= "$r_tr_lon $r_tr_lat\n";
+    $xg .= "NEXT\n";
+
+    #################################################
+    # At YGIL, this is a 33 circuit
+    $l_tl_lat = $plat22; #-31.684063;
+    $l_tl_lon = $plon22; #148.614120;
+    $l_bl_lat = $plat23; #-31.723495;
+    $l_bl_lon = $plon23; #148.633003;
+    $l_br_lat = $plat11; #-31.716778;
+    $l_br_lon = $plon11; #148.666992;
+    $l_tr_lat = $plat21; #-31.672960;
+    $l_tr_lon = $plon21; #148.649139;
+    ###########################################################
+    # LEFT circuit
+    $xg .= "color white\n";
+    $xg .= "anno $l_tr_lon $l_tr_lat _____ L-TR\n";
+
+    get_mid_point($l_tr_lat,$l_tr_lon,$l_tl_lat,$l_tl_lon,\$m_lat,\$m_lon); # TR->TL - cross
+    if ($use_full_msg) {
+        $xg .= "anno $m_lon $m_lat cross TR->TL\n";
+    } else {
+        $xg .= "anno $m_lon $m_lat cross\n";
+    }
+
+    $xg .= "$l_tr_lon $l_tr_lat\n";
+    $xg .= "anno $l_tl_lon $l_tl_lat L-TL\n";
+    $xg .= "$l_tl_lon $l_tl_lat\n";
+
+    get_mid_point($l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,\$m_lat,\$m_lon); # TL->BL - downwind
+    if ($use_full_msg) {
+        $xg .= "anno $m_lon $m_lat downwind TL->BL\n";
+    } else {
+        $xg .= "anno $m_lon $m_lat downwind\n";
+    } 
+
+    $xg .= "anno $l_bl_lon $l_bl_lat L-BL\n";
+    $xg .= "$l_bl_lon $l_bl_lat\n";
+
+    get_mid_point($l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,\$m_lat,\$m_lon); # BL->BR - base
+    if ($use_full_msg) {
+        $xg .= "anno $m_lon $m_lat base BL->BR\n";
+    } else {
+        $xg .= "anno $m_lon $m_lat base\n";
+    } 
+
+    $xg .= "anno $l_br_lon $l_br_lat _____ L-BR\n";
+    $xg .= "$l_br_lon $l_br_lat\n";
+
+    # on final
+    # get_mid_point($l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon,\$m_lat,\$m_lon); # BR->TR - runway
+    get_mid_point($l_br_lat,$l_br_lon,$elat1,$elon1,\$m_lat,\$m_lon); # BR->RWY - final
+    $xg .= "anno $m_lon $m_lat final $rwy2\n";
+
+    $xg .= "$l_tr_lon $l_tr_lat\n";
+    $xg .= "NEXT\n";
+
     #### prt($xg);
     return $xg;
 }
@@ -812,7 +987,7 @@ sub show_airports_found {
                     }
                 }
                 # =======================================================
-                $apt_xg .= rwy_xg_stg($elat1,$elon1,$elat2,$elon2,feet_2_meter($rwid));
+                $apt_xg .= rwy_xg_stg($elat1,$elon1,$elat2,$elon2,feet_2_meter($rwid),$rtyp,$rhdg);
                 # =======================================================
                 $min_lat = $elat1 if ($elat1 < $min_lat);
                 $max_lat = $elat1 if ($elat1 > $max_lat);
@@ -878,7 +1053,7 @@ sub show_airports_found {
                 $elon2 = ${$ra}[19];
                 my $res = fg_geo_inverse_wgs_84 ($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$s);
                 # =======================================================
-                $apt_xg .= rwy_xg_stg($elat1,$elon1,$elat2,$elon2,$rwid);
+                $apt_xg .= rwy_xg_stg($elat1,$elon1,$elat2,$elon2,$rwid,$rwy1,$rwy2);
                 # =======================================================
                 $min_lat = $elat1 if ($elat1 < $min_lat);
                 $max_lat = $elat1 if ($elat1 > $max_lat);
