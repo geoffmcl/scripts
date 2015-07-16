@@ -31,7 +31,8 @@ require 'lib_utils.pl' or die "Unable to load 'lib_utils.pl' Check paths in \@IN
 require 'fg_wsg84.pl' or die "Unable to load fg_wsg84.pl ...\n";
 require 'lib_fgio.pl' or die "Unable to load 'lib_fgio.pl'! Check location and \@INC content.\n";
 
-my $VERS = "0.0.6 2015-07-08"; # add to scripts repo
+my $VERS = "0.0.7 2015-07-15"; # some functions moved to library
+# my $VERS = "0.0.6 2015-07-08"; # add to scripts repo
 # my $VERS = "0.0.5 2014-11-29"; # allow ICAO inputs
 # my $VERS = "0.0.4 2014-10-11"; # allow single 4 value input
 # my $VERS = "0.0.3 2011-09-08"; # added --inter <NUM>, to output a SET of points between
@@ -50,6 +51,10 @@ my $K2KPH = 1.85200;
 my $Km2NMiles = 1 / $K2KPH; # Nautical Miles.
 #my $Km2NMiles = 0.53995680346; # Nautical Miles.
 my $MAD_LL = -200;
+# /** Feet to Meters */
+my $SG_FEET_TO_METER = 0.3048;
+# /** Meters to Feet */
+my $SG_METER_TO_FEET = 3.28083989501312335958;
 
 # London and Tokyo - not used
 #my $lonlon = -0.5;
@@ -178,28 +183,28 @@ sub set_decimal_stg($) {
  # Notice the 90 - latitude: phi zero is at the North Pole
 sub NESW { deg2rad($_[0]), deg2rad(90 - $_[1]) }
 
-
-sub GetHeadingError($$) {
-    my ($initial,$final) = @_;
-    if ($initial > 360 || $initial < 0 || $final > 360 || $final < 0) {
-        pgm_exit(1,"Internal ERROR: GetHeadingError invalid params $initial $final\n");
-    }
-
-    my $diff = $final - $initial;
-    my $absDiff = abs($diff);
-    if ($absDiff <= 180) {
-        # Edit 1:27pm
-        return $absDiff == 180 ? $absDiff : $diff;
-    } elsif ($final > $initial) {
-        return $absDiff - 360;
-    }
-    return 360 - $absDiff;
-}
-
-sub get_hdg_diff($$) {
-    my ($chdg,$nhdg) = @_;
-    return GetHeadingError($chdg,$nhdg);
-}
+# moved to lib_fgio.pl library
+#sub GetHeadingError($$) {
+#    my ($initial,$final) = @_;
+#    if ($initial > 360 || $initial < 0 || $final > 360 || $final < 0) {
+#        pgm_exit(1,"Internal ERROR: GetHeadingError invalid params $initial $final\n");
+#    }
+#
+#    my $diff = $final - $initial;
+#    my $absDiff = abs($diff);
+#    if ($absDiff <= 180) {
+#        # Edit 1:27pm
+#        return $absDiff == 180 ? $absDiff : $diff;
+#    } elsif ($final > $initial) {
+#        return $absDiff - 360;
+#    }
+#    return 360 - $absDiff;
+#}
+#
+#sub get_hdg_diff($$) {
+#    my ($chdg,$nhdg) = @_;
+#    return GetHeadingError($chdg,$nhdg);
+#}
 
 
 sub show_sg_distance_vs_est($$$$$$) {
@@ -468,10 +473,13 @@ sub show_distance($$$$) {
     my $d_nmiles = $d_km * $Km2NMiles;
 
     # derived
+    my $d_m = int(($d_km * 1000) + 0.5);
+    my $d_ft = int(($d_km * 1000 * $SG_METER_TO_FEET) + 0.5);
     my $chdg = int($hdg + 0.05); # only WHOLE degrees
     $chdg = "0$chdg" while (length($chdg) < 3);
     my $crhdg = int($rhdg + 0.5);
     $crhdg = "0$crhdg" while (length($crhdg) < 3);
+    my $thdg = $hdg;
 
     my $hrs = $d_km / $g_speed;
     my $eta = get_hhmmss($hrs);
@@ -486,7 +494,8 @@ sub show_distance($$$$) {
     $t_degs = sprintf("%0.6f",$t_degs);
     get_sg_distance_vs_est( $lat1,$lon1,$lat2,$lon2,$d_km,$hdg, \$cmpdist, \$cmphdg );
     if (VERB1()) {
-        prt("Center lat,lon $sg_clat,$sg_clon, heading $sg_hdg\n");
+        set_decimal1_stg(\$thdg);
+        prt("Center: lat,lon $sg_clat,$sg_clon, heading $thdg, dist $d_m m, $d_ft ft..\n");
     }
     if (VERB2()) {
         prt("From (lon,lat): $lon1,$lat1 to $lon2,$lat2 is about -\n");
@@ -724,27 +733,6 @@ exit(0);
 
 # ==========================
 
-sub give_help {
-    prt("\n");
-    prt("$pgmname: version $VERS\n");
-    prt("Usage: $pgmname [options] lat1 lon1 lat2 lon2\n");
-    prt("Options:\n");
-    prt(" --help     (-h or -?) = This help, and exit 0.\n");
-    prt(" --inter Num     (-i) = Show intervals between points. (def=off)\n");
-    prt(" --rev           (-r) = Reverse the calculation. (def=off)\n");
-    prt(" --speed         (-s) = Set the speed, in knots. (def=$g_ias)\n");
-    prt(" --air APT1:APT2 (-a) = Distance between airports, as 2 or more ICAO.\n");
-    prt(" --xchange       (-x) = Exchange lat and lon\n");
-    prt("   Uses file $aptdat ".((-f $aptdat) ? "ok" : "NOT FOUND *** FIX ME ***")."\n");
-    prt(" -v[N]                = Bump or set verbosity. (def=$verbosity).\n");
-    prt("The lat/lon can be input as comma separated pairs.\n");
-    prt("\n");
-    prt("The calculation is first done using Math::Trig qw(great_circle_distance ...), and\n");
-    prt(" then repeated using a perl rendition of simgear fg_geo_inverse_wgs_84(), and\n");
-    prt(" the results are compared. Bumping verbosity will display the SG values.\n");
-    prt("\n");
-}
-
 sub need_arg {
     my ($arg,@av) = @_;
     pgm_exit(1,"ERROR: [$arg] must have following argument!\n") if (!@av);
@@ -797,6 +785,15 @@ sub parse_args {
                 need_arg(@av);
                 shift @av;
                 $icaos = $av[0];
+            } elsif ($sarg =~ /^f/) {
+                need_arg(@av);
+                shift @av;
+                $sarg = $av[0];
+                $aptdat = $sarg;
+                if (! -f $aptdat) {
+                    pgm_exit(1,"Error: Can NOT locate '$aptdat' file! *** FIX ME ***\n");
+                }
+                prt("Set airport data to $aptdat.\n") if (VERB5());
             } elsif ($sarg =~ /^r/) {
                 $rev = 1;
             } elsif ($sarg =~ /^i/) {
@@ -914,7 +911,7 @@ sub parse_args {
     }
     if (in_world($g_lat1,$g_lon1) &&
         in_world($g_lat2,$g_lon2) ) {
-        prt("Input (lat,lon) $g_lat1,$g_lon1 to $g_lat2,$g_lon2\n") if (VERB1());
+        prt("Input (lat,lon) $g_lat1,$g_lon1 to $g_lat2,$g_lon2\n") if (VERB2());
         $do_global_vals = 1;
     } elsif (!$got_icao) {
         #in_world_show($g_lat1,$g_lon1);
@@ -929,5 +926,31 @@ sub parse_args {
         pgm_exit(1,"\n");
     }
 }
+
+sub give_help {
+    prt("\n");
+    prt("$pgmname: version $VERS\n");
+    prt("\n");
+    prt("Usage: $pgmname [options] lat1 lon1 lat2 lon2\n");
+    prt("Options:\n");
+    prt(" --help     (-h or -?) = This help, and exit 0.\n");
+    prt(" --inter Num     (-i) = Show intervals between points. (def=off)\n");
+    prt(" --rev           (-r) = Reverse the calculation. (def=off)\n");
+    prt(" --speed         (-s) = Set the speed, in knots. (def=$g_ias)\n");
+    prt(" --air APT1:APT2 (-a) = Distance between airports, as 2 or more ICAO.\n");
+    prt(" --xchange       (-x) = Exchange lat and lon\n");
+    prt(" --file <file>   (-f) = Set the FG airport dat file to use.\n");
+    prt("   Def file $aptdat ".((-f $aptdat) ? "ok" : "*** NOT FOUND *** FIX ME ***")."\n");
+    prt(" -v[N]                = Bump or set verbosity. (def=$verbosity).\n");
+    prt(" -v1 will show the center lat,lon, heading, and distance in meters.\n");
+    prt("\n");
+    prt(" The lat/lon can be input as comma separated pairs.\n");
+    prt("\n");
+    prt(" The calculation is first done using Math::Trig qw(great_circle_distance ...), and\n");
+    prt(" then repeated using a perl rendition of simgear fg_geo_inverse_wgs_84(), and\n");
+    prt(" the results are compared. Bumping verbosity will display the SG values.\n");
+    prt("\n");
+}
+
 
 # eof - distance02.pl
