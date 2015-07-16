@@ -25,6 +25,11 @@
 # Need to prepare ALL cicuits, meaning left and right, and 2 for each runway
 # When a runway is chosen, then should fly the left circuit of that runway
 # 
+# Heading: This is where my nose points
+# Course: This is my INTENDED path calculated taking in winds, variation and declination.
+# Track: This is my ACTUAL path traveled over ground 
+# Bearing: This is the position of another object from my position... mag/true
+# 
 use strict;
 use warnings;
 use File::Basename;  # split path ($name,$dir,$ext) = fileparse($file [, qr/\.[^.]*/] )
@@ -412,6 +417,10 @@ sub write_circuit_xg($) {
 
 # Expect a somewhat special xg describing an airport, its runways,
 # and the left and right circuits around those runways
+# flags
+my $had_blue  = 0x0001;
+my $had_white = 0x0002;
+
 sub process_in_file($) {
     my ($inf) = @_;
     if (! open INF, "<$inf") {
@@ -421,7 +430,7 @@ sub process_in_file($) {
     close INF;
     my $lncnt = scalar @lines;
     prt("Processing $lncnt lines, from [$inf]...\n") if (VERB2());
-    my ($line,$inc,$lnn,$type,@arr,$cnt,$ra,$lat,$lon,$text);
+    my ($line,$inc,$lnn,$type,@arr,$cnt,$ra,$lat,$lon,$text,$rwy);
     my (@arr2);
     my $tmpxg = $tmp_xg_out;
     $lnn = 0;
@@ -430,7 +439,43 @@ sub process_in_file($) {
     my %h = ();
     my $circ_cnt = 0;
     my $cl_cnt = 0;
+    my $flag = 0;
+    my $bcnt = 0;
+    my @block = ();
+    my @blocks = ();
+    my %colors = ();
     ###write_circuit_xg($tmpxg);
+    my %dupes = ();
+    foreach $line (@lines) {
+        chomp $line;
+        $lnn++;
+        if ($line =~ /^\s*color\s+(.+)$/) {
+            $color = $1;
+            if (defined $dupes{$color}) {
+                # doing the next block...
+                $bcnt++;
+                if (@block) {
+                    %dupes = ();
+                    my @a = @block;
+                    push(@blocks,\@a);
+                    @block = ();
+                }
+            }
+            $dupes{$color} = 1;
+            $colors{$color} = 1;
+        }
+        push(@block,$line);
+    }
+    if (@block) {
+        $bcnt++;
+        %dupes = ();
+        my @a = @block;
+        push(@blocks,\@a);
+        @block = ();
+    }
+    $bcnt = scalar @blocks;
+    prt("Split files lines into $bcnt blocks...\n");
+    pgm_exit(1,"TEMP EXIT\n");
     foreach $line (@lines) {
         chomp $line;
         $lnn++;
@@ -449,6 +494,9 @@ sub process_in_file($) {
                 $circ_cnt = 0;
             } elsif ($color eq 'blue') {
                 $type = 'center line';
+                if ($flag & $had_blue) {
+                    # This is a NEW set starting
+                }
             } elsif ($color = 'red') {
                 $type = 'runways';
             }
@@ -479,6 +527,8 @@ sub process_in_file($) {
                     $a_gil_lat = $lat;
                     $a_gil_lon = $lon;
                     prt("CIRCUIT $a_gil_lat,$a_gil_lon ICAO $icao, circuit $circuit\n") if (VERB5());
+                } elsif ($text =~ /final\s+(\w+)$/) {
+                    $rwy = $1;
                 } else {
                     prt("Annotation $lat,$lon '$text'\n") if (VERB9());
                 }
@@ -1589,6 +1639,42 @@ sub set_wpts_to_rwy($$) {
     my ($elat1,$elon1,$elat2,$elon2);
     my ($az1,$az2,$distm);
     my ($tllat,$tllon,$bllat,$bllon,$brlat,$brlon,$trlat,$trlon);
+    my $thdg = ${$rch}{'target_hdg'};
+    my ($diff,$diff2,$fnd);
+    # are we picking up the right RUNWAY
+    $fnd = 0;
+    if (@g_center_lines) {
+        my ($ra);
+        #                       0        1        2        3
+        # push(@g_center_lines,[$g_elat1,$g_elon1,$g_elat2,$g_elon2]);
+        $diff2 = 30;
+        foreach $ra (@g_center_lines) {
+            $elat1 = ${$ra}[0];
+            $elon1 = ${$ra}[1];
+            $elat2 = ${$ra}[2];
+            $elon2 = ${$ra}[3];
+            fg_geo_inverse_wgs_84 ($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$distm);
+            $diff = abs(get_hdg_diff($az1,$thdg));
+            if ($diff < $diff2) {
+                $diff2 = $diff;
+                $g_elat1 = $elat1;
+                $g_elon1 = $elon1;
+                $g_elat2 = $elat2;
+                $g_elon2 = $elon2;
+                $fnd |= 1;
+            }
+            $diff = abs(get_hdg_diff($az2,$thdg));
+            if ($diff < $diff2) {
+                $diff2 = $diff;
+                $g_elat2 = $elat1;
+                $g_elon2 = $elon1;
+                $g_elat1 = $elat2;
+                $g_elon1 = $elon2;
+                $fnd |= 2;
+            }
+        }
+    }
+    # have we chosen wisely???
     $elat1 = $g_elat1;
     $elon1 = $g_elon1;
     $elat2 = $g_elat2;
@@ -1609,14 +1695,21 @@ sub set_wpts_to_rwy($$) {
     # this is the leg BR to TR for 33 circuit
     # $brlat = ${$rch}{'br_lat'};
     # $brlon = ${$rch}{'br_lon'};
-    my ($az11,$az21,$dist1,$az12,$az22,$dist2);
-    my $thdg = ${$rch}{'target_hdg'};
-    my $diff = get_hdg_diff($az1,$thdg);
-    if (($diff < -15) || ($diff > 15)) {
+    my ($az11,$az21,$dist1,$az12,$az22,$dist2,$char,$tnow,$tnxt);
+    $diff = abs(get_hdg_diff($az1,$thdg));
+    if ($diff > 30) {
         set_hdg_stg(\$az1);
         set_hdg_stg(\$thdg);
         set_decimal1_stg(\$diff);
-        prt("Target hdg $thdg gt 30 ($diff) away from runway $az1... no solution...\n");
+        prt("\nTarget hdg $thdg gt 30 ($diff) away from runway $az1... no solution...\n\n");
+        $tnxt = 0;
+        while ( !got_keyboard(\$char) ) {
+            $tnow = time();
+            if ($tnow != $tnxt) {
+                $tnxt = $tnow;
+                prt("Any key to continue!\n");
+            }
+        }
         return;
     }
 
