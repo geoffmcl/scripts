@@ -229,6 +229,12 @@ sub show_position($) {
     prt("$ctm $rpm/$thr\n");
 }
 
+sub show_wind_speed() {
+    my $msg = "Wind speed: ";
+    $msg .= get_env_wind_stg();
+    prt("$msg\n");
+}
+
 sub connect_to_fgfs() {
     wait_fgio_avail();
     my ($rch);
@@ -237,6 +243,7 @@ sub connect_to_fgfs() {
     prt("Show position...\n");
     show_position($rp);
     show_decent_stats($rch,$rp);
+    show_wind_speed();
     fgfs_disconnect();
 }
 
