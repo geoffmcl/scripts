@@ -144,6 +144,8 @@ my $exclude_gs_ils  = 1;     # exclude the GS, since has the same frequency as a
 my $min_nav_aids = 10;
 my $out_file = '';
 my $add_anno = 0;   # -a - add xgraph anno output for airport
+my $xg_output = '';
+
 my $HOST = "localhost";
 my $PORT = 5556;
 my $TIMEOUT = 1;
@@ -820,6 +822,8 @@ sub show_airports_found {
                 $max_lats = $elat1 if ($elat1 > $max_lats);
                 $min_lons = $elon1 if ($elon1 < $min_lons);
                 $max_lons = $elon1 if ($elon1 > $max_lons);
+                $apt_xg .= "anno $elon1 $elat1 $rtyp\n";
+                $apt_xg .= "anno $elon2 $elat2 $rhdg\n";
 
                 if ($gen_threshold_xml) {
                     $lato1 = $elat1;
@@ -902,6 +906,8 @@ sub show_airports_found {
                 if (defined $runway_surface{$surf}) {
                     $info .= " (".$runway_surface{$surf}.")";
                 }
+                $apt_xg .= "anno $elon1 $elat1 $rwy1\n";
+                $apt_xg .= "anno $elon2 $elat2 $rwy2\n";
             } else {
                 pgm_exit(1,"Uncoded RUNWAY type $type - FIX ME!\n".join(" ",@{$ra})."\n");
             }
@@ -988,6 +994,7 @@ sub show_airports_found {
     if ($add_anno && length($annoxg)) {
         $annoxg .= $apt_xg;
         #prt("$annoxg");
+        $out_xg1 = $xg_output if (length($xg_output));
         write2file($annoxg,$out_xg1);
         prt("Written airport XG file $out_xg1\n");
     }
@@ -3036,7 +3043,7 @@ sub give_help {
 	prt( "*** FLIGHTGEAR AIRPORT SEARCH UTILITY - $VERS ***\n" );
 	prt( "Usage: $pgmname options\n" );
 	prt( "Options: A ? anywhere for this help.\n" );
-    prt( " --anno          (-a) = Generate XG(rapgh) output for airports. (def=".
+    prt( " --anno          (-a) = Generate XG(raph) output for airports. (def=".
         ($add_anno ? "On" : "Off") . "\n");
     prt( " --bbox          (-b) = Output a bounding box for the airport.\n");
     prt( " --file <file>   (-f) = Load commands from this 'file' of commands...\n");
@@ -3055,16 +3062,17 @@ sub give_help {
         ((-f $navdat) ? 'ok' : 'NF!').")\n" );
     prt( " -range=$max_range_km             = Set Km range when checking for NAVAIDS.\n" );
     prt( " -r                   = Use above range ($max_range_km Km) for searching.\n" );
-#    prt( " --sidstar       (-s) = Attempt SID/STAR generation. Implies -n, and needs ICAO search.\n");
+    prt( " --sidstar       (-s) = Attempt SID/STAR generation. Implies -n, and needs ICAO search.\n");
     prt( " -tryhard        (-t) = Expand search if no NAVAIDS found in range. " );
     prt( "(Def=". ($tryharder ? "On" : "Off") . ")\n" );
     prt( " --verbosity (-v[nn]) = Increase or set verbosity.\n");
     prt( " --VOR           (-V) = List only VOR (+NDB)\n");
     prt( " --loadlog       (-l) = Load log at end of display.\n");
-    prt( " --xml           (-x) = Generate ICAO.threshold.xml file (def=".
+    prt( " --Xml           (-X) = Generate ICAO.threshold.xml file (def=".
         ($gen_threshold_xml ? "on" : "off").")\n");
     prt( " --out <file>    (-o) = Write found information to file. (def=".
         (length($out_file) ? $out_file : "none").")\n");
+    prt( " --xg <file>     (-x) = Write airport xg file. Implies -a\n");
     prt( "When searching by lat,lon, use -H to not skip helipads.\n");
 	mydie( "                                                         Happy Searching.\n" );
 }
@@ -3338,10 +3346,10 @@ sub parse_args {
                     prt( "[v1] Set show NAVAIDS around airport, if any.\n" ) if (VERB1());
                 }
             ##########################################################
-            #} elsif ( $arg =~ /^-s$/i ) {
-            #    $SHOWNAVS = 1;
-            #    $gen_sidstar = 1;
-            #    prt( "[v1] Attempt SID/STAR generation using fixes.\n" ) if (VERB1());
+            } elsif ( $sarg =~ /^s/ ) {
+                $SHOWNAVS = 1;
+                $gen_sidstar = 1;
+                prt( "[v1] Attempt SID/STAR generation using fixes.\n" ) if (VERB1());
             ##########################################################
             } elsif ( $arg =~ /-maxll=(.+)/i ) {
                 @arr = split(',', $1);
@@ -3463,9 +3471,16 @@ sub parse_args {
             } elsif (( $lcarg eq '-tryhard' )||( $lcarg eq '-t' )) {
                 $tryharder = 1;  # Expand the search for NAVAID, until at least 1 found
                 prt( "[v1] Set NAVAID search 'tryharder'...\n" ) if (VERB1());
-            } elsif ($sarg =~ /^x/) {
+            } elsif ($sarg =~ /^X/) {
                 $gen_threshold_xml = 1;
                 prt( "[v1] Generate threshold xml for airport(s) found\n" ) if (VERB1());
+            } elsif ( $sarg =~ /^x/ ) {
+                require_arg(@av);
+                shift @av;
+                $sarg = $av[0];
+                $xg_output = $sarg;
+                $add_anno = 1;
+                prt( "[v1] Generate runway xg for airport(s) found\n" ) if (VERB1());
             } elsif ($sarg =~ /^o/) {
                 require_arg(@av);
                 shift @av;
