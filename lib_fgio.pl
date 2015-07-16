@@ -1289,6 +1289,42 @@ sub fgfs_get_position() {
     return $rc;
 }
 
+# ##########################################################
+# get current wind
+my %env_wind = ();
+sub get_env_wind() {
+    return \%env_wind;
+}
+my $env_from_stg = "/environment/wind-from-heading-deg";
+my $env_wspdkts_stg = "/environment/wind-speed-kt";
+sub fgfs_get_env_wind() {
+    my $rh = get_env_wind();
+    my ($fhdg,$spd);
+    fgfs_get($env_from_stg, \$fhdg) or get_exit(-2); # double
+    fgfs_get($env_wspdkts_stg, \$spd) or get_exit(-2); # double
+    ${$rh}{'wind-from'} = $fhdg;
+    ${$rh}{'wind-spd'} = $spd;
+    ${$rh}{'time'} = time();
+    return $rh;
+}
+
+sub get_env_wind_stg() {
+    my $rh = get_env_wind();
+    my $ct = time();
+    if (!defined ${$rh}{'time'}) {
+        fgfs_get_env_wind();
+    } elsif (($ct + $DELAY) > ${$rh}{'time'}) {
+        fgfs_get_env_wind();
+    }
+    my ($hdg,$spd);
+    $hdg = ${$rh}{'wind-from'};
+    $spd = ${$rh}{'wind-spd'};
+    set_hdg_stg(\$hdg);
+    set_int_stg(\$spd);
+    my $stg = "$hdg".'@'."$spd";
+    return $stg;
+}
+
 
 # =====================
 sub fgfs_get_wind_speed($) {
