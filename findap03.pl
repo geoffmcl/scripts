@@ -634,9 +634,19 @@ sub rwy_xg_stg($$$$$$$) {
     my ($az1,$az2,$s,$az3,$az4,$az5);
     my ($lon1,$lon2,$lon3,$lon4,$lat1,$lat2,$lat3,$lat4);
     my ($clat,$clon);
+    my $xg = '';
     #################################################
+    my $res = fg_geo_inverse_wgs_84($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$s);
+    $res = fg_geo_direct_wgs_84($elat1,$elon1, $az1, ($s / 2), \$clat, \$clon, \$az5);
+    #################################################
+    my $distft = int($s * $SG_METER_TO_FEET);
+    $xg .= "# begin runway description\n";
+    $xg .= "anno $elon1 $elat1 rwyid: $rwy2\n";
+    $xg .= "anno $elon2 $elat2 rwyid: $rwy1\n";
+
     # center line of runway
-    my $xg = "color blue\n";
+    $xg .= "color blue\n";
+    $xg .= "anno $clon $clat rwy:\"$rwy2/$rwy1\", len:\"$distft\", u=\"ft\"\n";
     $xg .= "$elon1 $elat1\n";
     $xg .= "$elon2 $elat2\n";
     $xg .= "NEXT\n";
@@ -644,8 +654,6 @@ sub rwy_xg_stg($$$$$$$) {
     #################################################
     # outline of runway, with width
     $xg .= "color red\n";
-    my $res = fg_geo_inverse_wgs_84($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$s);
-    $res = fg_geo_direct_wgs_84($elat1,$elon1, $az1, ($s / 2), \$clat, \$clon, \$az5);
     my $rwlen2 = $s;
     $az3 = $az1 + 90;
     $az3 -= 360 if ($az3 >= 360);
@@ -701,7 +709,7 @@ sub rwy_xg_stg($$$$$$$) {
     $r_tr_lon = $plon11;
     # RIGHT CIRCUIT
     $xg .= "color green\n";
-    $xg .= "anno $r_tr_lon $r_tr_lat R-TR\n";
+    $xg .= "anno $r_tr_lon $r_tr_lat ____ R-TR\n";
     $xg .= "$r_tr_lon $r_tr_lat\n";
 
     get_mid_point($r_tr_lat,$r_tr_lon,$r_tl_lat,$r_tl_lon,\$m_lat,\$m_lon); # TR->TL - cross
@@ -731,7 +739,7 @@ sub rwy_xg_stg($$$$$$$) {
         $xg .= "anno $m_lon $m_lat base\n";
     } 
 
-    $xg .= "anno $r_br_lon $r_br_lat R-BR\n";
+    $xg .= "anno $r_br_lon $r_br_lat ____ R-BR\n";
     $xg .= "$r_br_lon $r_br_lat\n";
 
     # on final
@@ -755,7 +763,7 @@ sub rwy_xg_stg($$$$$$$) {
     ###########################################################
     # LEFT circuit
     $xg .= "color white\n";
-    $xg .= "anno $l_tr_lon $l_tr_lat _____ L-TR\n";
+    $xg .= "anno $l_tr_lon $l_tr_lat L-TR\n";
 
     get_mid_point($l_tr_lat,$l_tr_lon,$l_tl_lat,$l_tl_lon,\$m_lat,\$m_lon); # TR->TL - cross
     if ($use_full_msg) {
@@ -785,7 +793,7 @@ sub rwy_xg_stg($$$$$$$) {
         $xg .= "anno $m_lon $m_lat base\n";
     } 
 
-    $xg .= "anno $l_br_lon $l_br_lat _____ L-BR\n";
+    $xg .= "anno $l_br_lon $l_br_lat L-BR\n";
     $xg .= "$l_br_lon $l_br_lat\n";
 
     # on final
@@ -796,6 +804,7 @@ sub rwy_xg_stg($$$$$$$) {
     $xg .= "$l_tr_lon $l_tr_lat\n";
     $xg .= "NEXT\n";
 
+    $xg .= "# end runway description\n";
     #### prt($xg);
     return $xg;
 }
@@ -997,8 +1006,6 @@ sub show_airports_found {
                 $max_lats = $elat1 if ($elat1 > $max_lats);
                 $min_lons = $elon1 if ($elon1 < $min_lons);
                 $max_lons = $elon1 if ($elon1 > $max_lons);
-                $apt_xg .= "anno $elon1 $elat1 $rtyp\n";
-                $apt_xg .= "anno $elon2 $elat2 $rhdg\n";
 
                 if ($gen_threshold_xml) {
                     $lato1 = $elat1;
@@ -1081,8 +1088,6 @@ sub show_airports_found {
                 if (defined $runway_surface{$surf}) {
                     $info .= " (".$runway_surface{$surf}.")";
                 }
-                $apt_xg .= "anno $elon1 $elat1 $rwy1\n";
-                $apt_xg .= "anno $elon2 $elat2 $rwy2\n";
             } else {
                 pgm_exit(1,"Uncoded RUNWAY type $type - FIX ME!\n".join(" ",@{$ra})."\n");
             }
