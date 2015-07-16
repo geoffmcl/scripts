@@ -34,7 +34,7 @@ my $VERS = "0.0.4 2015-07-04";
 # defaults
 # my $HOST = "localhost";
 my ($HOST,$PORT,$CONMSG);
-my $connect_win7 = 1;
+my $connect_win7 = 0;
 if (defined $ENV{'COMPUTERNAME'}) {
     if (!$connect_win7 && $ENV{'COMPUTERNAME'} eq 'WIN7-PC') {
         # connect to Ubuntu in DELL02
