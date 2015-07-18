@@ -263,6 +263,21 @@ sub got_runway_coords() {
     return 0;
 }
 
+sub get_runway_center($$) {
+    my ($rlat,$rlon) = @_;
+    my ($az1,$az2,$distm);
+    my $ret = 0;
+    if (got_runway_coords()) {
+        my ($clat,$clon);
+        my $res = fg_geo_inverse_wgs_84 ($g_elat1,$g_elon1,$g_elat2,$g_elon2,\$az1,\$az2,\$distm);
+        $res = fg_geo_direct_wgs_84($g_elat1,$g_elon1,$az1,$distm/2,\$clat,\$clon,\$az2);
+        ${$rlat} = $clat;
+        ${$rlon} = $clon;
+        $ret = 1;
+    }
+    return $ret;
+}
+
 sub fgfs_get_sim_time() {
     my $tm = getprop("/sim/time/elapsed-sec");  # double
     return $tm;
@@ -872,7 +887,6 @@ sub show_position($) {
     $agl  = ${$rp}{'agl'};
     $hb   = ${$rp}{'bug'};
     $mag  = ${$rp}{'mag'};  # is this really magnetic - # /orientation/heading-magnetic-deg
-
     $aspd = ${$rp}{'aspd'}; # Knots
     $gspd = ${$rp}{'gspd'}; # Knots
 
@@ -969,6 +983,7 @@ sub show_position($) {
     }
     if ($show_msg) {
         my $rch = $ref_circuit_hash;
+        # Only if in a CIRCUIT
         if ($circuit_mode && $circuit_flag && defined ${$rch}{'target_eta'}) {
             if ($turn eq 's') {
                 # in stable level flight - check for course change
@@ -1471,7 +1486,10 @@ sub set_circuit_values($$) {
     }
 }
 
-
+########################################################
+# Initialise/reinitialise the circuit hash
+# setup DEFAULT values from globals set on file read
+########################################################
 sub get_circuit_hash() {
     my %h = ();
     $h{'tl_lat'} = $tl_lat;
@@ -1497,7 +1515,7 @@ sub get_circuit_hash() {
     $h{'target_secs'} = 0;
     $h{'target_eta'} = 'none';
     $h{'target_start'} = 0;
-    $h{'begin_time'} = 0;
+    $h{'begin_time'} = time();
     $h{'last_time'} = 0;
 
     $h{'eta_update'} = 0;
@@ -2346,6 +2364,84 @@ sub process_circuit($) {
 
 my $do_init_pset = 0;
 
+sub keyboard_help() {
+    prt("Keyboard Help\n");
+    prt(" ?      This HELP output\n");
+    prt(" ESC    Exit program.\n");
+    prt(" h      Head home - centre of active runway\n");
+#    prt(" a      Get autopilot (KAP140) locks\n");
+#    prt(" B/b    Increase/Decrease heading bug 1 degreee\n");
+#    prt(" c/C    Circuit mode. C cancel.\n");
+#    prt(" +/-    Increase/Decrease position delay check. Current $DELAY secs\n");
+#    prt(" 9/(    Increase/Decrease heading bug 90 degrees\n");
+    #prt(" 1      Set heading target to Gil (YGIL)\n");
+    #prt(" 2      Set heading target to Dubbo (YSDU)\n");
+#    prt(" e      Show Engine(s)\n");
+#    prt(" g/1    Head for target YGIL\n");
+#    prt(" d/2    Head for target YSDU\n");
+#    prt(" o/O    Commence a 360 degree orbit. O will repeat. If in orbit, cancel orbitting.\n");
+#    prt(" Any keyboard input exits the keyboard loop, and continues the main loop, except ESC!\n");
+}
+
+sub clear_circuit_mode($) {
+    my $rch = shift;
+    #### prtt("Clear CIRCUIT mode\n");
+    $circuit_mode = 0;
+    $circuit_flag = 0;
+    $chk_turn_done = 0;
+    ${$rch}{'wp_mode'} = 0;
+}
+
+sub head_for_home($$) {
+    my ($rch,$rp) = @_;
+    my ($lon,$lat,$alt,$hdg,$agl,$hb,$mag,$aspd,$gspd,$tlat,$tlon);
+    $lon  = ${$rp}{'lon'};
+    $lat  = ${$rp}{'lat'};
+    $alt  = ${$rp}{'alt'};
+    $hdg  = ${$rp}{'hdg'};
+    $agl  = ${$rp}{'agl'};
+    $hb   = ${$rp}{'bug'};
+    $mag  = ${$rp}{'mag'};  # is this really magnetic - # /orientation/heading-magnetic-deg
+    $aspd = ${$rp}{'aspd'}; # Knots
+    $gspd = ${$rp}{'gspd'}; # Knots
+
+    if (!get_runway_center(\$tlat,\$tlon)) {
+        prtt("No target chosen!\n");
+    }
+    my ($az1,$az2,$distm);
+    # from present position to target - center of active runway
+    my $res = fg_geo_inverse_wgs_84 ($lat,$lon,$tlat,$tlon,\$az1,\$az2,\$distm);
+    my $rwh = compute_course($az1,$aspd);   # factor in the different
+    my $whdg = ${$rwh}{'heading'};  # = $whdg;
+    my $wdiff = get_hdg_diff($az1,$whdg);
+    my $secs = int(( $distm / (($gspd * $SG_NM_TO_METER) / 3600)) + 0.5);
+    my $eta = "eta:".secs_HHMMSS2($secs); # display as hh:mm:ss
+
+    ${$rch}{'target_hdg'} = $whdg;
+    ${$rch}{'suggest_chg'} = 0;
+    fgfs_set_hdg_bug(${$rch}{'target_hdg'});
+
+    # display stuff
+    set_hdg_stg(\$whdg);
+    #set_dist_stg(\$distm);
+    my $distkm = get_dist_stg_km($distm);
+    prtt("Turning to heading $whdg, target $distkm, $eta\n");
+
+    # check the WINDS, weather
+    my $renv = fgfs_get_environ();
+    show_environ($renv);
+
+    # get the RADIO stack
+    my $rcomms = fgfs_get_comms();
+    show_comms($rcomms);   # show current comms
+
+    # headed for new target - SHOW consumables, and maybe warnings, if any
+    my $rcs = fgfs_get_consumables();
+    show_consumables($rcs);
+    # other things on choosing a target???
+
+}
+
 sub main_loop() {
 
     prtt("Get 'sim' information...\n");
@@ -2368,14 +2464,15 @@ sub main_loop() {
     }
     my $ok = 1;
     my ($char,$val,$rp);
+    my $rch = $ref_circuit_hash;
     if ($do_init_pset) {
-        my $rch = $ref_circuit_hash;
         $rp = fgfs_get_position();
         get_next_in_circuit_targ($rch,$rp,${$rp}{'lat'},${$rp}{'lon'});
     }
 
     while ($ok) {
         $rp = fgfs_get_position();
+        $rch = $ref_circuit_hash;
         show_position($rp);
         if ( got_keyboard(\$char) ) {
             $val = ord($char);
@@ -2384,16 +2481,17 @@ sub main_loop() {
                 $ok = 0;
                 return 0;
             } elsif ($char eq 'c') {
+                clear_circuit_mode($rch);
                 prtt("Set CIRCUIT mode\n");
                 $circuit_mode = 1;
-                $circuit_flag = 0;
-                $chk_turn_done = 0;
                 process_circuit($rp);
             } elsif ($char eq 'C') {
                 prtt("Clear CIRCUIT mode\n");
-                $circuit_mode = 0;
-                $circuit_flag = 0;
-                $chk_turn_done = 0;
+                clear_circuit_mode($rch);
+            } elsif ($char eq 'h') {
+                prtt("Head for home...\n");
+                clear_circuit_mode($rch);
+                head_for_home($rch,$rp);
             }
         }
         process_circuit($rp) if ($circuit_mode);
