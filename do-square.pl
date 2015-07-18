@@ -60,6 +60,7 @@ my $load_log = 0;
 my $in_file = 'ygil.xg';
 ### my $in_file = 'ygil-L.xg';
 my $tmp_xg_out = $temp_dir."/temp.$pgmname.xg";
+my $tmp_xg_out2 = $temp_dir."/tempCIRCUIT.xg";
 my $tmp_wp_out = $temp_dir."/tempwaypt.xg";
 my $tmp_trk_out = $temp_dir."/temptrk.xg";	# keep movements of aircraft
 
@@ -167,8 +168,8 @@ sub prtt($) {
 }
 
 ##################################################
-my $icao = 'YGIL';
-my $circuit = '33';
+my $g_icao = 'YGIL';
+my $g_circuit = '33';
 # rough Gil circuit - will be replaced by CALCULATED values
 my $tl_lat = -31.684063;
 my $tl_lon = 148.614120;
@@ -273,6 +274,20 @@ sub get_runway_center($$) {
         $res = fg_geo_direct_wgs_84($g_elat1,$g_elon1,$az1,$distm/2,\$clat,\$clon,\$az2);
         ${$rlat} = $clat;
         ${$rlon} = $clon;
+        $ret = 1;
+    }
+    return $ret;
+}
+
+sub get_runway_heading($) {
+    my ($rhdg) = @_;
+    my ($az1,$az2,$distm);
+    my $ret = 0;
+    if (got_runway_coords()) {
+        ## my ($clat,$clon);
+        my $res = fg_geo_inverse_wgs_84 ($g_elat1,$g_elon1,$g_elat2,$g_elon2,\$az1,\$az2,\$distm);
+        # $res = fg_geo_direct_wgs_84($g_elat1,$g_elon1,$az1,$distm/2,\$clat,\$clon,\$az2);
+        ${$rhdg} = $az1;
         $ret = 1;
     }
     return $ret;
@@ -458,7 +473,7 @@ sub termtracker() {
 ########################################################
 ## XG generation
 sub get_circuit_xg() {
-    my $xg = "annon $a_gil_lon $a_gil_lat ICAO $icao, circuit $circuit\n";
+    my $xg = "annon $a_gil_lon $a_gil_lat ICAO $g_icao, circuit $g_circuit\n";
     $xg .= "color white\n";
     $xg .= "anno $tr_lon $tr_lat TR\n";
     $xg .= "$tr_lon $tr_lat\n";
@@ -569,7 +584,7 @@ sub process_in_file($) {
             } elsif ($line =~ /end runway description/) {
                 $inrwy = 0;
                 if (defined $rwy) {
-                    $circuit = $rwy;
+                    $g_circuit = $rwy;
                     if ($rwy =~ /^(\d+)(R|L|C)*$/) {
                         my $rwy2 = ($1 > 18) ? $1 - 18 : $1 + 18;
                         $rwy2 = '0'.$rwy2 if ($rwy2 < 10);
@@ -579,17 +594,29 @@ sub process_in_file($) {
                             $rwy2 .= 'C' if ($2 eq 'C');
                         }
                         if ($got_left && $got_right && $got_center) {
+                            my %h1 = ();
                             my %h2 = ();
                             my ($az1,$az2,$dist);
+                            $h1{'left'} = [$l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon];
+                            $h1{'right'} = [$r_tl_lat,$r_tl_lon,$r_bl_lat,$r_bl_lon,$r_br_lat,$r_br_lon,$r_tr_lat,$r_tr_lon];
+                            $h1{'runway'} = [$g_elat1,$g_elon1,$g_elat2,$g_elon2];
+                            fg_geo_inverse_wgs_84($g_elat1,$g_elon1,$g_elat2,$g_elon2,\$az1,\$az2,\$dist);
+                            $h1{'rwy_heading'} = $az1;
+                            $h1{'rwy_id'}      = $rwy;
+                            $h1{'rwy_id2'}     = $rwy2;
+                            $h1{'rwy_left'}    = 1;
+                            # store under each key - is this a good idea?
+                            $xg_circuits{$rwy}  = \%h1;
+
                             $h2{'left'} = [$l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon];
                             $h2{'right'} = [$r_tl_lat,$r_tl_lon,$r_bl_lat,$r_bl_lon,$r_br_lat,$r_br_lon,$r_tr_lat,$r_tr_lon];
-                            $h2{'runway'} = [$g_elat1,$g_elon1,$g_elat2,$g_elon2];
-                            fg_geo_inverse_wgs_84($g_elat1,$g_elon1,$g_elat2,$g_elon2,\$az1,\$az2,\$dist);
+                            $h2{'runway'} = [$g_elat2,$g_elon2,$g_elat1,$g_elon1];
+                            fg_geo_inverse_wgs_84($g_elat2,$g_elon2,$g_elat1,$g_elon1,\$az1,\$az2,\$dist);
                             $h2{'rwy_heading'} = $az1;
-                            $h2{'rwy_id'}      = $rwy;
-                            $h2{'rwy_id2'}     = $rwy2;
-                            # store under each key - is this a good idea
-                            $xg_circuits{$rwy}  = \%h2;
+                            $h2{'rwy_id'}      = $rwy2;
+                            $h2{'rwy_id2'}     = $rwy;
+                            $h2{'rwy_left'}    = 0;
+
                             $xg_circuits{$rwy2} = \%h2;
                         }
                     }
@@ -638,11 +665,11 @@ sub process_in_file($) {
                 $text = join(' ', splice(@arr,3));
                 @arr2 = split(/\s+/,$text);
                 if (scalar @arr2 == 4) {
-                    $icao = $arr2[0];
-                    $circuit = $arr2[3];
+                    $g_icao = $arr2[0];
+                    $g_circuit = $arr2[3];
                     $a_gil_lat = $lat;
                     $a_gil_lon = $lon;
-                    prt("CIRCUIT $a_gil_lat,$a_gil_lon ICAO $icao, circuit $circuit\n") if (VERB5());
+                    prt("CIRCUIT $a_gil_lat,$a_gil_lon ICAO $g_icao, circuit $g_circuit\n") if (VERB5());
                 } elsif ($text =~ /final\s+(\w+)$/) {
                     $rwy = $1;
                 } elsif ($text =~ /(\w+)-TR$/) {
@@ -740,11 +767,11 @@ sub process_in_file($) {
     foreach $key (@arr2) {
         $rcx = $xg_circuits{$key};
         $az1 = ${$rcx}{'rwy_heading'};
-        if (${$rcx}{'rwy_id'} eq $key) {
-            # doing this runway - get heading
+        #if (${$rcx}{'rwy_id'} eq $key) {
+        #    # doing this runway - get heading
             $az1 += 180;
             $az1 -= 360 if ($az1 > 360);
-        }
+        #}
         set_decimal1_stg(\$az1);
         prt("$key ($az1) ");
     }
@@ -1156,6 +1183,101 @@ sub show_takeoff($) {
 
 }
 
+sub get_runway_for_heading($) {
+    my $hdg = shift;
+    my @arr2 = keys %xg_circuits;
+    my $bcnt = scalar @arr2;
+    my ($key,$rcx,$az1,$diff,$msg,$tmp);
+    $tmp = $hdg;
+    set_hdg_stg(\$tmp);
+    $msg = "Searching $bcnt circuits for $tmp hdg: ";
+    my $mdiff = 180;
+    my $ckey = '';
+    my $set = '';
+    foreach $key (@arr2) {
+        $rcx = $xg_circuits{$key};
+        $az1 = ${$rcx}{'rwy_heading'};
+        ### if (${$rcx}{'rwy_id'} eq $key) {
+        ### } else {
+            # doing opposite - get heading
+            $az1 += 180;
+            $az1 -= 360 if ($az1 > 360);
+        ### }
+        $diff = abs(get_hdg_diff($hdg,$az1));
+        $set = '';
+        if ($diff < $mdiff) {
+            $mdiff = $diff;
+            $ckey = $key;
+            $set = '*';
+        }
+        set_decimal1_stg(\$az1);
+        set_int_stg(\$diff);
+        $msg .= "$key $az1 ($diff) $set ";
+    }
+    prt("$msg\n");
+    $key = '';
+    $tmp = $hdg;
+    set_hdg_stg(\$tmp);
+    $msg = "For heading $tmp NO runway chosen! ";
+    if (length($ckey) && defined $xg_circuits{$ckey}) {
+        $rcx = $xg_circuits{$ckey};
+        $key = ${$rcx}{'rwy_id'};
+        $az1 = ${$rcx}{'rwy_heading'};
+        # if (${$rcx}{'rwy_id'} eq $ckey) {
+        # } else {
+            # doing opposite - get heading
+            $az1 += 180;
+            $az1 -= 360 if ($az1 > 360);
+        # }
+        set_hdg_stg(\$az1);
+        $msg = "For heading $tmp, chosen $ckey, takeoff on $az1 ";
+    }
+    prtt("$msg\n");
+    return $ckey;
+}
+
+
+sub position_on_got_engine($) {
+    my $rp = shift;
+    my ($lon,$lat,$alt,$hdg,$agl,$hb,$mag,$aspd,$gspd,$msg,$tmp,$tmp2);
+    # my ($rch,$targ_lat,$targ_lon,$targ_hdg,$targ_dist,$targ_pset,$prev_pset);
+    # my $msg = '';
+    # my $eta = '';
+    $lon  = ${$rp}{'lon'};
+    $lat  = ${$rp}{'lat'};
+    $alt  = ${$rp}{'alt'};
+    $hdg  = ${$rp}{'hdg'};
+    $agl  = ${$rp}{'agl'};
+    $hb   = ${$rp}{'bug'};
+    $mag  = ${$rp}{'mag'};  # is this really magnetic - # /orientation/heading-magnetic-deg
+    $aspd = ${$rp}{'aspd'}; # Knots
+    $gspd = ${$rp}{'gspd'}; # Knots
+    # fg_geo_inverse_wgs_84 ($lat,$lon,$tlat,$tlon,\$az1,\$az2,\$distm);
+    # my $rwh = compute_course($az1,$aspd);
+    # $hdg = ${$rwh}{'heading'};
+    # my $wdiff = get_hdg_diff($az1,$hdg);
+    my ($rhdg);
+    $msg = "Failed get runway heading...";
+    my $key = get_runway_for_heading($hdg);
+    if (length($key) && defined $xg_circuits{$key}) {
+        set_global_per_key($key);
+        $msg = 'Set new from ';
+    }
+    # we have a suggested runway 
+    if ( get_runway_heading(\$rhdg) ) {
+        my $rch = $ref_circuit_hash;
+        my $diff = abs(get_hdg_diff($rhdg,$hdg));
+        $msg .= "ac hdg ";
+        set_hdg_stg(\$hdg);
+        set_hdg_stg(\$rhdg);
+        set_int_stg(\$diff);
+        $msg .= "$hdg, rwy $rhdg, (d=$diff)";
+    }
+
+    prtt("Position on got engine... $msg $key\n");
+    show_position($rp);
+}
+
 #######################################################################
 ########### WAIT for engine start ####### need motor for flight #######
 #######################################################################
@@ -1250,10 +1372,10 @@ sub wait_for_engine() {
                 $showstart = 0;
             }
         }
-    }
+    } # while (!$ok) - awaiting ENGINE
+
     my $rp = fgfs_get_position();
-    prtt("Position on got engine...\n");
-    show_position($rp);
+    position_on_got_engine($rp);
     return 0;
 }
 
@@ -1393,10 +1515,10 @@ sub set_circuit_values($$) {
             $diff = abs(get_hdg_diff( ${$rcx}{'rwy_heading'}, $rwy_hdg ));
             if ($diff < $maxdiff) {
                 $maxdiff = $diff;
-                $circuit = ${$rcx}{'rwy_id'};
-                ${$rch}{'rwy_id'} = $circuit;
+                $g_circuit = ${$rcx}{'rwy_id'};
+                ${$rch}{'rwy_id'} = $g_circuit;
                 set_decimal3_stg(\$diff);
-                prt("Selected circuit $circuit, diff $diff\n");
+                prt("Selected circuit $g_circuit, diff $diff\n");
                 $fnd = 1;
             }
         } else {
@@ -1479,7 +1601,7 @@ sub set_circuit_values($$) {
         set_hdg_stg3(\$cra);
 
         prt("l1 $dwd m, on $dwa (tl2bl) - downwind, turn $bsa to base\n");
-        prt("l2 $bsd m, on $bsa (bl2br) - base,     turn $rwa to final $icao $circuit $distkm on $az1\n");
+        prt("l2 $bsd m, on $bsa (bl2br) - base,     turn $rwa to final $g_icao $g_circuit $distkm on $az1\n");
         prt("l3 $rwd m, on $rwa (br2tr) - runway,   turn $cra to cross\n");
         prt("l4 $crd m, on $cra (tr2tl) - cross,    turn $dwa to downwind\n");
 
@@ -1528,6 +1650,37 @@ sub get_circuit_hash() {
     $h{'wp_flag'} = 0;
     $h{'wpts'} = [];    # array of waypoints
     return \%h;
+}
+
+sub set_global_per_key($) {
+    my $key = shift;
+    if (length($key) && defined $xg_circuits{$key}) {
+        $g_circuit = $key;
+        my $ocx = $xg_circuits{$key};
+        my ($rca,$rends);
+        if (${$ocx}{'rwy_left'}) {
+            #                0         1         2         3          4        5         6         7
+            # $h1{'left'} = [$l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon];
+            $rca = ${$ocx}{'left'};
+        } else {
+            $rca = ${$ocx}{'right'};
+        }
+        $tl_lat = ${$rca}[0];
+        $tl_lon = ${$rca}[1];
+        $bl_lat = ${$rca}[2];
+        $bl_lon = ${$rca}[3];
+        $br_lat = ${$rca}[4];
+        $br_lon = ${$rca}[5];
+        $tr_lat = ${$rca}[6];
+        $tr_lon = ${$rca}[7];
+        $rends = ${$ocx}{'runway'}; #  = [$g_elat1,$g_elon1,$g_elat2,$g_elon2];
+        $g_elat1 = ${$rends}[0];
+        $g_elon1 = ${$rends}[1];
+        $g_elat2 = ${$rends}[2];
+        $g_elon2 = ${$rends}[3];
+        $ref_circuit_hash = get_circuit_hash();
+        write_circuit_xg($tmp_xg_out2);
+    }
 }
 
 sub get_nxt_ps($) {
