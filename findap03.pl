@@ -108,6 +108,9 @@ my $aptname = "strasbourg";
 my $apticao = 'KSFO';
 my $g_center_lat = 0; # 37.6;
 my $g_center_lon = 0; # -122.4;
+my $g_circuit = '';
+my %g_rwy_ends = ();
+
 my $maxlatd = 0.5;
 my $maxlond = 0.5;
 my $nmaxlatd = 0.1;
@@ -628,6 +631,9 @@ sub get_mid_point($$$$$$) {
     ${$rclon} = $clon;
 }
 
+##############################################################
+### get RUNWAY xg string
+##############################################################
 sub rwy_xg_stg($$$$$$$) {
     my ($elat1,$elon1,$elat2,$elon2,$widm,$rwy1,$rwy2) = @_;
     my $hwidm = $widm / 2;
@@ -640,6 +646,8 @@ sub rwy_xg_stg($$$$$$$) {
     $res = fg_geo_direct_wgs_84($elat1,$elon1, $az1, ($s / 2), \$clat, \$clon, \$az5);
     #################################################
     my $distft = int($s * $SG_METER_TO_FEET);
+
+    ###############################################################################
     $xg .= "# begin runway description\n";
     $xg .= "anno $elon1 $elat1 rwyid: $rwy2\n";
     $xg .= "anno $elon2 $elat2 rwyid: $rwy1\n";
@@ -805,6 +813,11 @@ sub rwy_xg_stg($$$$$$$) {
     $xg .= "NEXT\n";
 
     $xg .= "# end runway description\n";
+    ###############################################################################
+    $g_circuit = $rwy2;
+    $g_rwy_ends{$rwy2} = 1;
+    $g_rwy_ends{$rwy1} = 1;
+    ###############################################################################
     #### prt($xg);
     return $xg;
 }
@@ -885,7 +898,8 @@ sub show_airports_found {
         $aalt = $aptlist2[$i][15];  # ALT (AMSL)
         $rrwys = $aptlist2[$i][14]; # extract RUNWAY reference
         $rwycnt = scalar @{$rrwys};
-        $annoxg .= "anno $dlon $dlat $icao $name - $aalt ft - $rwycnt rwys.\n";
+        # anno 148.636305809373 -31.6965632128734 YGIL Airport circuit 33
+        $annoxg .= "anno $dlon $dlat $icao $name circuit $g_circuit\n";
         $alat = $dlat;
         $alon = $dlon;
         $oicao = $icao;
@@ -1172,6 +1186,16 @@ sub show_airports_found {
 	}
     prt("bounds: $min_lats $min_lons $max_lats $max_lons\n") if ($add_bbox && ($scnt > 1));
     if ($add_anno && length($annoxg)) {
+        $name = trim_all($name);
+        $annoxg = "# Airport:[ icao=\"$icao\", name:\"$name\", lon:$dlon, lat:$dlat, alt:$aalt, rwys:$rwycnt";
+        my @a = keys %g_rwy_ends;
+        if (@a) {
+            $annoxg .= ", ids:\"";
+            $annoxg .= join("/",@a);
+            $annoxg .= "\"";
+        }
+        $annoxg .= "]\n";
+        $annoxg .= "anno $dlon $dlat $apticao Airport circuit $g_circuit\n";
         $annoxg .= $apt_xg;
         #prt("$annoxg");
         $out_xg1 = $xg_output if (length($xg_output));

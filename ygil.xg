@@ -1,4 +1,5 @@
-anno 148.6367707575 -31.696845765 YGIL Gilgandra - 1050 ft - 2 rwys.
+# Airport:[ icao="YGIL", name:"Gilgandra", lon:148.6367707575, lat:-31.696845765, alt:1050, rwys:2, ids:"33/08/26/15"]
+anno 148.6367707575 -31.696845765 YGIL Airport circuit 26
 # begin runway description
 anno 148.63434984 -31.69134846 rwyid: 33
 anno 148.63826182 -31.70177797 rwyid: 15
