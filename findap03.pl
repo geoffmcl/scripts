@@ -649,12 +649,12 @@ sub rwy_xg_stg($$$$$$$) {
 
     ###############################################################################
     $xg .= "# begin runway description\n";
-    $xg .= "anno $elon1 $elat1 rwyid: $rwy2\n";
-    $xg .= "anno $elon2 $elat2 rwyid: $rwy1\n";
+    $xg .= "anno $elon1 $elat1 rwyid: $rwy1\n";
+    $xg .= "anno $elon2 $elat2 rwyid: $rwy2\n";
 
     # center line of runway
     $xg .= "color blue\n";
-    $xg .= "anno $clon $clat rwy:\"$rwy2/$rwy1\", len:\"$distft\", u=\"ft\"\n";
+    $xg .= "anno $clon $clat rwy:\"$rwy1/$rwy2\", len:\"$distft\", u=\"ft\"\n";
     $xg .= "$elon1 $elat1\n";
     $xg .= "$elon2 $elat2\n";
     $xg .= "NEXT\n";
