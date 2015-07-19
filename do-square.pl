@@ -193,42 +193,42 @@ my ($r_tl_lat,$r_tl_lon,$r_bl_lat,$r_bl_lon,$r_br_lat,$r_br_lon,$r_tr_lat,$r_tr_
 
 ###################################################################
 # RUNWAY ARRAY OFFSETS
-my $RW_LEN = 0;
-my $RW_HDG = 1;
-my $RW_REV = 2;
-my $RW_TT1 = 3;
-my $RW_TT2 = 4;
-my $RW_CLAT = 5;
-my $RW_CLON = 6;
-my $RW_LLAT = 7;
-my $RW_LLON = 8;
-my $RW_RLAT = 9;
-my $RW_RLON = 10;
-my $RW_DONE = 11;
-#                 Len    Hdg   Rev  Title  RTit Ctr Lat    Ctr Lon
-#                 0      1     2    3     4     5          6           7  8  9  10 11
-my @gil_patt = ();
-### my @gil_rwys = ( [4204,  162.0, 0, '15', '33', -31.696928, 148.636404, 0, 0, 0, 0, 0 ] );
-my @gil_rwys = ( [3984,  162.22, 0, '15', '33', -31.69656323, 148.6363057, 0, 0, 0, 0, 0 ] );
-#my @gil_navs = ( ["", 0 ] );
-my @gil_navs = ();
-#my @gil_rwys = ( [162.0, 4204], [93.0, 1902] );
-my @dub_patt = ( [ ] );
-my @dub_rwys = ( [5600, 53.61, 0, '05', '23', -32.218265, 148.576145, 0, 0, 0, 0, 0 ] );
-my @dub_navs = ( ["VOR", 114.4], ["NDB", 251] );
-
-my $OL_LAT = 0;
-my $OL_LON = 1;
-my $OL_NAV = 2;
-my $OL_RWY = 3;
-my $OL_PAT = 4;
-my %apt_locations = (
-    # ICAO       Center LAT, LON       NAVAIDS      RUNWAYS
-    'YGIL' => [$a_gil_lat, $a_gil_lon, \@gil_navs, \@gil_rwys, \@gil_patt ],
-    'YSDU' => [$a_dub_lat, $a_dub_lon, \@dub_navs, \@dub_rwys, \@dub_patt ]
-    );
-
-sub get_locations() { return \%apt_locations; }
+#my $RW_LEN = 0;
+#my $RW_HDG = 1;
+#my $RW_REV = 2;
+#my $RW_TT1 = 3;
+#my $RW_TT2 = 4;
+#my $RW_CLAT = 5;
+#my $RW_CLON = 6;
+#my $RW_LLAT = 7;
+#my $RW_LLON = 8;
+#my $RW_RLAT = 9;
+#my $RW_RLON = 10;
+#my $RW_DONE = 11;
+##                 Len    Hdg   Rev  Title  RTit Ctr Lat    Ctr Lon
+##                 0      1     2    3     4     5          6           7  8  9  10 11
+#my @gil_patt = ();
+#### my @gil_rwys = ( [4204,  162.0, 0, '15', '33', -31.696928, 148.636404, 0, 0, 0, 0, 0 ] );
+#my @gil_rwys = ( [3984,  162.22, 0, '15', '33', -31.69656323, 148.6363057, 0, 0, 0, 0, 0 ] );
+##my @gil_navs = ( ["", 0 ] );
+#my @gil_navs = ();
+##my @gil_rwys = ( [162.0, 4204], [93.0, 1902] );
+#my @dub_patt = ( [ ] );
+#my @dub_rwys = ( [5600, 53.61, 0, '05', '23', -32.218265, 148.576145, 0, 0, 0, 0, 0 ] );
+#my @dub_navs = ( ["VOR", 114.4], ["NDB", 251] );
+#
+#my $OL_LAT = 0;
+#my $OL_LON = 1;
+#my $OL_NAV = 2;
+#my $OL_RWY = 3;
+#my $OL_PAT = 4;
+#my %apt_locations = (
+#    # ICAO       Center LAT, LON       NAVAIDS      RUNWAYS
+#    'YGIL' => [$a_gil_lat, $a_gil_lon, \@gil_navs, \@gil_rwys, \@gil_patt ],
+#    'YSDU' => [$a_dub_lat, $a_dub_lon, \@dub_navs, \@dub_rwys, \@dub_patt ]
+#    );
+#
+#sub get_locations() { return \%apt_locations; }
 
 my $PI = 3.1415926535;
 # my $D2R = math.pi / 180;               # degree to radian
@@ -878,9 +878,9 @@ sub set_altimeter_stg() {
     $ind_hdg_degs = $ind;
 
     set_decimal1_stg(\$ai);
-    set_decimal1_stg(\$hg);
+    set_decimal2_stg(\$hg);
 
-    my $msg = "QNH $hg, IndFt $ai, ";
+    my $msg = "QNH $hg, alt $ai, ";
     if ($altimeter_msg ne $msg) {
         $altimeter_msg = $msg;
         $alt_msg_chg++;
@@ -1068,8 +1068,12 @@ sub show_position($) {
 }
 
 ###########################################################
-## Has a BUG - some variable not numeric - set_hdg_stg
+## Had a BUG - some variable not numeric - set_hdg_stg
 ###############
+my $last_tomsg = '';
+my $last_tomsg_time = 0;
+my $tomsg_delay = 15;
+
 sub show_takeoff($) {
     my ($rp) = @_;
     my ($ilon,$ilat,$ialt,$ihdg,$iagl,$ihb,$imag,$iaspd,$igspd,$iind);
@@ -1175,14 +1179,24 @@ sub show_takeoff($) {
     set_int_stg(\$ialt);
     set_int_stg(\$iagl);
 
-    prtt("$iagl/$ialt flt a=$iai/$iait e=$iel/$ielt r=$irud/$irudt, f=$iflp($flap) ".
-        "- $rpm/$thr\%/$igspd \n");
-    #prtt("$iagl/$ialt flt a=$iai/$iait e=$iel/$ielt r=$irud/$irudt, f=$iflp($flap) ".
-    #    "- $rpm/$thr/$igspd - ${imag}m/${ihdg}t/${iind}i/${ihb}b\n");
-    ###prtt("Flt e=$iel a=$iai/$irud - $rpm/$thr/$igspd - ${imag}m/${ihdg}t/${iind}i/${ihb}b\n");
-
+    my $ct = time();
+    my $msg = "$iagl/$ialt flt a=$iai/$iait e=$iel/$ielt r=$irud/$irudt, f=$iflp($flap) ".
+        "- $rpm/$thr\%/$igspd";
+    if ($msg ne $last_tomsg) {
+        $last_tomsg = $msg;
+        prtt("$msg\n");
+        $last_tomsg_time = $ct;
+    } else {
+        if ($ct > ($last_tomsg_time + $tomsg_delay)) {
+            $last_tomsg = $msg;
+            prtt("$msg\n");
+            $last_tomsg_time = $ct;
+        }
+    }
 }
 
+#################################################################
+### Given a heading, select a RUNWAY, from %xg_circuits
 sub get_runway_for_heading($) {
     my $hdg = shift;
     my @arr2 = keys %xg_circuits;
@@ -1252,10 +1266,21 @@ sub position_on_got_engine($) {
     $mag  = ${$rp}{'mag'};  # is this really magnetic - # /orientation/heading-magnetic-deg
     $aspd = ${$rp}{'aspd'}; # Knots
     $gspd = ${$rp}{'gspd'}; # Knots
-    # fg_geo_inverse_wgs_84 ($lat,$lon,$tlat,$tlon,\$az1,\$az2,\$distm);
-    # my $rwh = compute_course($az1,$aspd);
-    # $hdg = ${$rwh}{'heading'};
-    # my $wdiff = get_hdg_diff($az1,$hdg);
+    my $from = "ac";
+    my $rew = get_env_wind();
+    my $whdg = ${$rew}{'wind-from'};
+    my $wspd = ${$rew}{'wind-spd'};
+    if ($aspd < $min_fly_speed) {
+        # use current ac heading
+    } else {
+        $hdg = $whdg;   # select RUNWAY, and CIRCUIT on WIND HEADING
+        $hdg += 180;
+        $hdg -= 360 if ($hdg > 360);
+        set_hdg_stg(\$whdg);
+        set_int_stg(\$wspd);
+        $from = "wind $whdg".'@'.$wspd;
+    }
+
     my ($rhdg);
     $msg = "Failed get runway heading...";
     my $key = get_runway_for_heading($hdg);
@@ -1267,14 +1292,14 @@ sub position_on_got_engine($) {
     if ( get_runway_heading(\$rhdg) ) {
         my $rch = $ref_circuit_hash;
         my $diff = abs(get_hdg_diff($rhdg,$hdg));
-        $msg .= "ac hdg ";
+        $msg .= "$from hdg ";
         set_hdg_stg(\$hdg);
         set_hdg_stg(\$rhdg);
         set_int_stg(\$diff);
         $msg .= "$hdg, rwy $rhdg, (d=$diff)";
     }
 
-    prtt("Position on got engine... $msg $key\n");
+    prtt("Position on got engine... $msg $key ".get_env_wind_stg()."\n");
     show_position($rp);
 }
 
@@ -1448,6 +1473,11 @@ sub reset_circuit_legs($) {
     ${$rch}{'target_runway'}   = 0;
 }
 
+######################################################################
+### Do some calculations on the current (global) circuit
+######################################################################
+my ($active_rcx);
+
 sub set_circuit_values($$) {
     my ($rch,$show) = @_;
     my ($az1,$az2,$dist);
@@ -1459,7 +1489,7 @@ sub set_circuit_values($$) {
     $elon1 = ${$rch}{'rwy_elon1'};  #  = $g_elon1;
     $elat2 = ${$rch}{'rwy_elat2'};  #  = $g_elat2;
     $elon2 = ${$rch}{'rwy_elon2'};  #  = $g_elon2;
-    prt("Get runway heading... $elat1,$elon1 $elat2,$elon2...\n");
+    ### prt("Get runway heading... $elat1,$elon1 $elat2,$elon2...\n");
     fg_geo_inverse_wgs_84 ($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$dist);
     $rwy_hdg = $az1;
 
@@ -1503,10 +1533,12 @@ sub set_circuit_values($$) {
     # $h2{'rwy_id2'} = $rwy2;
     # $xg_circuits{$rwy} = \%h2;
     # $xg_circuits{$rwy2} = \%h2;
-    my ($key,$rcx,$diff,$fnd,$maxdiff); # each key is a runway id
+    my ($key,$rcx,$diff,$fnd,$maxdiff,$circuit); # each key is a runway id
     my @karr = keys %xg_circuits;
     my $cnt = scalar @karr;
-    prt("Selecting from $cnt circuits...\n");
+    $fnd = $rwy_hdg;
+    set_hdg_stg(\$fnd);
+    prt("Selecting from $cnt circuits matching heading $fnd...\n");
     $fnd = 0;
     $maxdiff = 5;
     foreach $key (keys %xg_circuits) {
@@ -1515,18 +1547,23 @@ sub set_circuit_values($$) {
             $diff = abs(get_hdg_diff( ${$rcx}{'rwy_heading'}, $rwy_hdg ));
             if ($diff < $maxdiff) {
                 $maxdiff = $diff;
-                $g_circuit = ${$rcx}{'rwy_id'};
-                ${$rch}{'rwy_id'} = $g_circuit;
+                $circuit = ${$rcx}{'rwy_id'};
+                ${$rch}{'rwy_id'} = $circuit;
                 set_decimal3_stg(\$diff);
-                prt("Selected circuit $g_circuit, diff $diff\n");
+                prt("Selected circuit $circuit, diff $diff\n");
                 $fnd = 1;
+                $active_rcx = $rcx;
             }
         } else {
             pgm_exit(1,"rwy_heading NOT defined in xg curcuit hash!\n");
         }
     }
-    if ($cnt && !$fnd) {
-        pgm_exit(1,"Failed to select a circuits! WHY???\n");
+    if ($cnt) {
+        if ($fnd) {
+
+        } else {
+            pgm_exit(1,"Failed to select a circuits! WHY???\n");
+        }
     }
 
     # ================================================
@@ -1586,10 +1623,11 @@ sub set_circuit_values($$) {
         set_lon_stg(\$brlon);
         set_lon_stg(\$trlon);
 
-        prt("Set, show circuit...\nTL $tllat,$tllon\nBL ".
-            "$bllat,$bllon\nBR ".
-            "$brlat,$brlon\nTR ".
-            "$trlat,$trlon\n");
+        prt("Set, show circuit $g_circuit... \n".
+            "TL $tllat,$tllon\n".
+            "BL $bllat,$bllon\n".
+            "BR $brlat,$brlon\n".
+            "TR $trlat,$trlon\n");
 
         set_int_dist_stg5(\$dwd);
         set_hdg_stg3(\$dwa);
@@ -1627,11 +1665,14 @@ sub get_circuit_hash() {
     $h{'rwy_elon1'} = $g_elon1;
     $h{'rwy_elat2'} = $g_elat2;
     $h{'rwy_elon2'} = $g_elon2;
+    $h{'rwy_id'}    = $g_circuit;
+
     my ($az1,$az2,$dist);
     fg_geo_inverse_wgs_84($g_elat1,$g_elon1,$g_elat2,$g_elon2,\$az1,\$az2,\$dist);
     $h{'rwy_heading'} = $az1;
 
     set_circuit_values(\%h,1);
+
     $h{'suggest_hdg'} = 0;
     $h{'suggest_chg'} = 0;
     $h{'target_secs'} = 0;
@@ -1652,12 +1693,16 @@ sub get_circuit_hash() {
     return \%h;
 }
 
+##############################################################
+## Extract from circuit hash, and place values in GLOBAL
+##############################################################
 sub set_global_per_key($) {
     my $key = shift;
     if (length($key) && defined $xg_circuits{$key}) {
-        $g_circuit = $key;
+        $g_circuit = $key;  # SET ACTIVE CIRCUIT
         my $ocx = $xg_circuits{$key};
         my ($rca,$rends);
+
         if (${$ocx}{'rwy_left'}) {
             #                0         1         2         3          4        5         6         7
             # $h1{'left'} = [$l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon];
@@ -1673,6 +1718,7 @@ sub set_global_per_key($) {
         $br_lon = ${$rca}[5];
         $tr_lat = ${$rca}[6];
         $tr_lon = ${$rca}[7];
+
         $rends = ${$ocx}{'runway'}; #  = [$g_elat1,$g_elon1,$g_elat2,$g_elon2];
         $g_elat1 = ${$rends}[0];
         $g_elon1 = ${$rends}[1];
