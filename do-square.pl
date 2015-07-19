@@ -669,7 +669,7 @@ sub process_in_file($) {
                     $g_circuit = $arr2[3];
                     $a_gil_lat = $lat;
                     $a_gil_lon = $lon;
-                    prt("CIRCUIT $a_gil_lat,$a_gil_lon ICAO $g_icao, circuit $g_circuit\n") if (VERB5());
+                    prt("CIRCUIT $a_gil_lat,$a_gil_lon ICAO $g_icao, circuit $g_circuit\n"); # if (VERB5());
                 } elsif ($text =~ /final\s+(\w+)$/) {
                     $rwy = $1;
                 } elsif ($text =~ /(\w+)-TR$/) {
