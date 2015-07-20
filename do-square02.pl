@@ -30,6 +30,10 @@
 # Track: This is my ACTUAL path traveled over ground 
 # Bearing: This is the position of another object from my position... mag/true
 # 
+# TODO: If fgfs_ac_on_ground() choose CIRCUIT, from loaded circuits using current ac heading,
+# else if 'flying' choose CIRCUIT according to the --wind=167@10 - direction and speed in Knots.
+#
+# $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
 use strict;
 use warnings;
 use File::Basename;  # split path ($name,$dir,$ext) = fileparse($file [, qr/\.[^.]*/] )
@@ -841,7 +845,7 @@ my $sp_msg_show = 10;
 my $sp_msg_cnt = 0;
 
 my $have_target = 0;
-my $min_fly_speed = 30; # Knots
+my $min_fly_speed = 35; # was 30; # Knots
 my $min_agl_height = 500;   # 4500;  # was just 500
 my $alt_msg_chg = 0;
 my $ind_alt_ft = 0; # YGIL = 881.7 feet
@@ -890,7 +894,7 @@ sub set_altimeter_stg() {
     set_decimal1_stg(\$ai);
     set_decimal2_stg(\$hg);
 
-    my $msg = "QNH $hg, alt $ai, ";
+    my $msg = "QNH $hg, alt $ai";
     if ($altimeter_msg ne $msg) {
         $altimeter_msg = $msg;
         $alt_msg_chg++;
@@ -953,32 +957,37 @@ sub show_position($) {
     $cpos = get_curr_pos_stg($lat,$lon,$alt);
     ###############################################################
     ### criteria for ON GROUND
-    ### WAS just if ($aspd < $min_fly_speed) {
-    # if ($aspd < $min_fly_speed)
-    if (fgfs_ac_on_ground()) {
+    ### TRIED if (fgfs_ac_on_ground()) but func error?
+    my $dagl = '';
+    if ( $aspd < $min_fly_speed ) {
+        #############################################################
         # ON GROUND has different concerns that say position
         set_altimeter_stg();
-        $agl = "OG ";
+        $dagl = "OG ";
         if ($alt_msg_chg) {
             $alt_msg_chg = 0;
-            $agl .= "$altimeter_msg ";
+            $dagl .= $altimeter_msg;
         } else {
             if ($sp_msg_cnt < 5) {
-                $agl .= "$altimeter_msg ";
+                $dagl .= $altimeter_msg;
             } else {
-                $agl .= "$cpos";
+                $dagl .= $cpos;
             }
         }
+        # $tmp = $agl;
+        # set_int_stg(\$tmp);
+        # $dagl .= ", agl $tmp";
+        #############################################################
     } elsif (!$got_alt_hold) {
         if ($agl > $min_agl_height) {
-            $agl = '';
+            $dagl = '';
         } elsif ($have_target) {
-            $agl = '';
+            $dagl = '';
         } else {
-            $agl = int($agl + 0.5)."Ft";
+            $dagl = int($agl + 0.5)."Ft";
         }
     } else {
-        $agl = '';
+        $dagl = '';
     }
     $aspd = int($aspd + 0.5);
     $gspd = int($gspd + 0.5);
@@ -1074,7 +1083,7 @@ sub show_position($) {
         $mag  = ${$rp}{'mag'};  # is this really magnetic - # /orientation/heading-magnetic-deg
         set_hdg_stg(\$hdg);
         set_hdg_stg(\$mag);
-        prt("$ctm: $agl hdg=".$hdg."t/".$mag."m/${tmp}i/${hb}b $msg $eta\n");
+        prt("$ctm: $dagl hdg=".$hdg."t/".$mag."m/${tmp}i/${hb}b $msg $eta\n");
     }
 
     $sp_prev_msg = $msg;    # save last message
