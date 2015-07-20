@@ -285,6 +285,16 @@ sub fgfs_show_gear_wow() {
     return $rh;
 }
 
+sub fgfs_ac_on_ground() {
+    my $rh = get_curr_gear_wow();
+    my $ct = time();
+    if ( ! defined ${$rh}{'time'} ) {
+        $rh = fgfs_get_gear_wow();
+    } elsif ($ct > (${$rh}{'time'} + $DELAY)) {
+        $rh = fgfs_get_gear_wow();
+    }
+    return ${$rh}{'on_ground'};
+}
 
 #############################################################################
 ### some indicated speeds
