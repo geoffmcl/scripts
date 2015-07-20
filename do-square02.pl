@@ -1783,33 +1783,63 @@ sub get_nxt_ps($) {
 }
 
 sub get_next_pointset($$$$$) {
-    my ($rh,$ptset,$rlat,$rlon,$show) = @_;
+    my ($rch,$ptset,$rlat,$rlon,$show) = @_;
     my $nxps = 'none';
     my ($nlat,$nlon);
     if ($ptset eq 'TL') {
         $nxps = 'BL';
-        $nlat = ${$rh}{'bl_lat'};
-        $nlon = ${$rh}{'bl_lon'};
+        $nlat = ${$rch}{'bl_lat'};
+        $nlon = ${$rch}{'bl_lon'};
     } elsif ($ptset eq 'BL') {
         $nxps = 'BR';
-        $nlat = ${$rh}{'br_lat'};
-        $nlon = ${$rh}{'br_lon'};
+        $nlat = ${$rch}{'br_lat'};
+        $nlon = ${$rch}{'br_lon'};
     } elsif ($ptset eq 'BR') {
         $nxps = 'TR';
-        $nlat = ${$rh}{'tr_lat'};
-        $nlon = ${$rh}{'tr_lon'};
+        $nlat = ${$rch}{'tr_lat'};
+        $nlon = ${$rch}{'tr_lon'};
     } elsif ($ptset eq 'TR') {
         $nxps = 'TL';
-        $nlat = ${$rh}{'tl_lat'};
-        $nlon = ${$rh}{'tl_lon'};
+        $nlat = ${$rch}{'tl_lat'};
+        $nlon = ${$rch}{'tl_lon'};
     } else {
-        prtw("WARNING: point [$ptset] set NOT one of 'TL', 'BR', 'TR', or 'TL'!");
+        pgm_exit(1,"ERROR: get_next_point [$ptset] set NOT one of 'TL', 'BR', 'TR', or 'TL'!");
     }
     ${$rlat} = $nlat;
     ${$rlon} = $nlon;
     prtt("get_next_pointset: from $ptset to $nxps\n") if ($show);
     return $nxps;
 }
+
+sub get_prev_pointset($$$$$) {
+    my ($rch,$ptset,$rlat,$rlon,$show) = @_;
+    my $prevps = 'none';
+    my ($nlat,$nlon);
+    if ($ptset eq 'TL') {
+        $prevps = 'TR';
+        $nlat = ${$rch}{'tr_lat'};
+        $nlon = ${$rch}{'tr_lon'};
+    } elsif ($ptset eq 'BL') {
+        $prevps = 'TL';
+        $nlat = ${$rch}{'tl_lat'};
+        $nlon = ${$rch}{'tl_lon'};
+    } elsif ($ptset eq 'BR') {
+        $prevps = 'BL';
+        $nlat = ${$rch}{'bl_lat'};
+        $nlon = ${$rch}{'bl_lon'};
+    } elsif ($ptset eq 'TR') {
+        $prevps = 'BR';
+        $nlat = ${$rch}{'br_lat'};
+        $nlon = ${$rch}{'br_lon'};
+    } else {
+        pgm_exit(1,"ERROR: get_prev_point [$ptset] set NOT one of 'TL', 'BR', 'TR', or 'TL'!");
+    }
+    ${$rlat} = $nlat;
+    ${$rlon} = $nlon;
+    prtt("get_prev_pointset: from $ptset to $prevps\n") if ($show);
+    return $prevps;
+}
+
 
 #######################################################################################
 # A good attempt at choosing a circuit target
@@ -1856,8 +1886,8 @@ sub get_closest_ptset($$$$$$) {
         $nlat = $tlat;
         $nlon = $tlon;
     }
-    ${$rpt} = $pt;
-    ${$rlat} = $nlat;
+    ${$rpt} = $pt;  # set CLOSEST ptset
+    ${$rlat} = $nlat;   # return target lat,lon
     ${$rlon} = $nlon;
 }
 
@@ -2021,6 +2051,18 @@ sub get_next_in_circuit_targ($$$$) {
     ### my $rch = $ref_circuit_hash;
     my ($pt,$tlat,$tlon);
     get_closest_ptset($rch,$slat,$slon,\$pt,\$tlat,\$tlon);
+    ######################################################################
+    # maybe keep this, if it is dist > 1 Km, and on my heading +/-10 degrees...
+    my ($az1,$az2,$dist);
+    fg_geo_inverse_wgs_84($slat,$slon,$tlat,$tlon,\$az1,\$az2,\$dist);
+    my $hdg = ${$rp}{'hdg'};
+    my $diff = abs(get_hdg_diff($az1,$hdg));
+    if (($diff < 10) && ($dist > 1000)) {
+        my $ppt = get_prev_pointset($rch,$pt,\$tlat,\$tlon,0);
+        prtt("Choosing CLOSEST ptset $pt...\n");
+        $pt = $ppt; # set next bumps the pointet...
+    }
+    ######################################################################
     set_next_in_circuit_targ($rch,$rp,$slat,$slon,$pt);
 }
 
@@ -2171,11 +2213,21 @@ sub set_wpts_to_rwy($$) {
         $az21 = $az22;
         $elat1 = $elat2;
         $elon1 = $elon2;
-        prt("Note switched to other end...\n");
+        prt("\nNOTE: switched to other end...\n\n");
     }
+
     ############################################
     ### Divide the segment BR to $elat1,$elon1
+
     fg_geo_inverse_wgs_84 ($brlat,$brlon,$elat1,$elon1,\$az11,\$az21,\$dist1);
+    ${$rch}{'wp_bgn_lat'} = $lat;
+    ${$rch}{'wp_bgn_lon'} = $lon;
+    # This should be the TOUCHDOWN point
+    ${$rch}{'wp_end_lat'} = $elat1;
+    ${$rch}{'wp_end_lon'} = $elon1;
+    ${$rch}{'wp_heading'} = $az11;
+    ${$rch}{'wp_distance'} = $dist1;
+
     my $dist4 = $dist1 / 4;
     my ($wp_lat,$wp_lon,$wp_az1,$cnt);
     fg_geo_direct_wgs_84($brlat,$brlon, $az11, $dist4, \$wp_lat, \$wp_lon, \$wp_az1 );
@@ -2207,12 +2259,17 @@ sub set_wpts_to_rwy($$) {
     }
     ##$xg .= "$elon1 $elat1\n";
     ##$xg .= "NEXT\n";
+    $xg .= "color white\n";
+    $xg .= "$lon $lat\n";
+    $xg .= "NEXT\n";
+    $xg .= "color gray\n";
     write2file($xg,$tmp_wp_out);
     prt("Generated $cnt wps to target... written $tmp_wp_out\n");
     prtt("\nEnter WAYPOINT mode - follow $cnt wps...\n");
     ${$rch}{'wp_mode'} = 1;
     ${$rch}{'wp_start'} = time();
     ${$rch}{'wp_last'} = ${$rch}{'wp_start'};
+    ${$rch}{'wp_next_sec'} = 0;
 }
 
 
@@ -2383,8 +2440,9 @@ sub do_wpts_to_rwy($$) {
         $spds = get_speeds_stg($aspd,$gspd,$wspd);
 
         fgfs_set_hdg_bug($az1);
-        $eta = "eta:".secs_HHMMSS2($secs);
+
         $secs = int(( $dist / (($gspd * $SG_NM_TO_METER) / 3600)) + 0.5);
+        $eta = "eta:".secs_HHMMSS2($secs);
         ${$rch}{'wp_targ_lat'} = $wp_lat;
         ${$rch}{'wp_targ_lon'} = $wp_lon;
         ${$rch}{'wp_targ_hdg'} = $az1;
@@ -2415,6 +2473,16 @@ sub do_wpts_to_rwy($$) {
         $off--;
         prtt("WP: Last $off of $cnt, at $dist $eta $spds\n\n");
     }
+
+    # end of WAYPOINT tracker
+    set_int_stg(\$alt);
+    set_int_stg(\$az1);
+    set_int_stg(\$secs);
+    my $xg = "$lon $lat # $alt - $secs on $az1\n";
+    # $xg .= "$wp_lon $wp_lat # touch down\n"; # there is aready a RED dot
+    $xg .= "NEXT\n";
+    append2file($xg,$tmp_wp_out);
+
     ${$rch}{'wp_mode'} = 0;
 }
 
@@ -2499,11 +2567,12 @@ sub process_circuit($) {
     my $rch = $ref_circuit_hash;
     return if (!defined ${$rp}{'time'});
     my $ctm = lu_get_hhmmss_UTC(${$rp}{'time'});
+    my $ct = time();
     my $bgn_turn = 500; # meters BEFORE target, commence turn - should be a function of degrees to turn to next
     my $secs = -1;
     my $eta = '';
-    my ($lon,$lat,$alt,$hdg,$agl,$hb,$mag,$aspd,$gspd,$cpos,$msg);
-    my ($az1,$az2,$dist);
+    my ($lon,$lat,$alt,$hdg,$agl,$hb,$mag,$aspd,$gspd,$cpos,$msg,$tmp);
+    my ($az1,$az2,$dist,$tlat,$tlon);
     my $ptset = ${$rch}{'targ_ptset'};   # current chosen point TR,BR,BL,TL
     if (!defined $ptset) {
         $ptset = 'none';
@@ -2518,12 +2587,31 @@ sub process_circuit($) {
     $mag  = ${$rp}{'mag'};  # /orientation/heading-magnetic-deg
     $aspd = ${$rp}{'aspd'}; # Knots
     $gspd = ${$rp}{'gspd'}; # Knots
+
+    ###########################################################################
+    if (${$rch}{'wp_mode'}) {
+        # if in WP MODE, keep another track record... each second
+        if ($ct != ${$rch}{'wp_next_sec'}) {
+            ${$rch}{'wp_next_sec'} = $ct;
+            $tlat  = ${$rch}{'wp_end_lat'};
+            $tlon  = ${$rch}{'wp_end_lon'};
+            fg_geo_inverse_wgs_84($lat,$lon,$tlat,$tlon,\$az1,\$az2,\$dist);
+            $secs = int(( $dist / (($gspd * $SG_NM_TO_METER) / 3600)) + 0.5);
+            $tmp = $alt;
+            set_int_stg(\$tmp);
+            set_int_stg(\$secs);
+            set_int_stg(\$az1);
+            append2file("$lon $lat # $tmp - $secs on $az1\n",$tmp_wp_out);
+        }
+    }
+    ###########################################################################
+
     if ($circuit_mode && $circuit_flag) {
         if (!defined ${$rch}{'target_lat'} || !defined ${$rch}{'target_lon'}) {
             pgm_exit(1,"ERROR: target_lat, lon NOT defined?\n");
         }
-        my $tlat  = ${$rch}{'target_lat'};
-        my $tlon  = ${$rch}{'target_lon'};
+        $tlat  = ${$rch}{'target_lat'};
+        $tlon  = ${$rch}{'target_lon'};
         fg_geo_inverse_wgs_84($lat,$lon,$tlat,$tlon,\$az1,\$az2,\$dist);
         $secs = int(( $dist / (($gspd * $SG_NM_TO_METER) / 3600)) + 0.5);
         my $psecs = ${$rch}{'target_secs'};
