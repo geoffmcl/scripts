@@ -27,7 +27,7 @@ my $ind_char = '    ';  # 4 space indenting
 my $show_quoted_items = 0;
 
 # ### DEBUG ###
-my $debug_on = 1;
+my $debug_on = 0;
 my $def_file = 'C:\GTools\perl\uas-demo.nas';
 
 ### program variables
