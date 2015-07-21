@@ -64,8 +64,8 @@ my $VERS = "0.0.7 2015-07-20"; # start an 02 verison
 my $load_log = 0;
 my $in_file = $perl_dir .'/ygil.xg';
 ### my $in_file = 'ygil-L.xg';
-my $tmp_xg_out = $temp_dir."/temp.$pgmname.xg";
-my $tmp_xg_out2 = $temp_dir."/tempCIRCUIT.xg";
+my $tmp_xg_out  = $temp_dir."/tempCIRCUIT";
+my $tmp_xg_out2 = $temp_dir."/tempCIRCUITA.xg";
 my $tmp_wp_out = $temp_dir."/tempwaypt.xg";
 my $tmp_trk_out = $temp_dir."/temptrk.xg";	# keep movements of aircraft
 
@@ -149,6 +149,7 @@ sub pgm_exit($$) {
         prt($msg);
     }
     fgfs_disconnect();
+    ReadMode('restore'); # not sure this is required, or what it does exactly
     show_warnings($val);
     close_log($outfile,$load_log);
     exit($val);
@@ -176,6 +177,7 @@ sub prtt($) {
 my $g_icao = 'YGIL';
 my $g_circuit = '33';
 my $g_rwy_left = 1;     # is left or right circuit
+my $g_rcx = 0;
 
 # rough Gil circuit - will be replaced by CALCULATED values
 my $tl_lat = -31.684063;
@@ -187,55 +189,10 @@ my $br_lon = 148.666992;
 my $tr_lat = -31.672960;
 my $tr_lon = 148.649139;
 
-
 my $a_gil_lat = -31.697287500;
 my $a_gil_lon = 148.636942500;
 my $a_dub_lat = -32.2174865;
 my $a_dub_lon = 148.57727;
-
-###################################################################
-### RIGHT and LEFT circuits
-my ($l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon);
-my ($r_tl_lat,$r_tl_lon,$r_bl_lat,$r_bl_lon,$r_br_lat,$r_br_lon,$r_tr_lat,$r_tr_lon);
-
-###################################################################
-# RUNWAY ARRAY OFFSETS
-#my $RW_LEN = 0;
-#my $RW_HDG = 1;
-#my $RW_REV = 2;
-#my $RW_TT1 = 3;
-#my $RW_TT2 = 4;
-#my $RW_CLAT = 5;
-#my $RW_CLON = 6;
-#my $RW_LLAT = 7;
-#my $RW_LLON = 8;
-#my $RW_RLAT = 9;
-#my $RW_RLON = 10;
-#my $RW_DONE = 11;
-##                 Len    Hdg   Rev  Title  RTit Ctr Lat    Ctr Lon
-##                 0      1     2    3     4     5          6           7  8  9  10 11
-#my @gil_patt = ();
-#### my @gil_rwys = ( [4204,  162.0, 0, '15', '33', -31.696928, 148.636404, 0, 0, 0, 0, 0 ] );
-#my @gil_rwys = ( [3984,  162.22, 0, '15', '33', -31.69656323, 148.6363057, 0, 0, 0, 0, 0 ] );
-##my @gil_navs = ( ["", 0 ] );
-#my @gil_navs = ();
-##my @gil_rwys = ( [162.0, 4204], [93.0, 1902] );
-#my @dub_patt = ( [ ] );
-#my @dub_rwys = ( [5600, 53.61, 0, '05', '23', -32.218265, 148.576145, 0, 0, 0, 0, 0 ] );
-#my @dub_navs = ( ["VOR", 114.4], ["NDB", 251] );
-#
-#my $OL_LAT = 0;
-#my $OL_LON = 1;
-#my $OL_NAV = 2;
-#my $OL_RWY = 3;
-#my $OL_PAT = 4;
-#my %apt_locations = (
-#    # ICAO       Center LAT, LON       NAVAIDS      RUNWAYS
-#    'YGIL' => [$a_gil_lat, $a_gil_lon, \@gil_navs, \@gil_rwys, \@gil_patt ],
-#    'YSDU' => [$a_dub_lat, $a_dub_lon, \@dub_navs, \@dub_rwys, \@dub_patt ]
-#    );
-#
-#sub get_locations() { return \%apt_locations; }
 
 my $PI = 3.1415926535;
 # my $D2R = math.pi / 180;               # degree to radian
@@ -306,6 +263,7 @@ sub fgfs_get_sim_time() {
     return $tm;
 }
 
+# from : C:\GTools\perl\uas-demo.nas
 # var f8Ep=getprop("/instrumentation/airspeed-indicator/true-speed-kt");
 # var VZeb=func(course_deg,f8Ep,add_carrier_motion){
 sub compute_course_org($$) {
@@ -376,63 +334,6 @@ sub compute_course($$) {
 }
 
 
-#sub show_ref_circuit_hash() {
-#    if (!defined $mreh_circuithash) {
-#        return undef;
-#    }
-#    my $rch = $mreh_circuithash;
-#    my @arr = keys %{$rch};
-#    prt("Keys ".join(" ",@arr)."\n") if (VERB9());
-#    my ($key,$rpa,$cnt,$i,$rpa2,$cnt2,$rpa3,$lat,$lon,$msg,$type);
-#    my ($elat1,$elon1,$elat2,$elon2);
-#    my $tot_pts = 0;
-#    foreach $key (@arr) {
-#        $type = get_type($key);
-#        $rpa = ${$rch}{$key};
-#        $cnt = scalar @{$rpa};
-#        $tot_pts = 0;
-#        $msg = '';
-#        for ($i = 0; $i < $cnt; $i++) {
-#            $rpa2 = ${$rpa}[$i];
-#            $cnt2 = scalar @{$rpa2};
-#            $tot_pts += $cnt2;
-#            foreach $rpa3 (@{$rpa2}) {
-#                $lat = ${$rpa3}[0];
-#                $lon = ${$rpa3}[1];
-#                $msg .= "$lon,$lat ";
-#            }
-#        }
-#        prt("Color $type ($key) - $cnt sets, $tot_pts points\n");
-#        prt("$msg\n") if (VERB9());
-#    }
-#    if (got_runway_coords()) {
-#        $elat1 = $g_elat1;
-#        $elon1 = $g_elon1;
-#        $elat2 = $g_elat2;
-#        $elon2 = $g_elon2;
-#        my ($az1,$az2,$distm,$distf);
-#        fg_geo_inverse_wgs_84 ($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$distm);
-#        $g_rwy_az1 = $az1;
-#        $distf = int($SG_METER_TO_FEET * $distm);
-#        set_lat_stg(\$elat1);
-#        set_lon_stg(\$elon1);
-#        set_lat_stg(\$elat2);
-#        set_lon_stg(\$elon2);
-#        #my $rwy1 = int($az1 / 10);
-#        my $rwy1 = $az1;
-#        $rwy1 += 180;
-#        $rwy1 -= 360 if ($rwy1 > 360);
-#        $rwy1 = int($rwy1 / 10);
-#        $rwy1 = '0'.$rwy1 if ($rwy1 < 10);
-#        set_decimal1_stg(\$az1);
-#        prt("Runway: $distf ft, $rwy1~ $elat1,$elon1 $elat2,$elon2 $az1\n");
-#    } else {
-#        prt("Warning: Did NOT set a RUNWAY!!!\n");
-#    }
-#    ### pgm_exit(1,"TEMP EXIT\n");
-#    return $rch;
-#}
-
 ###############################################################
 ### keep a tracker xg file
 my %tracker_hash = ();
@@ -447,7 +348,8 @@ sub get_tracker() {
 		${$rt}{'lat'} = 0;
 		${$rt}{'lon'} = 0;
         my $msg = "# Start ".lu_get_hhmmss_UTC($ct)."\n";
-        $msg .= get_circuit_xg();
+        ###$msg .= get_circuit_xg();
+        $msg .= get_circuit_xg2($g_rcx);
         $msg .= "color gray\n";
         write2file($msg,$tmp_trk_out);
 	}
@@ -511,12 +413,70 @@ sub get_circuit_xg() {
     return $xg;
 }
 
-sub write_circuit_xg($) {
-    my $file = shift;
-    my $xg = get_circuit_xg();
-    write2file($xg,$file);
-    prt("Circuit XG written to '$file'\n");
+sub get_circuit_xg2($) {
+    my $rcx = shift;
+    my $xg = "annon $a_gil_lon $a_gil_lat ICAO $g_icao, circuit $g_circuit\n";
+
+    my ($rca,$rends);
+    my ($tllat,$tllon,$bllat,$bllon,$brlat,$brlon,$trlat,$trlon);
+    my ($elat1,$elon1,$elat2,$elon2);
+    if (${$rcx}{'rwy_left'}) {
+        #                0         1         2         3          4        5         6         7
+        # $h1{'left'} = [$l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon];
+        $rca = ${$rcx}{'left'};
+        $g_rwy_left = 1;
+    } else {
+        $rca = ${$rcx}{'right'};
+        $g_rwy_left = 0;
+    }
+    # set the appropriate circuit
+    $tllat = ${$rca}[0];
+    $tllon = ${$rca}[1];
+    $bllat = ${$rca}[2];
+    $bllon = ${$rca}[3];
+    $brlat = ${$rca}[4];
+    $brlon = ${$rca}[5];
+    $trlat = ${$rca}[6];
+    $trlon = ${$rca}[7];
+
+    $rends = ${$rcx}{'runway'}; #  = [$g_elat1,$g_elon1,$g_elat2,$g_elon2];
+    $elat1 = ${$rends}[0];
+    $elon1 = ${$rends}[1];
+    $elat2 = ${$rends}[2];
+    $elon2 = ${$rends}[3];
+
+    $xg .= "color white\n";
+    $xg .= "anno $trlon $trlat TR\n";
+    $xg .= "$trlon $trlat\n";
+    $xg .= "anno $tllon $tllat TL\n";
+    $xg .= "$tllon $tllat\n";
+    $xg .= "anno $bllon $bllat BL\n";
+    $xg .= "$bllon $bllat\n";
+    $xg .= "anno $brlon $brlat BR\n";
+    $xg .= "$brlon $brlat\n";
+    $xg .= "$trlon $trlat\n";
+    $xg .= "NEXT\n";
+    $xg .= "color blue\n";
+    $xg .= "$elon1 $elat1\n";
+    $xg .= "$elon2 $elat2\n";
+    $xg .= "NEXT\n";
+    return $xg;
 }
+
+
+sub write_circuit_xg2($$) {
+    my ($rcx,$file) = @_;
+    my $xg = get_circuit_xg2($rcx);
+    write2file($xg,$file);
+    prt("Circuit xg written to '$file'\n");
+}
+
+#sub write_circuit_xg($) {
+#    my $file = shift;
+#    my $xg = get_circuit_xg();
+#    write2file($xg,$file);
+#    prt("Circuit XG written to '$file'\n");
+#}
 
 # Expect a somewhat special xg describing an airport, its runways,
 # and the left and right circuits around those runways
@@ -534,7 +494,11 @@ sub process_in_file($) {
     prt("Processing $lncnt lines, from [$inf]...\n") if (VERB2());
     my ($line,$inc,$lnn,$type,@arr,$cnt,$ra,$lat,$lon,$text,$rwy);
     my (@arr2);
-    my $tmpxg = $tmp_xg_out;
+    ###################################################################
+    ### RIGHT and LEFT circuits
+    my ($l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon);
+    my ($r_tl_lat,$r_tl_lon,$r_bl_lat,$r_bl_lon,$r_br_lat,$r_br_lon,$r_tr_lat,$r_tr_lon);
+
     $lnn = 0;
     my $color = '';
     my @points = ();
@@ -546,7 +510,6 @@ sub process_in_file($) {
     my @block = ();
     my @blocks = ();
     my %colors = ();
-    ###write_circuit_xg($tmpxg);
     my %dupes = ();
     foreach $line (@lines) {
         chomp $line;
@@ -776,10 +739,15 @@ sub process_in_file($) {
     }
     @arr2 = keys %xg_circuits;
     $bcnt = scalar @arr2;
-    my ($key,$rcx,$az1);
-    prt("Bagged $bcnt circuits ");
+    if (!$bcnt) {
+        pgm_exit(1,"FAILED to get circuits from $inf\n");
+    }
+    my ($key,$rcx,$az1,$tmpxg,$msg);
+    $msg ="Bagged $bcnt circuits ";
     foreach $key (@arr2) {
+        $g_circuit = $key;
         $rcx = $xg_circuits{$key};
+        $g_rcx = $rcx;
         $az1 = ${$rcx}{'rwy_heading'};
         #if (${$rcx}{'rwy_id'} eq $key) {
         #    # doing this runway - get heading
@@ -787,13 +755,17 @@ sub process_in_file($) {
             $az1 -= 360 if ($az1 > 360);
         #}
         set_decimal1_stg(\$az1);
-        prt("$key ($az1) ");
+        $msg .= "$key ($az1) ";
+        $tmpxg = $tmp_xg_out.$key.'.xg';
+        write_circuit_xg2($rcx,$tmpxg);
+
     }
-    prt("\n");
+    prt("$msg\n");
     ### $mreh_circuithash = \%h;
     ### show_ref_circuit_hash();
-    write_circuit_xg($tmpxg);
-    $ref_circuit_hash = get_circuit_hash();
+    ### $tmpxg = $tmp_xg_out.'.xg';
+    ### write_circuit_xg($tmpxg);
+    $ref_circuit_hash = get_circuit_hash2($rcx);
     ### pgm_exit(1,"TEMP EXIT\n");
 }
 
@@ -1273,10 +1245,11 @@ sub get_runway_for_heading($) {
     return $ckey;
 }
 
+my $swap_wind_hdg = 1;
 
 sub position_on_got_engine($) {
     my $rp = shift;
-    my ($lon,$lat,$alt,$hdg,$agl,$hb,$mag,$aspd,$gspd,$msg,$tmp,$tmp2);
+    my ($lon,$lat,$alt,$hdg,$agl,$hb,$mag,$aspd,$gspd,$msg,$tmp,$tmp2,$rwy,$key,$rhdg);
     # my ($rch,$targ_lat,$targ_lon,$targ_hdg,$targ_dist,$targ_pset,$prev_pset);
     # my $msg = '';
     # my $eta = '';
@@ -1293,24 +1266,38 @@ sub position_on_got_engine($) {
     my $rew = get_env_wind();
     my $whdg = ${$rew}{'wind-from'};
     my $wspd = ${$rew}{'wind-spd'};
-    if ($aspd < $min_fly_speed) {
-        # use current ac heading
-    } else {
-        $hdg = $whdg;   # select RUNWAY, and CIRCUIT on WIND HEADING
-        $hdg += 180;
-        $hdg -= 360 if ($hdg > 360);
-        set_hdg_stg(\$whdg);
-        set_int_stg(\$wspd);
-        $from = "wind $whdg".'@'.$wspd;
-    }
 
-    my ($rhdg);
     $msg = "Failed get runway heading...";
-    my $key = get_runway_for_heading($hdg);
+    fgfs_get_atc_runway(\$rwy);
+    if ( defined $rwy && length($rwy) ) {
+        if ( defined $xg_circuits{$rwy} ) {
+            $key = $rwy;
+            $from = 'atc';
+        }
+    }
+    if ( ! defined $key) {
+        # oops, seems ATC has not set an ACTIVE runway
+        # Other methods of chossing a circuit
+        if ($aspd < $min_fly_speed) {
+            # use current ac heading - assume in takoff mode
+        } else {
+            $hdg = $whdg;   # select RUNWAY, and CIRCUIT on WIND HEADING
+            if ($swap_wind_hdg) {
+                $hdg += 180;
+                $hdg -= 360 if ($hdg > 360);
+            }
+            set_hdg_stg(\$whdg);
+            set_int_stg(\$wspd);
+            $from = "wind $whdg".'@'.$wspd;
+        }
+
+        $key = get_runway_for_heading($hdg);
+    }
     if (length($key) && defined $xg_circuits{$key}) {
         set_global_per_key($key);
         $msg = 'Set new from ';
     }
+
     # we have a suggested runway 
     if ( get_runway_heading(\$rhdg) ) {
         my $rch = $ref_circuit_hash;
@@ -1553,48 +1540,48 @@ sub set_circuit_values($$) {
     ${$rch}{'br_dist'} = $dist;
     ${$rch}{'BR'} = [$az1,$az2,$dist];
 
-    # get runways id, for a runway with this heading
-    # $h2{'left'} = [$l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon];
-    # $h2{'right'} = [$r_tl_lat,$r_tl_lon,$r_bl_lat,$r_bl_lon,$r_br_lat,$r_br_lon,$r_tr_lat,$r_tr_lon];
-    # $h2{'runway'} = [$g_elat1,$g_elon1,$g_elat2,$g_elon2];
-    # fg_geo_inverse_wgs_84($g_elat1,$g_elon1,$g_elat2,$g_elon2,\$az1,\$az2,\$dist);
-    # $h2{'rwy_heading'} = $az1;
-    # $h2{'rwy_id'} = $rwy;
-    # $h2{'rwy_id2'} = $rwy2;
-    # $xg_circuits{$rwy} = \%h2;
-    # $xg_circuits{$rwy2} = \%h2;
-    my ($key,$rcx,$diff,$fnd,$maxdiff,$circuit); # each key is a runway id
-    my @karr = keys %xg_circuits;
-    my $cnt = scalar @karr;
-    $fnd = $rwy_hdg;
-    set_hdg_stg(\$fnd);
-    prt("Searching $cnt circuits matching heading $fnd... $circ\n");
-    $fnd = 0;
-    $maxdiff = 5;
-    foreach $key (keys %xg_circuits) {
-        $rcx = $xg_circuits{$key};  # get ref circuit hash loaded from xg file load
-        if (defined ${$rcx}{'rwy_heading'} ) {
-            $diff = abs(get_hdg_diff( ${$rcx}{'rwy_heading'}, $rwy_hdg ));
-            if ($diff < $maxdiff) {
-                $maxdiff = $diff;
-                $circuit = ${$rcx}{'rwy_id'};
-                ${$rch}{'rwy_id'} = $circuit;
-                set_decimal3_stg(\$diff);
-                prt("Selected circuit $circuit, diff $diff\n");
-                $fnd = 1;
-                $active_rcx = $rcx;
-            }
-        } else {
-            pgm_exit(1,"rwy_heading NOT defined in xg curcuit hash!\n");
-        }
-    }
-    if ($cnt) {
-        if ($fnd) {
-            # found
-        } else {
-            pgm_exit(1,"Failed to select a circuits! WHY???\n");
-        }
-    }
+#    # get runways id, for a runway with this heading
+#    # $h2{'left'} = [$l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon];
+#    # $h2{'right'} = [$r_tl_lat,$r_tl_lon,$r_bl_lat,$r_bl_lon,$r_br_lat,$r_br_lon,$r_tr_lat,$r_tr_lon];
+#    # $h2{'runway'} = [$g_elat1,$g_elon1,$g_elat2,$g_elon2];
+#    # fg_geo_inverse_wgs_84($g_elat1,$g_elon1,$g_elat2,$g_elon2,\$az1,\$az2,\$dist);
+#    # $h2{'rwy_heading'} = $az1;
+#    # $h2{'rwy_id'} = $rwy;
+#    # $h2{'rwy_id2'} = $rwy2;
+#    # $xg_circuits{$rwy} = \%h2;
+#    # $xg_circuits{$rwy2} = \%h2;
+#    my ($key,$rcx,$diff,$fnd,$maxdiff,$circuit); # each key is a runway id
+#    my @karr = keys %xg_circuits;
+#    my $cnt = scalar @karr;
+#    $fnd = $rwy_hdg;
+#    set_hdg_stg(\$fnd);
+#    prt("Searching $cnt circuits matching heading $fnd... $circ\n");
+#    $fnd = 0;
+#    $maxdiff = 5;
+#    foreach $key (keys %xg_circuits) {
+#        $rcx = $xg_circuits{$key};  # get ref circuit hash loaded from xg file load
+#        if (defined ${$rcx}{'rwy_heading'} ) {
+#            $diff = abs(get_hdg_diff( ${$rcx}{'rwy_heading'}, $rwy_hdg ));
+#            if ($diff < $maxdiff) {
+#                $maxdiff = $diff;
+#                $circuit = ${$rcx}{'rwy_id'};
+#                ${$rch}{'rwy_id'} = $circuit;
+#                set_decimal3_stg(\$diff);
+#                prt("Selected circuit $circuit, diff $diff\n");
+#                $fnd = 1;
+#                $active_rcx = $rcx;
+#            }
+#        } else {
+#            pgm_exit(1,"rwy_heading NOT defined in xg curcuit hash!\n");
+#        }
+#    }
+#    if ($cnt) {
+#        if ($fnd) {
+#            # found
+#        } else {
+#            pgm_exit(1,"Failed to select a circuits! WHY???\n");
+#        }
+#    }
 
     # ================================================
     $tllat = ${$rch}{'tl_lat'};
@@ -1610,15 +1597,6 @@ sub set_circuit_values($$) {
     if ($show) {
         ### my ($elat2,$elon2);
         ### my ($az11,$az21,$dist1);
-
-        $tllat = ${$rch}{'tl_lat'};
-        $tllon = ${$rch}{'tl_lon'};
-        $bllat = ${$rch}{'bl_lat'};
-        $bllon = ${$rch}{'bl_lon'};
-        $brlat = ${$rch}{'br_lat'};
-        $brlon = ${$rch}{'br_lon'};
-        $trlat = ${$rch}{'tr_lat'};
-        $trlon = ${$rch}{'tr_lon'};
 
         # extract values
         # downwind TL to BL
@@ -1676,32 +1654,113 @@ sub set_circuit_values($$) {
     }
 }
 
-########################################################
-# Initialise/reinitialise the circuit hash
-# setup DEFAULT values from globals set on file read
-########################################################
-sub get_circuit_hash() {
+#########################################################
+## Initialise/reinitialise the circuit hash
+## setup DEFAULT values from globals set on file read
+#########################################################
+#sub get_circuit_hash() {
+#    my %h = ();
+#    $h{'tl_lat'} = $tl_lat;
+#    $h{'tl_lon'} = $tl_lon;
+#    $h{'bl_lat'} = $bl_lat;
+#    $h{'bl_lon'} = $bl_lon;
+#    $h{'br_lat'} = $br_lat;
+#    $h{'br_lon'} = $br_lon;
+#    $h{'tr_lat'} = $tr_lat;
+#    $h{'tr_lon'} = $tr_lon;
+#
+#    # $h2{'runway'} = [$g_elat1,$g_elon1,$g_elat2,$g_elon2];
+#    $h{'rwy_elat1'} = $g_elat1;
+#    $h{'rwy_elon1'} = $g_elon1;
+#    $h{'rwy_elat2'} = $g_elat2;
+#    $h{'rwy_elon2'} = $g_elon2;
+#    $h{'rwy_id'}    = $g_circuit;
+#    $h{'rwy_left'}  = $g_rwy_left;
+#
+#    my ($az1,$az2,$dist);
+#    fg_geo_inverse_wgs_84($g_elat1,$g_elon1,$g_elat2,$g_elon2,\$az1,\$az2,\$dist);
+#    $h{'rwy_heading'} = $az1;
+#
+#    set_circuit_values(\%h,1);
+#
+#    $h{'suggest_hdg'} = 0;
+#    $h{'suggest_chg'} = 0;
+#    $h{'target_secs'} = 0;
+#    $h{'target_eta'} = 'none';
+#    $h{'target_start'} = 0;
+#    $h{'begin_time'} = time();
+#    $h{'last_time'} = 0;
+#
+#    $h{'eta_update'} = 0;
+#    $h{'eta_trend'} = '=';
+#    $h{'targ_first'}  = 0;
+#    # wp mode to get to a runway say...
+#    $h{'wp_mode'} = 0;
+#    $h{'wp_cnt'} = 0;
+#    $h{'wp_off'} = 0;
+#    $h{'wp_flag'} = 0;
+#    $h{'wpts'} = [];    # array of waypoints
+#    return \%h;
+#}
+
+######################################################################
+### Build a HASH as the current 'circuit' hash
+
+sub get_circuit_hash2($) {
+    my $rcx = shift;
     my %h = ();
-    $h{'tl_lat'} = $tl_lat;
-    $h{'tl_lon'} = $tl_lon;
-    $h{'bl_lat'} = $bl_lat;
-    $h{'bl_lon'} = $bl_lon;
-    $h{'br_lat'} = $br_lat;
-    $h{'br_lon'} = $br_lon;
-    $h{'tr_lat'} = $tr_lat;
-    $h{'tr_lon'} = $tr_lon;
+    my ($rca,$rends);
+    my ($tllat,$tllon,$bllat,$bllon,$brlat,$brlon,$trlat,$trlon);
+    my ($elat1,$elon1,$elat2,$elon2);
+    my ($rwy);
+    $rwy = ${$rcx}{'rwy_id'};
+    if (${$rcx}{'rwy_left'}) {
+        #                0         1         2         3          4        5         6         7
+        # $h1{'left'} = [$l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon];
+        $rca = ${$rcx}{'left'};
+        $g_rwy_left = 1;
+    } else {
+        $rca = ${$rcx}{'right'};
+        $g_rwy_left = 0;
+    }
+    # set the appropriate circuit
+    $tllat = ${$rca}[0];
+    $tllon = ${$rca}[1];
+    $bllat = ${$rca}[2];
+    $bllon = ${$rca}[3];
+    $brlat = ${$rca}[4];
+    $brlon = ${$rca}[5];
+    $trlat = ${$rca}[6];
+    $trlon = ${$rca}[7];
+
+    $rends = ${$rcx}{'runway'}; #  = [$g_elat1,$g_elon1,$g_elat2,$g_elon2];
+    $elat1 = ${$rends}[0];
+    $elon1 = ${$rends}[1];
+    $elat2 = ${$rends}[2];
+    $elon2 = ${$rends}[3];
+
+    $h{'rcx'} = $rcx;       # set the circuit hash in use
+    $h{'tl_lat'} = $tllat;
+    $h{'tl_lon'} = $tllon;
+    $h{'bl_lat'} = $bllat;
+    $h{'bl_lon'} = $bllon;
+    $h{'br_lat'} = $brlat;
+    $h{'br_lon'} = $brlon;
+    $h{'tr_lat'} = $trlat;
+    $h{'tr_lon'} = $trlon;
 
     # $h2{'runway'} = [$g_elat1,$g_elon1,$g_elat2,$g_elon2];
-    $h{'rwy_elat1'} = $g_elat1;
-    $h{'rwy_elon1'} = $g_elon1;
-    $h{'rwy_elat2'} = $g_elat2;
-    $h{'rwy_elon2'} = $g_elon2;
-    $h{'rwy_id'}    = $g_circuit;
-    $h{'rwy_left'}  = $g_rwy_left;
+    $h{'rwy_elat1'} = $elat1;
+    $h{'rwy_elon1'} = $elon1;
+    $h{'rwy_elat2'} = $elat2;
+    $h{'rwy_elon2'} = $elon2;
+    $h{'rwy_id'}    = $rwy;
+    $h{'rwy_left'}  = ${$rcx}{'rwy_left'};
 
-    my ($az1,$az2,$dist);
-    fg_geo_inverse_wgs_84($g_elat1,$g_elon1,$g_elat2,$g_elon2,\$az1,\$az2,\$dist);
-    $h{'rwy_heading'} = $az1;
+    #my ($az1,$az2,$dist);
+    #fg_geo_inverse_wgs_84($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$dist);
+    #$h{'rwy_heading'} = $az1;
+    $h{'rwy_heading'} = ${$rcx}{'rwy_heading'};
 
     set_circuit_values(\%h,1);
 
@@ -1725,6 +1784,7 @@ sub get_circuit_hash() {
     return \%h;
 }
 
+
 ##############################################################
 ## Extract from circuit hash, and place values in GLOBAL
 ##############################################################
@@ -1732,16 +1792,16 @@ sub set_global_per_key($) {
     my $key = shift;
     if (length($key) && defined $xg_circuits{$key}) {
         $g_circuit = $key;  # SET ACTIVE CIRCUIT
-        my $ocx = $xg_circuits{$key};
+        my $rcx = $xg_circuits{$key};
+        $g_rcx = $rcx;
         my ($rca,$rends);
-
-        if (${$ocx}{'rwy_left'}) {
+        if (${$rcx}{'rwy_left'}) {
             #                0         1         2         3          4        5         6         7
             # $h1{'left'} = [$l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon];
-            $rca = ${$ocx}{'left'};
+            $rca = ${$rcx}{'left'};
             $g_rwy_left = 1;
         } else {
-            $rca = ${$ocx}{'right'};
+            $rca = ${$rcx}{'right'};
             $g_rwy_left = 0;
         }
         # set the appropriate circuit
@@ -1754,14 +1814,15 @@ sub set_global_per_key($) {
         $tr_lat = ${$rca}[6];
         $tr_lon = ${$rca}[7];
 
-        $rends = ${$ocx}{'runway'}; #  = [$g_elat1,$g_elon1,$g_elat2,$g_elon2];
+        # TODO: this needs to be CHECKED - maybe in wrong order
+        $rends = ${$rcx}{'runway'}; #  = [$g_elat1,$g_elon1,$g_elat2,$g_elon2];
         $g_elat1 = ${$rends}[0];
         $g_elon1 = ${$rends}[1];
         $g_elat2 = ${$rends}[2];
         $g_elon2 = ${$rends}[3];
 
-        $ref_circuit_hash = get_circuit_hash();
-        write_circuit_xg($tmp_xg_out2);
+        $ref_circuit_hash = get_circuit_hash2($rcx);
+        write_circuit_xg2($rcx,$tmp_xg_out2);
     }
 }
 
@@ -2057,13 +2118,20 @@ sub get_next_in_circuit_targ($$$$) {
     fg_geo_inverse_wgs_84($slat,$slon,$tlat,$tlon,\$az1,\$az2,\$dist);
     my $hdg = ${$rp}{'hdg'};
     my $diff = abs(get_hdg_diff($az1,$hdg));
-    if (($diff < 10) && ($dist > 1000)) {
+    ###if (($diff < 25) && ($dist > 1000))
+    if (($diff < 30) && ($dist > 1000)) {
         my $ppt = get_prev_pointset($rch,$pt,\$tlat,\$tlon,0);
         prtt("Choosing CLOSEST ptset $pt...\n");
         $pt = $ppt; # set next bumps the pointet...
+    } else {
+        set_int_stg(\$diff);
+        $dist = get_dist_stg_km($dist);
+        set_hdg_stg(\$az1);
+        prtt("Choosing NEXT ptset. Closest $pt on $az1 ($diff) at $dist...\n");
+
     }
     ######################################################################
-    set_next_in_circuit_targ($rch,$rp,$slat,$slon,$pt);
+        set_next_in_circuit_targ($rch,$rp,$slat,$slon,$pt);
 }
 
 sub choose_best_target($$) {
@@ -2088,8 +2156,9 @@ sub set_suggested_hdg($$) {
     ${$rch}{'target_hdg'} = $shdg;
     ${$rch}{'suggest_chg'} = 0;
     fgfs_set_hdg_bug(${$rch}{'target_hdg'});
-    $circuit_flag |= 2;
     $m_stable_cnt = 0;
+
+    $circuit_flag |= 2;
     ### set_hdg_bug_force($az2);
     ${$rch}{'target_heading_t'} = $shdg;
     ${$rch}{'target_heading_m'} = get_mag_hdg_from_true($shdg);
@@ -2128,50 +2197,10 @@ sub set_wpts_to_rwy($$) {
     my ($lat,$lon);
     my ($elat1,$elon1,$elat2,$elon2);
     my ($az1,$az2,$distm);
-    my ($tllat,$tllon,$bllat,$bllon,$brlat,$brlon,$trlat,$trlon);
+    my ($tllat,$tllon,$bllat,$bllon,$brlat,$brlon,$trlat,$trlon,$tmp);
     my $thdg = ${$rch}{'target_hdg'};
     my ($diff,$diff2,$fnd);
 
-    # are we picking up the right RUNWAY
-    $fnd = 0;
-    if (@g_center_lines) {
-        my ($ra);
-        #                       0        1        2        3
-        # push(@g_center_lines,[$g_elat1,$g_elon1,$g_elat2,$g_elon2]);
-        $diff2 = 30;
-        foreach $ra (@g_center_lines) {
-            $elat1 = ${$ra}[0];
-            $elon1 = ${$ra}[1];
-            $elat2 = ${$ra}[2];
-            $elon2 = ${$ra}[3];
-            fg_geo_inverse_wgs_84 ($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$distm);
-            $diff = abs(get_hdg_diff($az1,$thdg));
-            if ($diff < $diff2) {
-                $diff2 = $diff;
-                $g_elat1 = $elat1;
-                $g_elon1 = $elon1;
-                $g_elat2 = $elat2;
-                $g_elon2 = $elon2;
-                $fnd |= 1;
-            }
-            $diff = abs(get_hdg_diff($az2,$thdg));
-            if ($diff < $diff2) {
-                $diff2 = $diff;
-                $g_elat2 = $elat1;
-                $g_elon2 = $elon1;
-                $g_elat1 = $elat2;
-                $g_elon1 = $elon2;
-                $fnd |= 2;
-            }
-        }
-    }
-
-    # have we chosen wisely???
-    $elat1 = $g_elat1;
-    $elon1 = $g_elon1;
-    $elat2 = $g_elat2;
-    $elon2 = $g_elon2;
-    fg_geo_inverse_wgs_84 ($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$distm);
     # ================================================
     $tllat = ${$rch}{'tl_lat'};
     $tllon = ${$rch}{'tl_lon'};
@@ -2184,10 +2213,49 @@ sub set_wpts_to_rwy($$) {
     # ================================================
     $lon  = ${$rp}{'lon'};
     $lat  = ${$rp}{'lat'};
+
+    # are we picking up the right RUNWAY
+    $elat1 = ${$rch}{'rwy_elat1'};
+    $elon1 = ${$rch}{'rwy_elon1'};
+    $elat2 = ${$rch}{'rwy_elat2'};
+    $elon2 = ${$rch}{'rwy_elon2'};
+    #$rwy = ${$rch}{'rwy_id'};
+    #$isleft = ${$rch}{'rwy_left'};
+    my ($az11,$az21,$dist1,$az12,$az22,$dist2,$char,$tnow,$tnxt);
+    fg_geo_inverse_wgs_84 ($brlat,$brlon,$elat1,$elon1,\$az11,\$az21,\$dist1);
+    fg_geo_inverse_wgs_84 ($brlat,$brlon,$elat2,$elon2,\$az12,\$az22,\$dist2);
+    if ($dist2 < $dist1) {
+        # TODO: THIS SHOULD NOT HAPPEN, AND SHULD BE FIXED ELSEWHERE
+        $tmp = $dist1;
+        $dist1 = $dist2;
+        $dist2 = $tmp;
+
+        $tmp = $az11;
+        $az11 = $az12;
+        $az12 = $tmp;
+
+        $tmp = $az21;
+        $az21 = $az22;
+        $az22 = $tmp;
+
+        $tmp = $elat1;
+        $elat1 = $elat2;
+        $elat2 = $tmp;
+
+        $tmp = $elon1;
+        $elon1 = $elon2;
+        $elon2 = $tmp;
+        prt("\nNOTE: switched to other end...\n\n");
+        ${$rch}{'rwy_elat1'} = $elat1; 
+        ${$rch}{'rwy_elon1'} = $elon1;
+        ${$rch}{'rwy_elat2'} = $elat2;
+        ${$rch}{'rwy_elon2'} = $elon2;
+    }
+
+    fg_geo_inverse_wgs_84 ($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$distm);
     # this is the leg BR to TR for 33 circuit
     # $brlat = ${$rch}{'br_lat'};
     # $brlon = ${$rch}{'br_lon'};
-    my ($az11,$az21,$dist1,$az12,$az22,$dist2,$char,$tnow,$tnxt);
     $diff = abs(get_hdg_diff($az1,$thdg));
     if ($diff > 30) {
         set_hdg_stg(\$az1);
@@ -2195,30 +2263,25 @@ sub set_wpts_to_rwy($$) {
         set_decimal1_stg(\$diff);
         prt("\nTarget hdg $thdg gt 30 ($diff) away from runway $az1... no solution...\n\n");
         $tnxt = 0;
+        my $loopcnt = 0;
         while ( !got_keyboard(\$char) ) {
             $tnow = time();
             if ($tnow != $tnxt) {
                 $tnxt = $tnow;
                 prt("Any key to continue!\n");
+                $loopcnt++;
+                if ($loopcnt > 30) {
+                    prt("Continuing with circuit...\n");
+                    last;
+                }
             }
         }
-        return;
+        return; # do not set waypoint mode...
     }
 
-    fg_geo_inverse_wgs_84 ($brlat,$brlon,$elat1,$elon1,\$az11,\$az21,\$dist1);
-    fg_geo_inverse_wgs_84 ($brlat,$brlon,$elat2,$elon2,\$az12,\$az22,\$dist2);
-    if ($dist2 < $dist1) {
-        $dist1 = $dist2;
-        $az11 = $az12;
-        $az21 = $az22;
-        $elat1 = $elat2;
-        $elon1 = $elon2;
-        prt("\nNOTE: switched to other end...\n\n");
-    }
-
-    ############################################
-    ### Divide the segment BR to $elat1,$elon1
-
+    ##################################################
+    ### Divide the segment BR to $elat1,$elon1 into 4
+    ##################################################
     fg_geo_inverse_wgs_84 ($brlat,$brlon,$elat1,$elon1,\$az11,\$az21,\$dist1);
     ${$rch}{'wp_bgn_lat'} = $lat;
     ${$rch}{'wp_bgn_lon'} = $lon;
@@ -2237,7 +2300,8 @@ sub set_wpts_to_rwy($$) {
     push(@wpts, [ $wp_lat, $wp_lon ]);
     fg_geo_direct_wgs_84($brlat,$brlon, $az11, ($dist4 * 3), \$wp_lat, \$wp_lon, \$wp_az1 );
     push(@wpts, [ $wp_lat, $wp_lon ]);
-    push(@wpts, [ $elat1, $elon1 ]);
+    push(@wpts, [ $elat1, $elon1 ]);    # add DESTINATION as last
+
     my $ra = ${$rch}{'wpts'};    # array of waypoints
     @{$ra} = @wpts;
     $cnt = scalar @wpts;
@@ -2245,11 +2309,24 @@ sub set_wpts_to_rwy($$) {
     ${$rch}{'wp_off'} = 0;
     ${$rch}{'wp_flag'} = 0;
 
-    my $xg = get_circuit_xg();
+    ###my $xg = get_circuit_xg();   # no, do NOT want WHOLE circuit
+    ### Just 'final', 'runway', and waypoints
+    my $xg = "# wp mode points\n";
+    $xg .= "color white\n";
+    $xg .= "anno $brlon $brlat BR\n";
+    $xg .= "$brlon $brlat\n";
+    $xg .= "$elon1 $elat1\n";
+    $xg .= "NEXT\n";
+    $xg .= "color blue\n";
+    $xg .= "$elon1 $elat1\n";
+    $xg .= "$elon2 $elat2\n";
+    $xg .= "NEXT\n";
+
     my ($i,$ra2);
     $xg .= "color red\n";
     $xg .= "$brlon $brlat\n";
     $xg .= "NEXT\n";
+    $xg .= "color red\n";
     for ($i = 0; $i < $cnt; $i++) {
         $ra2 = ${$ra}[$i]; 
         $wp_lat = ${$ra2}[0];
@@ -2263,8 +2340,9 @@ sub set_wpts_to_rwy($$) {
     $xg .= "$lon $lat\n";
     $xg .= "NEXT\n";
     $xg .= "color gray\n";
+    # setup for adding 'track' to 'runway'
     write2file($xg,$tmp_wp_out);
-    prt("Generated $cnt wps to target... written $tmp_wp_out\n");
+    prtt("Generated $cnt wps to target... started $tmp_wp_out\n");
     prtt("\nEnter WAYPOINT mode - follow $cnt wps...\n");
     ${$rch}{'wp_mode'} = 1;
     ${$rch}{'wp_start'} = time();
@@ -2281,6 +2359,9 @@ sub get_speeds_stg($$$) {
     return "$aspd/$gspd,$wspd";
 }
 
+#######################################################################
+### Generate a set of WAYPOINT to target RUNWAY
+###############################################
 sub do_wpts_to_rwy($$) {
     my ($rch,$rp) = @_;
     my $flg = ${$rch}{'wp_flag'};
@@ -2291,6 +2372,7 @@ sub do_wpts_to_rwy($$) {
         ${$rch}{'wp_mode'} = 0;
         return;
     }
+
     # extract current POSIIION values
     my $lon  = ${$rp}{'lon'};
     my $lat  = ${$rp}{'lat'};
@@ -2310,7 +2392,7 @@ sub do_wpts_to_rwy($$) {
     if ($off < $cnt) {
         $ra2 = ${$ra}[$off];
     } else {
-        $ra2 = ${$ra}[$off-1];
+        $ra2 = ${$ra}[$off-1];  # get LAST
     }
     # get way point lat,lon
     $wp_lat = ${$ra2}[0];
@@ -2340,6 +2422,9 @@ sub do_wpts_to_rwy($$) {
             fgfs_set_hdg_bug($az1);
             $sethb = 1;
         }
+        $m_stable_cnt = 0;
+
+        # keep the next TARGET wp
         ${$rch}{'wp_targ_lat'}  = $wp_lat;
         ${$rch}{'wp_targ_lon'}  = $wp_lon;
         ${$rch}{'wp_targ_hdg'}  = $az1;
@@ -2371,7 +2456,8 @@ sub do_wpts_to_rwy($$) {
         $eta = "eta:".secs_HHMMSS2($secs);
         $az1 .= '*' if ($sethb);
         prtt("WP: Set first of $cnt wps, h=$az1, d=$dist, $eta $teta $spds\n");
-        return;
+        return; # all done setting FIRST target
+
     } else {
         # get TARGET WP
         $tlat = ${$rch}{'wp_targ_lat'};
@@ -2394,13 +2480,14 @@ sub do_wpts_to_rwy($$) {
             $diff = get_hdg_diff(${$rch}{'wp_targ_hdg'},$az1);
             if (abs($diff) > 1) {
                 fgfs_set_hdg_bug($az1);
+                $m_stable_cnt = 0;
                 $sethb = 1;
                 ${$rch}{'wp_targ_hdg'} = $az1;
                 set_hdg_stg(\$az1);
                 ${$rch}{'wp_last'} = $ct;
                 $dist = get_dist_stg_km($dist);
                 set_decimal1_stg(\$diff);
-                $msg = "WP: Cont* $off of $cnt, at $dist, adj hdg $az1 ($diff) $eta $spds";
+                $msg = "WP: Adj* $off of $cnt, at $dist, hdg $az1 ($diff) $eta $spds";
 
             } elsif ($ct != ${$rch}{'wp_last'}) {
                 ${$rch}{'wp_last'} = $ct;
@@ -2440,6 +2527,7 @@ sub do_wpts_to_rwy($$) {
         $spds = get_speeds_stg($aspd,$gspd,$wspd);
 
         fgfs_set_hdg_bug($az1);
+        $m_stable_cnt = 0;
 
         $secs = int(( $dist / (($gspd * $SG_NM_TO_METER) / 3600)) + 0.5);
         $eta = "eta:".secs_HHMMSS2($secs);
@@ -2482,6 +2570,7 @@ sub do_wpts_to_rwy($$) {
     # $xg .= "$wp_lon $wp_lat # touch down\n"; # there is aready a RED dot
     $xg .= "NEXT\n";
     append2file($xg,$tmp_wp_out);
+    prtt("Written track to '$tmp_wp_out'\n");
 
     ${$rch}{'wp_mode'} = 0;
 }
@@ -2656,6 +2745,7 @@ sub process_circuit($) {
                 ##my $nxt_ps = get_next_pointset($rch,$ptset,\$ntlat,\$ntlon,0);
                 set_next_in_circuit_targ($rch,$rp,$lat,$lon,$ptset);
                 fgfs_set_hdg_bug(${$rch}{'target_hdg'});
+                $m_stable_cnt = 0;
                 if (${$rch}{'target_runway'}) {
                     if (${$rch}{'target_runway'} == 1) {
                         ${$rch}{'target_runway'} = 2;
@@ -2743,6 +2833,7 @@ sub head_for_home($$) {
     ${$rch}{'target_hdg'} = $whdg;
     ${$rch}{'suggest_chg'} = 0;
     fgfs_set_hdg_bug(${$rch}{'target_hdg'});
+    $m_stable_cnt = 0;
 
     # display stuff
     set_hdg_stg(\$whdg);
