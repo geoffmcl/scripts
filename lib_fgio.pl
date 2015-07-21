@@ -199,6 +199,13 @@ sub get_curr_sim() { return \%m_curr_sim; }
 sub get_curr_aps() { return \%m_curr_aps; } # autopilot settings
 sub get_curr_gear_wow() { return \%m_curr_gear_wow; }
 
+########################################################################
+sub fgfs_get_atc_runway($) {
+    my $ref = shift;
+    fgfs_get("/sim/atc/runway", $ref) or get_exit(-2); # double
+    return 1;
+}
+#######################################################################
 
 my $gear0_wow = "/gear/gear[0]/wow";
 my $gear1_wow = "/gear/gear[1]/wow";
@@ -382,7 +389,7 @@ my $get_A_Z_pilot = "/accelerations/pilot/z-accel-fps_sec";
 # get_Latitude = get_Latitude_deg() * SG_DEGREES_TO_RADIANS;
 # get_Longitude = get_Longitude_deg() * SG_DEGREES_TO_RADIANS;
 my $get_Altitude = "/position/altitude-ft";
-my $get_Altitude_AGL = "/position/altitude-agl-ft";
+my $get_Altitude_AGL = "/position/altitude-agl-ft"; # why not used???
 my $get_Latitude_deg = "/position/latitude-deg";
 my $get_Longitude_deg = "/position/longitude-deg";
 my $get_Track = "/orientation/track-deg";
@@ -459,7 +466,7 @@ sub fgfs_connect($$$) {
         last if ($timeout == 0);
 		sleep(1);
 	}
-	prtt(" FAILED!\n") if ($lib_fgio_verbosity);
+	prt(" FAILED!\n") if ($lib_fgio_verbosity);
 	return 0;
 }
 
