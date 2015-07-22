@@ -62,8 +62,15 @@ my $VERS = "0.0.7 2015-07-20"; # start an 02 verison
 ### = "0.0.6 2015-07-16"; # begin tracker xg function
 ### "0.0.5 2015-07-06";
 my $load_log = 0;
-my $in_file = $perl_dir .'/ygil.xg';
-### my $in_file = 'ygil-L.xg';
+
+# default CIRCUIT files - generated with finadap03.pl...
+my $circ_xg = $perl_dir .'circuits/';
+my $in_file = $circ_xg.'lecd.xg';
+### my $in_file = $circ_xg.'vhsk.xg';
+### my $in_file = $circ_xg.'ystw.xg';
+### my $in_file = $circ_xg.'ygil.xg';
+### my $in_file = $circ_xg.'ygil-L.xg';
+
 my $tmp_xg_out  = $temp_dir."/tempCIRCUIT";
 my $tmp_xg_out2 = $temp_dir."/tempCIRCUITA.xg";
 my $tmp_wp_out = $temp_dir."/tempwaypt.xg";
