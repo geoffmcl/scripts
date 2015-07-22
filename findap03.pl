@@ -1199,6 +1199,7 @@ sub show_airports_found {
         $annoxg .= $apt_xg;
         #prt("$annoxg");
         $out_xg1 = $xg_output if (length($xg_output));
+        rename_2_old_bak($out_xg1); # never overwrite previous
         write2file($annoxg,$out_xg1);
         prt("Written airport XG file $out_xg1\n");
     }
