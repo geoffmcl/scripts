@@ -165,6 +165,8 @@ my $SG_EPSILON = 0.0000001;
 #/** Feet to Meters */
 my $FEET_TO_METER = 0.3048;
 my $METER_TO_FEET = 3.28084;
+##my $SG_NM_TO_METER = 1852;
+##my $SG_METER_TO_NM = 0.0005399568034557235;
 
 # debug tests
 # ===================
@@ -609,6 +611,7 @@ sub get_ll_stg($$) {
 my $stand_glide_degs = 3; # degrees
 my $stand_patt_alt = 1000; # feet
 my $stand_cross_nm = 2.1; # nm, but this will depend on the aircraft
+my $ac_speed_kts = 80;  # Knots
 #####################################################################
 ### constants
 my $SGD_PI = 3.1415926535;
@@ -678,12 +681,14 @@ sub rwy_xg_stg($$$$$$$) {
     $xg .= "$lon1 $lat1\n";
     $xg .= "NEXT\n";
 
+    ######################################################################################
+    # CIRCUIT GENERATION
     # We have the RUNWAY ends - now extend out to first turn to crosswind leg, and turn to final
     # but by how MUCH - ok decide from runway end, out to where it is a 3 degree glide from 1000 feet
     my $dist = ($stand_patt_alt * $SG_FEET_TO_METER) / tan($stand_glide_degs * $SGD_DEGREES_TO_RADIANS);
     my ($plat11,$plon11,$plat12,$plon12,$plat13,$plon13,$paz1);
     my ($plat21,$plon21,$plat22,$plon22,$plat23,$plon23,$paz2);
-    my ($hdg1L,$hdg1R,$crossd);
+    my ($hdg1L,$hdg1R,$crossd,$tmp);
     # get the outer end of the circuit
     fg_geo_direct_wgs_84( $clat, $clon, $az1, $rwlen2+$dist, \$plat11, \$plon11, \$paz1 );
     fg_geo_direct_wgs_84( $clat, $clon, $az2, $rwlen2+$dist, \$plat21, \$plon21, \$paz2 );
@@ -692,6 +697,32 @@ sub rwy_xg_stg($$$$$$$) {
     $hdg1R = $az1 + 90;
     $hdg1R -= 360 if ($hdg1R > 360);
     $crossd = $stand_cross_nm * $SG_NM_TO_METER;
+    if (VERB2()) {
+        my $msg = "Gen CIRCUIT using $stand_glide_degs degs glide";
+        $tmp = int($stand_patt_alt + 0.5);
+        $msg .= ", alt $tmp ft.";
+        $tmp = int(($stand_patt_alt * $SG_FEET_TO_METER) + 0.5);
+        $msg .= "($tmp".'m)';
+        $tmp = int($dist + 0.5) / 1000;
+        $msg .= ", Km dist $tmp";
+        my $mps = ($ac_speed_kts * $SG_NM_TO_METER) / 3600; # get meter per second
+        my $sec = $dist / $mps;
+        $tmp = int($sec + 0.5);
+        $msg .= ", $tmp secs";
+        $tmp = int($mps + 0.5);
+        $msg .= " at $tmp mps";
+        $tmp = int(($stand_patt_alt / $sec) * 60);
+        $msg .= ", -$tmp fpm";
+
+        #$tmp = int($rwlen2 + 0.5) / 1000;
+        #$msg .= ", rlen $tmp";
+        #$tmp = int(($rwlen2+$dist) * 2) / 1000;
+        #$msg .= ", circuit $tmp x ";
+        #$tmp = int($crossd + 0.5) / 1000;
+        #$msg .= "$tmp";
+
+        prt("$msg\n");
+    }
     # ON $rhdg to $elat1, $elon1 to ... turn point, go LEFT and to get NEXT points, this end
     fg_geo_direct_wgs_84( $plat11, $plon11, $hdg1L, $crossd, \$plat12, \$plon12, \$paz1 );
     fg_geo_direct_wgs_84( $plat21, $plon21, $hdg1L, $crossd, \$plat13, \$plon13, \$paz1 );
