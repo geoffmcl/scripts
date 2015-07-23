@@ -82,6 +82,9 @@ my $got_icao = 0;
 my $do_global_vals = 0;
 my $verbosity = 0;
 
+my ($usr_wind_dir,$usr_wind_spd);
+my $got_wind = 0;
+
 # Debug
 my $debug_on = 0;
 #anno 148.576583049264 -31.6521054356504 TL
@@ -475,6 +478,16 @@ sub show_distance($$$$) {
     my $hdg = rad2deg(great_circle_direction(@Pos2, @Pos1)); # track
     my $rhdg = rad2deg(great_circle_direction(@Pos1, @Pos2)); # track
     my $d_nmiles = $d_km * $Km2NMiles;
+    my ($whdg,$gspd);
+    my ($rwhdg,$rgspd);
+    if ($got_wind) {
+        my $rh = compute_wind_course($hdg,$g_ias,$usr_wind_dir,$usr_wind_spd);
+        $whdg = ${$rh}{'heading'};
+        $gspd = ${$rh}{'groundspeed'};
+        $rh = compute_wind_course($rhdg,$g_ias,$usr_wind_dir,$usr_wind_spd);
+        $rwhdg = ${$rh}{'heading'};
+        $rgspd = ${$rh}{'groundspeed'};
+    }
 
     # derived
     my $d_m = int(($d_km * 1000) + 0.5);
@@ -484,7 +497,7 @@ sub show_distance($$$$) {
     my $crhdg = int($rhdg + 0.5);
     $crhdg = "0$crhdg" while (length($crhdg) < 3);
     my $thdg = $hdg;
-
+    
     my $hrs = $d_km / $g_speed;
     my $eta = get_hhmmss($hrs);
     #my $ikm = int($d_km + 0.5);
@@ -506,8 +519,23 @@ sub show_distance($$$$) {
         prt("Distance: $ikm kilometers ($d_km) $inm Nm $cmpdist\n");
         prt("Heading : $chdg/$crhdg, for $t_degs degs $cmphdg\n");
         prt("ETA     : $eta, at $g_ias Knots\n");
+        if ($got_wind) {
+            $whdg = int($whdg + 0.5);
+            $gspd = int($gspd + 0.5);
+            $rwhdg = int($rwhdg + 0.5);
+            $rgspd = int($rgspd + 0.5);
+            prt("Correct : Wind=".$usr_wind_dir.'@'.$usr_wind_spd." hdg $whdg at $gspd, rhdg $rwhdg at $rgspd.");
+        }
     } else {
-        prt("Dist: $ikm Km, $inm Nm, hdg $crhdg, $eta, at $g_ias\n");
+        prt("Dist: $ikm Km, $inm Nm, hdg $chdg, $eta, at $g_ias.");
+        if ($got_wind) {
+            $whdg = int($whdg + 0.5);
+            $gspd = int($gspd + 0.5);
+            $rwhdg = int($rwhdg + 0.5);
+            $rgspd = int($rgspd + 0.5);
+            prt(" Wind=".$usr_wind_dir.'@'.$usr_wind_spd." hdg $whdg/$rwhdg at $gspd/$rgspd.");
+        }
+        prt("\n");
     }
     # print "km $km / spd $g_speed = $hours\n";
     if (VERB5()) {
@@ -823,6 +851,39 @@ sub parse_args {
                 }
             } elsif ($sarg =~ /^v/) {
                 # done
+            } elsif ($sarg =~ /^w/) {
+                need_arg(@av);
+                shift @av;
+                $sarg = $av[0];
+                @arr1 = split('@',$sarg);
+                $len = scalar @arr1;
+                if ($len == 2) {
+                    $usr_wind_dir = $arr1[0];
+                    $usr_wind_spd = $arr1[1];
+                    if ($usr_wind_dir =~ /^\d+$/) {
+                        if ($usr_wind_dir < 0) {
+                            pgm_exit(1,"Wind dir of $sarg NOT positive! Got $usr_wind_dir?\n");
+                        } elsif ($usr_wind_dir > 360) {
+                            pgm_exit(1,"Wind dir of $sarg greater than 360! Got $usr_wind_dir?\n");
+                        }
+                    } else {
+                        pgm_exit(1,"Wind var $sarg NOT an integer! Got $usr_wind_dir?\n");
+                    }
+                    if ($usr_wind_spd =~ /^\d+$/) {
+                        if ($usr_wind_spd < 0) {
+                            pgm_exit(1,"Wind speed of $sarg NOT positive! Got $usr_wind_spd?\n");
+                        ##} elsif ($usr_wind_dir > 360) {
+                        ##    pgm_exit(1,"Wind dir of $sarg greater than 360! Got $usr_wind_dir?\n");
+                        }
+                    } else {
+                        pgm_exit(1,"Wind var $sarg NOT an integer! Got $usr_wind_dir?\n");
+                    }
+
+                    $got_wind = 1;
+                } else {
+                    pgm_exit(1,"Wind var $sarg did not split in 2 on '\@'! $sarg\n".
+                        "Expect like 120\@12, 150\@9, etc...\n");
+                }
             } elsif ($sarg =~ /^x/) {
                 $xchg = 1;
             } else {
@@ -947,6 +1008,7 @@ sub give_help {
     prt("   Def file $aptdat ".((-f $aptdat) ? "ok" : "*** NOT FOUND *** FIX ME ***")."\n");
     prt(" -v[N]                = Bump or set verbosity. (def=$verbosity).\n");
     prt(" -v1 will show the center lat,lon, heading, and distance in meters.\n");
+    prt(" --wind deg\@kt   (-w) = Set wind direction (deg) and speed knots.\n");
     prt("\n");
     prt(" The lat/lon can be input as comma separated pairs.\n");
     prt("\n");
