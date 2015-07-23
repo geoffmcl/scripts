@@ -2269,6 +2269,48 @@ sub set_int_dist_stg5($) {
     ${$r} = $r5;
 }
 
+###############################################################
+# Given -
+# desired course - degrees
+# true airspeed - Knots
+# wind from dir - degrees
+# wind speed - Knots
+# compute
+# computed course - degrees
+# computed ground spd - Knots
+###############################################################
+sub compute_wind_course($$$$) {
+    my ($course_deg, $taspdkt, $wfmd, $wspd) = @_;
+    my $aspd = $taspdkt;
+    my %hash = ();
+
+    $hash{'course_deg'} = $course_deg;
+    $hash{'true_speed_kt'} = $aspd;
+    my $whdg = $course_deg;
+    my $gspd = 0;
+    my $hdgr = $course_deg * $M_D2R;
+    my $wfmr = $wfmd * $M_D2R;
+    $hash{'wind-from'} = $wfmd;
+    $hash{'wind-speed'} = $wspd;
+    my $ratio = ($wspd/$aspd) * sin($wfmr-$hdgr);
+    if(abs($ratio) > 1.0){
+        # ...
+    } else {
+        $whdg = ($hdgr + asin($ratio)) * $M_R2D;
+        $whdg += 360.0 if($whdg < 0);
+        $whdg -= 360.0 if($whdg > 360);
+        $gspd = $aspd * sqrt(1-$ratio*$ratio) - $wspd * cos($wfmr-$hdgr);
+        if ($gspd < 0) {
+            # ???
+        }
+    }
+    $hash{'heading'} = $whdg;
+    $hash{'groundspeed'} = $gspd;
+    return \%hash;
+}
+
+
+
 # from file [/home/geoff/downloads/curt/f-14b/Nasal/uas-demo.nas].
 my @uas_demo_list = qw(
 /ai/models/carrier/controls/ai-control
