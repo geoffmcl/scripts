@@ -56,6 +56,10 @@ my $SG_FEET_TO_METER = 0.3048;
 # /** Meters to Feet */
 my $SG_METER_TO_FEET = 3.28083989501312335958;
 
+my $M_PI = 3.141592653589793;
+my $M_D2R = $M_PI / 180;    # degree to radian
+my $M_R2D = 180.0 / $M_PI;
+
 # London and Tokyo - not used
 #my $lonlon = -0.5;
 #my $lonlat = 51.3;
