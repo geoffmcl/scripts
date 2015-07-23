@@ -39,6 +39,9 @@ my $MSDELAY = 200; # max wait before keyboard sampling
 my $gps_next_time = 5 * 60; # gps update each ?? minutes
 my $SG_NM_TO_METER = 1852;
 my $SG_METER_TO_NM = 0.0005399568034557235;
+my $M_PI = 3.141592653589793;
+my $M_D2R = $M_PI / 180;    # degree to radian
+my $M_R2D = 180.0 / $M_PI;
 
 my $engine_count = 1;
 my $is_jet_engine = 0;
