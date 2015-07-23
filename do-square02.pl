@@ -65,10 +65,10 @@ my $load_log = 0;
 
 # default CIRCUIT files - generated with finadap03.pl...
 my $circ_xg = $perl_dir .'circuits/';
-my $in_file = $circ_xg.'lecd.xg';
+### my $in_file = $circ_xg.'lecd.xg';
 ### my $in_file = $circ_xg.'vhsk.xg';
 ### my $in_file = $circ_xg.'ystw.xg';
-### my $in_file = $circ_xg.'ygil.xg';
+my $in_file = $circ_xg.'ygil.xg';
 ### my $in_file = $circ_xg.'ygil-L.xg';
 
 my $tmp_xg_out  = $temp_dir."/tempCIRCUIT";
@@ -2117,7 +2117,7 @@ sub set_next_in_circuit_targ($$$$$) {
 sub get_next_in_circuit_targ($$$$) {
     my ($rch,$rp,$slat,$slon) = @_;
     ### my $rch = $ref_circuit_hash;
-    my ($pt,$tlat,$tlon);
+    my ($pt,$tlat,$tlon,$msg);
     get_closest_ptset($rch,$slat,$slon,\$pt,\$tlat,\$tlon);
     ######################################################################
     # maybe keep this, if it is dist > 1 Km, and on my heading +/-10 degrees...
@@ -2128,17 +2128,25 @@ sub get_next_in_circuit_targ($$$$) {
     ###if (($diff < 25) && ($dist > 1000))
     if (($diff < 30) && ($dist > 1000)) {
         my $ppt = get_prev_pointset($rch,$pt,\$tlat,\$tlon,0);
-        prtt("Choosing CLOSEST ptset $pt...\n");
+        set_int_stg(\$diff);
+        $dist = get_dist_stg_km($dist);
+        set_hdg_stg(\$az1);
+        prtt("Choosing CLOSEST ptset $pt on $az1 ($diff) at $dist...\n");
         $pt = $ppt; # set next bumps the pointet...
     } else {
         set_int_stg(\$diff);
         $dist = get_dist_stg_km($dist);
         set_hdg_stg(\$az1);
-        prtt("Choosing NEXT ptset. Closest $pt on $az1 ($diff) at $dist...\n");
+        $msg = "Closest $pt on $az1 ($diff) at $dist.";
 
+        my $npt = get_next_pointset($rch,$pt,\$tlat,\$tlon,0);
+        fg_geo_inverse_wgs_84($slat,$slon,$tlat,$tlon,\$az1,\$az2,\$dist);
+        $dist = get_dist_stg_km($dist);
+        set_hdg_stg(\$az1);
+        prtt("Choosing NEXT ptset $npt on $az1 at $dist. $msg...\n");
     }
     ######################################################################
-        set_next_in_circuit_targ($rch,$rp,$slat,$slon,$pt);
+    set_next_in_circuit_targ($rch,$rp,$slat,$slon,$pt);
 }
 
 sub choose_best_target($$) {
