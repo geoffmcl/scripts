@@ -3279,7 +3279,7 @@ sub give_help {
 	prt( "*** FLIGHTGEAR AIRPORT SEARCH UTILITY - $VERS ***\n" );
 	prt( "Usage: $pgmname options\n" );
 	prt( "Options: A ? anywhere for this help.\n" );
-    prt( " --anno          (-a) = Generate XG(raph) output for airports. (def=".
+    prt( " --Anno          (-A) = Generate XG(raph) output for airports. (def=".
         ($add_anno ? "On" : "Off") . "\n");
     prt( " --bbox          (-b) = Output a bounding box for the airport.\n");
     prt( " --file <file>   (-f) = Load commands from this 'file' of commands...\n");
@@ -3414,7 +3414,7 @@ sub parse_args {
         } elsif ($ch eq '-') {
             if ($sarg =~ /^v/) {
                 # done verbosity
-            } elsif ($sarg =~ /^a/) {
+            } elsif ($sarg =~ /^A/) {
                 $add_anno = 1;
                 prt("[v1] Add xgraph anno output for airports.\n") if (VERB1());
             } elsif ($sarg =~ /^b/) {
