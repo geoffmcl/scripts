@@ -40,11 +40,12 @@ use warnings;
 use File::Basename;  # split path ($name,$dir,$ext) = fileparse($file [, qr/\.[^.]*/] )
 use Time::HiRes qw( gettimeofday tv_interval );
 use Math::Trig;
+use Data::Dumper;
 use Cwd;
 my $cwd = cwd();
 my $os = $^O;
 my ($pgmname,$perl_dir) = fileparse($0);
-my $temp_dir = $perl_dir . "/temp";
+my $temp_dir = $perl_dir . "temp";
 unshift(@INC, $perl_dir);
 my $PATH_SEP = '/';
 my $CDATROOT="/media/Disk2/FG/fg22/fgdata"; # 20150716 - 3.5++
@@ -85,7 +86,8 @@ my $VERS="Jul 16, 2015. version 1.0.7";
 
 # log file stuff
 my ($LF);
-my $outfile = $temp_dir."\\temp.$pgmname.txt";
+my $outfile = $temp_dir."/temp.$pgmname.txt";
+$outfile = path_u2d($outfile) if ($os =~ /win/i);
 open_log($outfile);
 my $t0 = [gettimeofday];
 
@@ -177,7 +179,7 @@ my $test_ll = 0;	# to TEST a LAT,LON search
 my $def_lat = 37.228;    # 37.6;
 my $def_lon = -121.9703; # -122.4;
 
-my $test_icao = 0;	# to TEST an ICAO search
+my $test_icao = 1;	# to TEST an ICAO search
 my $def_icao = 'VHHH'; ## 'KHAF';  ## LFPO'; ## 'KSFO';
 my $dbg1 = 0;	# show airport during finding ...
 my $dbg_fa02 = 0;	# show navaid during finding ...
@@ -428,6 +430,75 @@ sub get_fg_dist_dir($$$$) {
     $dist_hdg .= " on $sg_az1 d.";
     #$dist_hdg .= ")";
     return $dist_hdg;
+}
+
+##                  0      1      2      3      4      5     6     7     8
+#push(@g_naptlist, [$diff, $icao, $name, $alat, $alon, \@ra, \@wa, \@ha, \@fa ]);
+sub write_runway_csv($) {
+    my ($file) = @_;
+    my $max = scalar @g_naptlist;
+    my ($i,$raa);
+    my ($res,$diff, $icao, $name, $alat, $alon, $ra, $rwa, $rha, $rfa,$ra1);
+    my ($type, $rwid, $surf,$rwy1,$elat1,$elon1,$rwy2,$elat2,$elon2,$az1,$az2,$s);
+    my ($clat,$clon);
+    my $rcsv = "icao,lat1,lon1,lat2,lon2,width,sign\n";
+    for ($i = 0; $i < $max; $i++) {
+        $raa = $g_naptlist[$i];
+        $icao = ${$raa}[1];
+        $ra1  = ${$raa}[5];
+        next if (!defined $ra1);    # no LAND runways
+        ###prt(Dumper($raa));
+        ###prt(Dumper($ra));
+        ###pgm_exit(1,"TEMP EXIT\n");
+        foreach $ra (@{$ra1}) {
+            $type = ${$ra}[0];
+            if (! defined $type) {
+                prt("raa...\n");
+                prt(Dumper($raa));
+                prt("ra1...\n");
+                prt(Dumper($ra1));
+                prt("ra...\n");
+                prt(Dumper($ra));
+                $loadlog = 1;
+                pgm_exit(1,"type NOT defined!\n");
+            }
+            if ($type == 100) {
+                # See full version 1000 specs below
+                # 0   1     2 3 4    5 6 7 8  9           10           11   12   13 14 15 16 17 18          19           20   21   22 23 24 25
+                # 100 29.87 3 0 0.00 1 2 1 16 43.91080605 004.90321905 0.00 0.00 2  0  0  0  34 43.90662331 004.90428974 0.00 0.00 2  0  0  0
+                $rwid  = ${$ra}[1];  # WIDTH in meters? NOT SHOWN
+                $surf  = ${$ra}[2];  # add surface type
+                $rwy1  = ${$ra}[8];
+                $elat1 = ${$ra}[9];
+                $elon1 = ${$ra}[10];
+                $rwy2 = ${$ra}[17];
+                $elat2 = ${$ra}[18];
+                $elon2 = ${$ra}[19];
+                $rcsv .= "$icao,$elat1,$elon1,$elat2,$elon2,$rwid,$rwy1\n";
+                # $res = fg_geo_inverse_wgs_84 ($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$s);
+                # $clat = ($elat1 + $elat2) / 2;
+                # $clon = ($elon1 + $elon2) / 2;
+            } elsif ($type == 10) {
+                # 0   1          2          3   4       5    6         7           8   9      10 ...
+                # 10  36.962213  127.031071 14x 131.52  8208 1595.0620 0000.0000   150 321321  1 0 3 0.25 0 0300.0300
+                # 10  36.969145  127.020106 xxx 221.51   329 0.0 0.0    75 161161  1 0 0 0.25 0 
+                $elat1 = ${$ra}[1];
+                $elon1 = ${$ra}[2];
+                $rwy1  = ${$ra}[3]; # text 'xxx'=taxiway, 'H1x'=heleport, else a runway
+                ###prt( "$line [$rlat, $rlon]\n" );
+                if ( $rwy1 ne "xxx" ) {
+                    $rwy1 =~ s/x*$//;    # remove trailing 'x'
+                    $az1 = ${$ra}[4];
+                    $s   = ${$ra}[5] * $FEET_TO_METER;
+                    $res = fg_geo_direct_wgs_84($elat1,$elon1, $az1, $s, \$elat2, \$elon2, \$az2 );
+                    $rwid = 50;
+                    $rcsv .= "$icao,$elat1,$elon1,$elat2,$elon2,$rwid,$rwy1\n";
+                }
+            }
+        }
+    }
+    write2file($rcsv,$file);
+    prt("Written runway csv to file $file\n");
 }
 
 ##                 0      1      2      3      4      5      6
@@ -1930,6 +2001,7 @@ sub load_apt_data {
     }
     prt("$msg\n") if (VERB1());
     my $lncnt = 0;
+    #my $acsv = "icao,latitude,longitude,name\n";
     foreach $line (@lines) {
         $lncnt++;
         $line = trimall($line);
@@ -1986,6 +2058,7 @@ sub load_apt_data {
                 ##                 0      1      2      3      4      5      6
                 ##push(@g_aptlist, [$diff, $icao, $name, $alat, $alon, $aalt, \@fa]);
                 #prt("$icao, $name, $alat, $alon, $aalt, $rwycnt runways\n");
+                # $acsv .= "$icao,$alat,$alon,$name\n";
                 $add = 0;   # add to FOUND a/p, IFF
                 if ($SRCHICAO) {
                     # 1 - ICAO matches
@@ -2048,7 +2121,8 @@ sub load_apt_data {
                 $glat += $rlat;
                 $glon += $rlon;
                 $rwycnt++;
-                push(@runways, \@arr);
+                my @ar3 = @arr;
+                push(@runways, \@ar3);
             }
         ###} elsif ($line =~ /^5(\d+)\s+/) {
         } elsif (($type >= 50)&&($type <= 56)) {
@@ -2244,6 +2318,7 @@ sub load_apt_data {
         push(@g_naptlist, [$diff, $icao, $name, $alat, $alon, \@ra, \@wa, \@ha, \@fa ]);
         #                 0      1      2      3      4      5      6
         # push(@g_aptlist, [$diff, $icao, $name, $alat, $alon, $aalt, \@f]);
+        # $acsv .= "$icao,$alat,$alon,$name\n";
         $totaptcnt++;	# count another AIRPORT
         $add = 0;
         if ($SRCHICAO) {
@@ -2284,6 +2359,11 @@ sub load_apt_data {
     ### pgm_exit(1,"TEMP EXIT");
     $cnt =scalar @g_naptlist;
     prt("[v9] Done scan of $lncnt lines for $cnt airports...\n") if (VERB9());
+    #if ($write_acsv_list) {
+    #    write2file($acsv,'airports.csv');
+    #    prt("Written airport list to 'airports.csv'\n");
+    #    write_runway_csv('runways.csv');
+    #}
 }
 
 sub load_nav_file {
@@ -3273,7 +3353,6 @@ if ( show_airports_found($max_cnt) || $SRCHONLL ) {
     }
 }
 add_sidstar() if ($gen_sidstar && $SRCHICAO && ($total_apts == 1));
-
 
 my $elapsed = tv_interval ( $t0, [gettimeofday]);
 prt( "Ran for $elapsed seconds ...\n" ) if (VERB5());
