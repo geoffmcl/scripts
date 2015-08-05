@@ -1894,6 +1894,7 @@ sub load_apt_data {
     my $total_lon = 0;
     my $c_lat = $g_center_lat;
     my $c_lon = $g_center_lon;
+    my $got_twr = 0;
     $off = 0;
     $dist = 0;
     $az = 0;
@@ -1956,9 +1957,11 @@ sub load_apt_data {
             $trwycnt += $wwcnt;
             $trwycnt += $helicnt;
             if (length($apt) && ($trwycnt > 0)) {
-                # average position
-                $alat = $glat / $trwycnt;
-                $alon = $glon / $trwycnt;
+                if (!$got_twr) {
+                    # average position
+                    $alat = $glat / $trwycnt;
+                    $alon = $glon / $trwycnt;
+                }
                 $off = -1;
                 $dist = 9999000;
                 $az = 400;
@@ -2030,6 +2033,7 @@ sub load_apt_data {
             @freqs = (); # clear frequencies
             $glat = 0;
             $glon = 0;
+            $got_twr = 0;
             $totaptcnt++;	# count another AIRPORT
         ###} elsif ($line =~ /^$rln\s+/) {
         } elsif ($type == 10) {
@@ -2077,6 +2081,10 @@ sub load_apt_data {
             }
         } elsif ($type == 14) {
             # tower location
+            # 14  52.911007  156.878342    0 0 Tower Viewpoint
+            $got_twr = 1;
+            $alat = $arr[1];
+            $alon = $arr[2];
         } elsif ($type == 15) {
             # ramp startup
         } elsif ($type == 18) {
