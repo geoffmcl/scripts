@@ -593,4 +593,4 @@ sub give_help {
 	
 }
 
-# eof - template.pl
+# eof - xml2xg.pl
