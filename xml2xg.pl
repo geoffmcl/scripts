@@ -569,6 +569,10 @@ sub parse_args {
         }
     }
     if (length($in_file) ==  0) {
+		give_help();
+		if ( -f $def_file ) {
+			prt("Try: $pgmname $def_file\n");
+        }
         pgm_exit(1,"ERROR: No input files found in command!\n");
     }
     if (! -f $in_file) {
@@ -584,6 +588,9 @@ sub give_help {
     prt(" --verb[n]     (-v) = Bump [or set] verbosity. def=$verbosity\n");
     prt(" --load        (-l) = Load LOG at end. ($outfile)\n");
     prt(" --out <file>  (-o) = Write output to this file.\n");
+	prt(" Read an xml sid/star procedure file, and generate a 2D graph of the\n");
+	prt(" flight waypoints found.\n");
+	
 }
 
 # eof - template.pl
