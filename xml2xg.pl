@@ -31,8 +31,8 @@ my $apts_csv = $perl_dir."circuits/airports.csv";
 my $rwys_csv = $perl_dir."circuits/runways.csv";
 
 # ### DEBUG ###
-my $debug_on = 1;
-my $def_file = 'C:\Users\user\Downloads\EHAM.procedures.xml';
+my $debug_on = 0;
+my $def_file = 'circuits\EHAM.procedures.xml';
 my $def_xg = $temp_dir."/tempsidstar.xg";
 
 ### program variables
