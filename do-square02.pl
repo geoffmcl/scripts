@@ -333,6 +333,7 @@ sub get_tracker() {
         ###$msg .= get_circuit_xg();
         $msg .= get_circuit_xg2($g_rcx);
         $msg .= "color gray\n";
+        rename_2_old_bak($tmp_trk_out);
         write2file($msg,$tmp_trk_out);
 	}
 	return $rt;
@@ -2190,7 +2191,7 @@ sub set_wpts_to_rwy($$) {
     my ($tllat,$tllon,$bllat,$bllon,$brlat,$brlon,$trlat,$trlon,$tmp);
     my $thdg = ${$rch}{'target_hdg'};
     my ($diff,$diff2,$fnd);
-
+    my ($mid_lat,$mid_lon);
     # ================================================
     $tllat = ${$rch}{'tl_lat'};
     $tllon = ${$rch}{'tl_lon'};
@@ -2285,11 +2286,13 @@ sub set_wpts_to_rwy($$) {
     my ($wp_lat,$wp_lon,$wp_az1,$cnt);
     fg_geo_direct_wgs_84($brlat,$brlon, $az11, $dist4, \$wp_lat, \$wp_lon, \$wp_az1 );
     my @wpts = ();
-    push(@wpts, [ $wp_lat, $wp_lon ]);
+    push(@wpts, [ $wp_lat, $wp_lon ]);  # set first wp
     fg_geo_direct_wgs_84($brlat,$brlon, $az11, ($dist4 * 2), \$wp_lat, \$wp_lon, \$wp_az1 );
-    push(@wpts, [ $wp_lat, $wp_lon ]);
+    push(@wpts, [ $wp_lat, $wp_lon ]);  # 2nd
+    $mid_lat = $wp_lat;
+    $mid_lon = $wp_lon;
     fg_geo_direct_wgs_84($brlat,$brlon, $az11, ($dist4 * 3), \$wp_lat, \$wp_lon, \$wp_az1 );
-    push(@wpts, [ $wp_lat, $wp_lon ]);
+    push(@wpts, [ $wp_lat, $wp_lon ]);  # 3rd, and
     push(@wpts, [ $elat1, $elon1 ]);    # add DESTINATION as last
 
     my $ra = ${$rch}{'wpts'};    # array of waypoints
@@ -2307,12 +2310,60 @@ sub set_wpts_to_rwy($$) {
     $xg .= "$brlon $brlat\n";
     $xg .= "$elon1 $elat1\n";
     $xg .= "NEXT\n";
+    # add runway in blue
     $xg .= "color blue\n";
     $xg .= "$elon1 $elat1\n";
     $xg .= "$elon2 $elat2\n";
     $xg .= "NEXT\n";
 
+    ####################################################################
+    ### Add WIND indication
+    ### size of wind line should be based on $wspd, not on 
+    ### $dist = ($stand_patt_alt * $SG_FEET_TO_METER) / tan($stand_glide_degs * $SGD_DEGREES_TO_RADIANS);
+    ### fg_geo_inverse_wgs_84 ($brlat,$brlon,$elat1,$elon1,\$az11,\$az21,\$dist1);
+    ### my $dist4 = $dist1 / 4;
+    ### speed is in Knots
+    ### my $KNOTS_TO_FTS = ($SG_NM_TO_METER * $SG_METER_TO_FEET) / 3600.0;
+    ### my $KNOTS_TO_MPS = $SG_NM_TO_METER / 3600.0;
+    my $rew = get_env_wind();
+    my $whdg1 = ${$rew}{'wind-from'};
+    my $wspd  = ${$rew}{'wind-spd'};
+    my ($wlat1,$wlon1,$wlat2,$wlon2,$waz1);
+    my $whdg2 = $whdg1 + 180;
+    $whdg2 -= 360 if ($whdg2 >= 360);
+    ####my $wsize = $wspd * 10;
+    my $wsize = $dist4 / 4;
+    fg_geo_direct_wgs_84($mid_lat,$mid_lon, $whdg1, $dist4 / 2, \$wlat1, \$wlon1, \$waz1 );
+    fg_geo_direct_wgs_84($mid_lat,$mid_lon, $whdg2, $dist4 / 2, \$wlat2, \$wlon2, \$waz1 );
+    $xg .= "color green\n";
+    $xg .= "$wlon1 $wlat1\n";
+    $xg .= "$wlon2 $wlat2\n";
+    $xg .= "NEXT\n";
+    $xg .= "# wsize $wsize\n";
+    if ($wsize > 3) {
+        my ($wlatv,$wlonv,$whdg);
+        $whdg = $whdg1 + 30;
+        $whdg -= 360 if ($whdg > 360);
+        fg_geo_direct_wgs_84($wlat1,$wlon1, $whdg, $wsize, \$wlatv, \$wlonv, \$waz1 );
+        $xg .= "$wlon1 $wlat1\n";
+        $xg .= "$wlonv $wlatv\n";
+        $xg .= "NEXT\n";
+        $whdg = $whdg1 - 30;
+        $whdg += 360 if ($whdg < 0);
+        fg_geo_direct_wgs_84($wlat1,$wlon1, $whdg, $wsize, \$wlatv, \$wlonv, \$waz1 );
+        $xg .= "$wlon1 $wlat1\n";
+        $xg .= "$wlonv $wlatv\n";
+        $xg .= "NEXT\n";
+    }
+
+    set_hdg_stg(\$whdg1);
+    set_int_stg(\$wspd);
+    $xg .= "anno $mid_lon $mid_lat $whdg1".'@'."$wspd\n";
+
+    #####################################################################
+    ## Add DOTS for each waypoint
     my ($i,$ra2);
+    # start at BR
     $xg .= "color red\n";
     $xg .= "$brlon $brlat\n";
     $xg .= "NEXT\n";
@@ -2324,13 +2375,16 @@ sub set_wpts_to_rwy($$) {
         $xg .= "$wp_lon $wp_lat\n";
         $xg .= "NEXT\n";
     }
+
     ##$xg .= "$elon1 $elat1\n";
     ##$xg .= "NEXT\n";
     $xg .= "color white\n";
-    $xg .= "$lon $lat\n";
+    $xg .= "$lon $lat # current position\n";
     $xg .= "NEXT\n";
-    $xg .= "color gray\n";
+
     # setup for adding 'track' to 'runway'
+    $xg .= "color gray\n";
+    rename_2_old_bak($tmp_wp_out);
     write2file($xg,$tmp_wp_out);
     prtt("Generated $cnt wps to target... started $tmp_wp_out\n");
     prtt("\nEnter WAYPOINT mode - follow $cnt wps...\n");
@@ -2537,7 +2591,12 @@ sub do_wpts_to_rwy($$) {
     set_int_stg(\$az1);
     set_int_stg(\$secs);
     my $xg = "$lon $lat # $alt - $secs on $az1\n";
-    # $xg .= "$wp_lon $wp_lat # touch down\n"; # there is aready a RED dot
+    $xg .= "NEXT\n";
+    $xg .= "color yellow\n";
+    $xg .= "$lon $lat # $alt - $secs on $az1\n";
+    $elat1 = ${$rch}{'wp_end_lat'};
+    $elon1 = ${$rch}{'wp_end_lon'};
+    $xg .= "$elon1 $elat1 # touch down\n"; # there should aready be a RED dot
     $xg .= "NEXT\n";
     append2file($xg,$tmp_wp_out);
     prtt("Written track to '$tmp_wp_out'\n");
@@ -2990,6 +3049,7 @@ sub parse_args {
     if (! -f $in_file) {
         pgm_exit(1,"ERROR: Unable to find in file [$in_file]! Check name, location...\n");
     }
+    ###pgm_exit(1,"TEMP EXIT\n");
 }
 
 sub give_help {
