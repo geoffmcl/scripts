@@ -29,6 +29,9 @@ my $verbosity = 0;
 my $out_file = '';
 my $apts_csv = $perl_dir."circuits/airports.csv";
 my $rwys_csv = $perl_dir."circuits/runways.csv";
+my $add_star_wps = 1;
+my $add_sid_wps = 1;
+my $add_app_wps = 1;
 
 # ### DEBUG ###
 my $debug_on = 0;
@@ -199,9 +202,6 @@ sub get_path_xg($$$$) {
     return $xg;
 }
 
-my $add_star_wps = 1;
-my $add_sid_wps = 1;
-my $add_app_wps = 1;
 # 0    1        2         3...
 # icao,latitude,longitude,name
 # VHXX,22.32753500,114.19287600,[X] CLOSED Kai Tak
@@ -214,7 +214,7 @@ sub process_airports_file($$) {
     my @lines = <INF>;
     close INF;
     my $lncnt = scalar @lines;
-    prt("Processing $lncnt lines, from [$inf]...\n");
+    prt("Processing $lncnt lines, from [$inf]...\n") if (VERB9());
     my ($line,$inc,$lnn,@arr,$txt,$lat,$lon,$name);
     $lnn = 0;
     my $xg = '';
@@ -247,7 +247,7 @@ sub process_runway_file($$) {
     my @lines = <INF>;
     close INF;
     my $lncnt = scalar @lines;
-    prt("Processing $lncnt lines, from [$inf]...\n");
+    prt("Processing $lncnt lines, from [$inf]...\n") if (VERB9());
     my ($line,$inc,$lnn,@arr,$txt,$elat1,$elon1,$name);
     my ($elat2,$elon2,$wid,$sign);
     my ($az1,$az2,$s,$res,$az3,$az4,$az5);
@@ -324,7 +324,12 @@ sub process_in_file($) {
     my (@arr2,$msg,$wpvcnt);
     my ($nm,$id,$lat,$lon,$typ);
     my ($plat,$plon,$pxg,$wpxg);
-    my %wpkeys = {};
+    my %wpkeys = ();
+    my @waypoints = ();
+    my %tracknames = ();
+    my %wpnames = ();
+    prt("Have $cnt keys: ".join(" ",@arr)."\n");
+
     $key = 'ICAOcode';
     my $xg = "# icao found\n";
     if (defined ${$aref}{$key}) {
@@ -334,16 +339,17 @@ sub process_in_file($) {
         $xg .= add_airport_xg($icao);
     }
 
-    prt("Have $cnt keys: ".join(" ",@arr)."\n");
+    ##################################################################################
     $key = 'Star';
     if (defined ${$aref}{$key}) {
         my $starra = ${$aref}{$key};
         $cnt = scalar @{$starra};
-        prt("$key with $cnt points...\n");
+        prt("$key with $cnt segments...\n");
         foreach $wprh (@{$starra}) {
             $name = 'Unknown';
             if (defined ${$wprh}{'Name'}) {
                 $name = ${$wprh}{'Name'};
+                $tracknames{$name} = 1;
             }
             $wpcnt = 0;
             $wpra = [];
@@ -354,11 +360,14 @@ sub process_in_file($) {
             $wpvcnt = 0;
             foreach $wp (@{$wpra}) {
                 if (is_valid_wp($wp)) {
+                    ($nm,$id,$lat,$lon,$typ) = get_wp_info($wp);
+                    push(@waypoints,[$key,$name,$nm,$id,$lat,$lon,$typ]);
+                    $wpnames{$nm} = 1;
                     $wpvcnt++;
                 }
             }
 
-            prt("  $name - with $wpcnt ($wpvcnt) wps\n");
+            prt("  $name - with $wpcnt ($wpvcnt) wps\n") if (VERB5());
             $xg .= "# Star $name $wpvcnt wps\n";
             if ($wpvcnt && $add_star_wps) {
                 $wpxg = "color green\n";
@@ -387,15 +396,18 @@ sub process_in_file($) {
             }
         }
     }
+    ##################################################################################
+    ##################################################################################
     $key = 'Sid';
     if (defined ${$aref}{$key}) {
         my $starra = ${$aref}{$key};
         $cnt = scalar @{$starra};
-        prt("$key with $cnt points...\n");
+        prt("$key with $cnt segments...\n");
         foreach $wprh (@{$starra}) {
             $name = 'Unknown';
             if (defined ${$wprh}{'Name'}) {
                 $name = ${$wprh}{'Name'};
+                $tracknames{$name} = 1;
             }
             $wpcnt = 0;
             $wpra = [];
@@ -406,11 +418,14 @@ sub process_in_file($) {
             $wpvcnt = 0;
             foreach $wp (@{$wpra}) {
                 if (is_valid_wp($wp)) {
+                    ($nm,$id,$lat,$lon,$typ) = get_wp_info($wp);
+                    push(@waypoints,[$key,$name,$nm,$id,$lat,$lon,$typ]);
+                    $wpnames{$nm} = 1;
                     $wpvcnt++;
                 }
             }
 
-            prt("  $name - with $wpcnt ($wpvcnt) wps\n");
+            prt("  $name - with $wpcnt ($wpvcnt) wps\n") if (VERB5());
             $xg .= "# Sid $name $wpvcnt wps\n";
             if ($wpvcnt && $add_sid_wps) {
                 $pxg = '';
@@ -439,15 +454,18 @@ sub process_in_file($) {
             }
         }
     }
+    ##################################################################################
+    ##################################################################################
     $key = 'Approach';
     if (defined ${$aref}{$key}) {
         my $starra = ${$aref}{$key};
         $cnt = scalar @{$starra};
-        prt("$key with $cnt points...\n");
+        prt("$key with $cnt segments...\n");
         foreach $wprh (@{$starra}) {
             $name = 'Unknown';
             if (defined ${$wprh}{'Name'}) {
                 $name = ${$wprh}{'Name'};
+                $tracknames{$name} = 1;
             }
             $wpcnt = 0;
             $wpra = [];
@@ -458,11 +476,14 @@ sub process_in_file($) {
             $wpvcnt = 0;
             foreach $wp (@{$wpra}) {
                 if (is_valid_wp($wp)) {
+                    ($nm,$id,$lat,$lon,$typ) = get_wp_info($wp);
+                    push(@waypoints,[$key,$name,$nm,$id,$lat,$lon,$typ]);
+                    $wpnames{$nm} = 1;
                     $wpvcnt++;
                 }
             }
 
-            prt("  $name - with $wpcnt ($wpvcnt) wps\n");
+            prt("  $name - with $wpcnt ($wpvcnt) wps\n") if (VERB5());
             $xg .= "# App $name $wpvcnt wps\n";
             if ($wpvcnt && $add_app_wps) {
                 $pxg = '';
@@ -491,6 +512,20 @@ sub process_in_file($) {
             }
         }
     }
+    ##################################################################################
+
+    $cnt = scalar @waypoints;
+    $msg = "Stored $cnt waypoints... ";
+    @arr = keys %tracknames;
+    $cnt = scalar @arr;
+    $msg .= "$cnt tracks... ";
+    prt("\nTrack:$cnt: ".join(", ",@arr)."\n") if (VERB9());
+    @arr = keys %wpnames;
+    $cnt = scalar @arr;
+    prt("\nWPS:$cnt: ". join(" ",@arr)."\n") if (VERB9());
+    $msg .= "$cnt wpnames... ";
+    prt("$msg\n");
+
     if (length($out_file) == 0) {
         $out_file = $def_xg;
     }
@@ -545,6 +580,23 @@ sub parse_args {
                     $load_log = 1;
                 }
                 prt("Set to load log at end. ($load_log)\n") if ($verb);
+            } elsif ($sarg =~ /^n/) {
+                need_arg(@av);
+                shift @av;
+                $sarg = $av[0];
+                if ($sarg eq 'star') {
+                    $add_star_wps = 0;
+                } elsif ($sarg eq 'sid') {
+                    $add_sid_wps = 0;
+                } elsif ($sarg =~ /^app/) {
+                    $add_app_wps = 0;
+                } elsif ($sarg eq 'all') {
+                    $add_star_wps = 0;
+                    $add_sid_wps = 0;
+                    $add_app_wps = 0;
+                } else {
+                    pgm_exit(1,"ERROR: Invalid argument [$sarg]! Must be one of 'sid', 'star' or 'app'\n");
+                }
             } elsif ($sarg =~ /^o/) {
                 need_arg(@av);
                 shift @av;
@@ -567,6 +619,9 @@ sub parse_args {
             $in_file = $def_file;
             prt("Set DEFAULT input to [$in_file]\n");
         }
+        $add_star_wps = 0;
+        #$add_sid_wps = 0;
+        $add_app_wps = 0;
     }
     if (length($in_file) ==  0) {
 		give_help();
@@ -588,6 +643,7 @@ sub give_help {
     prt(" --verb[n]     (-v) = Bump [or set] verbosity. def=$verbosity\n");
     prt(" --load        (-l) = Load LOG at end. ($outfile)\n");
     prt(" --out <file>  (-o) = Write output to this file.\n");
+    prt(" --no <type>   (-n) = Disable the 'type', either sid, star or app.\n");
 	prt(" Read an xml sid/star procedure file, and generate a 2D graph of the\n");
 	prt(" flight waypoints found.\n");
 	
