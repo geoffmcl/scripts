@@ -989,8 +989,9 @@ sub show_position($) {
     if ($show_msg) {
         my $rch = $ref_circuit_hash;
         # Only if in a CIRCUIT
-        if ($circuit_mode && $circuit_flag && defined ${$rch}{'target_eta'}) {
-            if ($turn eq 's') {
+        if ($circuit_mode && $circuit_flag && defined ${$rch}{'target_hdg'}) {
+            #if ($turn eq 's') {
+            if ($m_stable_cnt > 1) {
                 # in stable level flight - check for course change
                 $eta = ${$rch}{'target_eta'};
                 $lon  = ${$rp}{'lon'};
@@ -998,29 +999,38 @@ sub show_position($) {
                 $aspd = ${$rp}{'aspd'}; # Knots
                 my $tlat = ${$rch}{'target_lat'};   # $targ_lat;
                 my $tlon = ${$rch}{'target_lon'};   # $targ_lon;
+                my $chdg = ${$rch}{'target_hdg'};   # bug set to this
                 my ($az1,$az2,$distm);
+                # from current position to target position
                 fg_geo_inverse_wgs_84 ($lat,$lon,$tlat,$tlon,\$az1,\$az2,\$distm);
                 my $rwh = compute_course($az1,$aspd);
-                $hdg = ${$rwh}{'heading'};
-                my $wdiff = get_hdg_diff($az1,$hdg);
+                my $whdg = ${$rwh}{'heading'};  # get computed hdg, corrected for wind
+                my $wdiff = get_hdg_diff($az1,$whdg);    # get the difference
+                my $thdg = $az1;
+                if ($use_calc_wind_hdg) {
+                    $thdg = $whdg;
+                }
+                my $tdiff = get_hdg_diff($chdg,$thdg);
                 # give BOTH headings
                 ${$rch}{'suggest_hdg'} = $az1;
-                ${$rch}{'suggest_whdg'} = $hdg;
+                ${$rch}{'suggest_whdg'} = $whdg;
                 if (${$rch}{'wp_mode'}) {
                     $eta = "wp mode";
-                } elsif (defined ${$rch}{'target_hdg'}) {
-                    $az2 = ${$rch}{'target_hdg'};
+                } elsif (abs($tdiff) > 1) {
                     my $distnm = get_dist_stg_nm($distm);
                     my $distkm = get_dist_stg_km($distm);
-                    $tmp2 = $az1;
-                    #set_hdg_stg(\$tmp2);
+                    $tmp2 = $thdg;
                     set_decimal1_stg(\$tmp2);
-                    $eta .= " h=$tmp2, d $distnm $distkm ";
-                    $tmp2 = $hdg;
-                    set_decimal1_stg(\$tmp2);
-                    $eta .= "w=$tmp2 ";
-                    ##if (abs($az1 - $az2) > 1) {
-                    if (abs(get_hdg_diff($az1,$az2)) > 1) {
+                    # $eta .= " h=$tmp2, d $distnm $distkm ";
+                    set_decimal1_stg(\$tdiff);
+                    $eta .= " h=$tmp2, d=$tdiff, s $distkm ";
+                    if (!$use_calc_wind_hdg) {
+                        $tmp2 = $whdg;
+                        set_decimal1_stg(\$tmp2);
+                        $eta .= "w=$tmp2 ";
+                    }
+                    ## if (abs($az1 - $az2) > 1)
+                    ## if (abs(get_hdg_diff($az1,$az2)) > 1)
                         if (${$rch}{'suggest_chg'}) {
                             ${$rch}{'suggest_chg'}++;
                             $eta .= " Waiting ".${$rch}{'suggest_chg'};
@@ -1028,7 +1038,7 @@ sub show_position($) {
                             ${$rch}{'suggest_chg'} = 1;
                             $eta .= " Suggest change...";
                         }
-                    }
+                    ## }
                 }
             }
         }
@@ -3077,7 +3087,7 @@ sub parse_args {
     if (! -f $in_file) {
         pgm_exit(1,"ERROR: Unable to find in file [$in_file]! Check name, location...\n");
     }
-    ####pgm_exit(1,"TEMP EXIT\n");
+    ###pgm_exit(1,"TEMP EXIT\n");
 }
 
 sub give_help {
