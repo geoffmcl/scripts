@@ -2179,6 +2179,76 @@ sub set_suggested_hdg($$) {
     prtt("TURN from $chdg to $shdg ($diff) degs, to targ... $eta\n");
 }
 
+
+####################################################################
+### Add WIND indication
+### size of wind line should be based on $wspd, not on 
+### $dist = ($stand_patt_alt * $SG_FEET_TO_METER) / tan($stand_glide_degs * $SGD_DEGREES_TO_RADIANS);
+### fg_geo_inverse_wgs_84 ($brlat,$brlon,$elat1,$elon1,\$az11,\$az21,\$dist1);
+### my $dist4 = $dist1 / 4;
+### speed is in Knots
+### my $KNOTS_TO_FTS = ($SG_NM_TO_METER * $SG_METER_TO_FEET) / 3600.0;
+### my $KNOTS_TO_MPS = $SG_NM_TO_METER / 3600.0;
+sub Add_WIND_indication($$$) {
+    my ($mid_lat,$mid_lon,$dist4) = @_;
+    my $xg = '';
+    my $rew = get_env_wind();
+    my $whdg1 = ${$rew}{'wind-from'};
+    my $wspd  = ${$rew}{'wind-spd'};
+    my ($wlat1,$wlon1,$wlat2,$wlon2,$waz1);
+    my $whdg2 = $whdg1 + 180;
+    $whdg2 -= 360 if ($whdg2 >= 360);
+    ####my $wsize = $wspd * 10;
+    my $wsize = $dist4 / 4;
+    fg_geo_direct_wgs_84($mid_lat,$mid_lon, $whdg1, $dist4 / 2, \$wlat1, \$wlon1, \$waz1 );
+    fg_geo_direct_wgs_84($mid_lat,$mid_lon, $whdg2, $dist4 / 2, \$wlat2, \$wlon2, \$waz1 );
+    $xg .= "color green\n";
+    $xg .= "$wlon1 $wlat1\n";
+    $xg .= "$wlon2 $wlat2\n";
+    $xg .= "NEXT\n";
+    $xg .= "# wsize $wsize\n";
+    if ($wsize > 3) {
+        my ($wlatv1,$wlonv1,$whdg,$wlatv2,$wlonv2);
+
+        $whdg = $whdg1 + 30;
+        $whdg -= 360 if ($whdg > 360);
+        fg_geo_direct_wgs_84($wlat1,$wlon1, $whdg, $wsize, \$wlatv1, \$wlonv1, \$waz1 );
+        $xg .= "$wlon1 $wlat1\n";
+        $xg .= "$wlonv1 $wlatv1\n";
+        $xg .= "NEXT\n";
+
+        fg_geo_direct_wgs_84($wlat2,$wlon2, $whdg, $wsize, \$wlatv2, \$wlonv2, \$waz1 );
+        $xg .= "$wlon2 $wlat2\n";
+        $xg .= "$wlonv2 $wlatv2\n";
+        $xg .= "NEXT\n";
+
+        $xg .= "$wlonv1 $wlatv1\n";
+        $xg .= "$wlonv2 $wlatv2\n";
+        $xg .= "NEXT\n";
+
+        $whdg = $whdg1 - 30;
+        $whdg += 360 if ($whdg < 0);
+        fg_geo_direct_wgs_84($wlat1,$wlon1, $whdg, $wsize, \$wlatv1, \$wlonv1, \$waz1 );
+        $xg .= "$wlon1 $wlat1\n";
+        $xg .= "$wlonv1 $wlatv1\n";
+        $xg .= "NEXT\n";
+
+        fg_geo_direct_wgs_84($wlat2,$wlon2, $whdg, $wsize, \$wlatv2, \$wlonv2, \$waz1 );
+        $xg .= "$wlon2 $wlat2\n";
+        $xg .= "$wlonv2 $wlatv2\n";
+        $xg .= "NEXT\n";
+
+        $xg .= "$wlonv1 $wlatv1\n";
+        $xg .= "$wlonv2 $wlatv2\n";
+        $xg .= "NEXT\n";
+    }
+
+    set_hdg_stg(\$whdg1);
+    set_int_stg(\$wspd);
+    $xg .= "anno $mid_lon $mid_lat $whdg1".'@'."$wspd\n";
+    return $xg;
+}
+
 sub set_wpts_to_rwy($$) {
     my ($rch,$rp) = @_;
     if (!got_runway_coords()) {
@@ -2316,49 +2386,7 @@ sub set_wpts_to_rwy($$) {
     $xg .= "$elon2 $elat2\n";
     $xg .= "NEXT\n";
 
-    ####################################################################
-    ### Add WIND indication
-    ### size of wind line should be based on $wspd, not on 
-    ### $dist = ($stand_patt_alt * $SG_FEET_TO_METER) / tan($stand_glide_degs * $SGD_DEGREES_TO_RADIANS);
-    ### fg_geo_inverse_wgs_84 ($brlat,$brlon,$elat1,$elon1,\$az11,\$az21,\$dist1);
-    ### my $dist4 = $dist1 / 4;
-    ### speed is in Knots
-    ### my $KNOTS_TO_FTS = ($SG_NM_TO_METER * $SG_METER_TO_FEET) / 3600.0;
-    ### my $KNOTS_TO_MPS = $SG_NM_TO_METER / 3600.0;
-    my $rew = get_env_wind();
-    my $whdg1 = ${$rew}{'wind-from'};
-    my $wspd  = ${$rew}{'wind-spd'};
-    my ($wlat1,$wlon1,$wlat2,$wlon2,$waz1);
-    my $whdg2 = $whdg1 + 180;
-    $whdg2 -= 360 if ($whdg2 >= 360);
-    ####my $wsize = $wspd * 10;
-    my $wsize = $dist4 / 4;
-    fg_geo_direct_wgs_84($mid_lat,$mid_lon, $whdg1, $dist4 / 2, \$wlat1, \$wlon1, \$waz1 );
-    fg_geo_direct_wgs_84($mid_lat,$mid_lon, $whdg2, $dist4 / 2, \$wlat2, \$wlon2, \$waz1 );
-    $xg .= "color green\n";
-    $xg .= "$wlon1 $wlat1\n";
-    $xg .= "$wlon2 $wlat2\n";
-    $xg .= "NEXT\n";
-    $xg .= "# wsize $wsize\n";
-    if ($wsize > 3) {
-        my ($wlatv,$wlonv,$whdg);
-        $whdg = $whdg1 + 30;
-        $whdg -= 360 if ($whdg > 360);
-        fg_geo_direct_wgs_84($wlat1,$wlon1, $whdg, $wsize, \$wlatv, \$wlonv, \$waz1 );
-        $xg .= "$wlon1 $wlat1\n";
-        $xg .= "$wlonv $wlatv\n";
-        $xg .= "NEXT\n";
-        $whdg = $whdg1 - 30;
-        $whdg += 360 if ($whdg < 0);
-        fg_geo_direct_wgs_84($wlat1,$wlon1, $whdg, $wsize, \$wlatv, \$wlonv, \$waz1 );
-        $xg .= "$wlon1 $wlat1\n";
-        $xg .= "$wlonv $wlatv\n";
-        $xg .= "NEXT\n";
-    }
-
-    set_hdg_stg(\$whdg1);
-    set_int_stg(\$wspd);
-    $xg .= "anno $mid_lon $mid_lat $whdg1".'@'."$wspd\n";
+    $xg .= Add_WIND_indication($mid_lat,$mid_lon,$dist4);
 
     #####################################################################
     ## Add DOTS for each waypoint
@@ -3049,7 +3077,7 @@ sub parse_args {
     if (! -f $in_file) {
         pgm_exit(1,"ERROR: Unable to find in file [$in_file]! Check name, location...\n");
     }
-    ###pgm_exit(1,"TEMP EXIT\n");
+    ####pgm_exit(1,"TEMP EXIT\n");
 }
 
 sub give_help {
