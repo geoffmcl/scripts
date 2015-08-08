@@ -41,7 +41,8 @@ my $VERS = "0.0.7 2015-07-15"; # some functions moved to library
 
 # log file stuff
 our ($LF);
-my $outfile = $temp_dir."\\temp.$pgmname.txt";
+my $outfile = $temp_dir."/temp.$pgmname.txt";
+$outfile = ($os =~ /win/i) ? path_u2d($outfile) : path_d2u($outfile);
 open_log($outfile);
 
 my $load_log = 0;
@@ -59,6 +60,8 @@ my $SG_METER_TO_FEET = 3.28083989501312335958;
 my $M_PI = 3.141592653589793;
 my $M_D2R = $M_PI / 180;    # degree to radian
 my $M_R2D = 180.0 / $M_PI;
+
+my $xg_out = $temp_dir."/tempdist.xg";
 
 # London and Tokyo - not used
 #my $lonlon = -0.5;
@@ -93,6 +96,7 @@ my $tl_lat = -31.6521054356504;
 #anno 148.617914716388 -31.7624265822579 BL
 my $bl_lon = 148.617914716388;
 my $bl_lat = -31.7624265822579;
+#  -31.7462205,148.6980507 -31.6254689,148.6527077 -w 80@3
 
 my @warnings = ();
 sub show_warnings($) {
@@ -467,6 +471,64 @@ sub show_intervals($$$$) {
     #}
 }
 
+sub get_wind_xg($$$$$$) {
+    my ($wlat1,$wlon1,$wlat2,$wlon2,$whdg1,$wsize) = @_;
+    my $degs = 30;
+    my $xg = "# wsize $wsize\n";
+    if ($wsize > 3) {
+        my ($wlatv1,$wlonv1,$whdg,$wlatv2,$wlonv2,$waz1);
+
+        # shift off wind direction by n degs
+        $whdg = $whdg1 + $degs;
+        $whdg -= 360 if ($whdg > 360);
+        fg_geo_direct_wgs_84($wlat1,$wlon1, $whdg, $wsize, \$wlatv1, \$wlonv1, \$waz1 );
+        $xg .= "$wlon1 $wlat1\n";
+        $xg .= "$wlonv1 $wlatv1\n";
+        $xg .= "NEXT\n";
+
+        fg_geo_direct_wgs_84($wlat2,$wlon2, $whdg, $wsize, \$wlatv2, \$wlonv2, \$waz1 );
+        $xg .= "$wlon2 $wlat2\n";
+        $xg .= "$wlonv2 $wlatv2\n";
+        $xg .= "NEXT\n";
+
+        $xg .= "$wlonv1 $wlatv1\n";
+        $xg .= "$wlonv2 $wlatv2\n";
+        $xg .= "NEXT\n";
+
+        $whdg = $whdg1 - $degs;
+        $whdg += 360 if ($whdg < 0);
+        fg_geo_direct_wgs_84($wlat1,$wlon1, $whdg, $wsize, \$wlatv1, \$wlonv1, \$waz1 );
+        $xg .= "$wlon1 $wlat1\n";
+        $xg .= "$wlonv1 $wlatv1\n";
+        $xg .= "NEXT\n";
+
+        fg_geo_direct_wgs_84($wlat2,$wlon2, $whdg, $wsize, \$wlatv2, \$wlonv2, \$waz1 );
+        $xg .= "$wlon2 $wlat2\n";
+        $xg .= "$wlonv2 $wlatv2\n";
+        $xg .= "NEXT\n";
+
+        $xg .= "$wlonv1 $wlatv1\n";
+        $xg .= "$wlonv2 $wlatv2\n";
+        $xg .= "NEXT\n";
+    }
+    return $xg;
+}
+
+sub get_hdg_diff2($$) {
+    my ($initial,$final) = @_;
+    if ($initial > 360 || $initial < 0 || $final > 360 || $final < 0) {
+        pgm_exit(1,"Internal ERROR: get_hdg_diff2 invalid params $initial $final\n");
+    }
+    my $diff = $final - $initial;
+    my $absDiff = abs($diff);
+    if ($absDiff <= 180) {
+        return $absDiff == 180 ? $absDiff : $diff;
+    } elsif ($final > $initial) {
+        return $absDiff - 360;
+    }
+    return 360 - $absDiff;
+}
+
 
 sub show_distance($$$$) {
     my ($lon1,$lat1,$lon2,$lat2) = @_;
@@ -478,18 +540,87 @@ sub show_distance($$$$) {
     my $hdg = rad2deg(great_circle_direction(@Pos2, @Pos1)); # track
     my $rhdg = rad2deg(great_circle_direction(@Pos1, @Pos2)); # track
     my $d_nmiles = $d_km * $Km2NMiles;
-    my ($whdg,$gspd);
-    my ($rwhdg,$rgspd);
+    my ($whdg,$gspd,$gspd_kph,$wspd_kph,$tmp);
+    my ($nlat,$nlon,$naz,$alat,$alon);
+    #my ($rwhdg,$rgspd);
+    my $ceta = '';
+    my $chrs = 0;
+    my $hrs = $d_km / $g_speed; # distance (km) / speed (kph)
+    my $eta = get_hhmmss($hrs);
+    $tmp = int($g_ias + 0.05);
+    my $xg = "anno $lon1 $lat1 Start $tmp kts\n";
+
+    $xg .= "color yellow\n";
+    $xg .= "$lon1 $lat1\n";
+    $xg .= "$lon2 $lat2\n";
+    $xg .= "anno $lon2 $lat2 Dest.\n";
+    $xg .= "NEXT\n";
+    #$alat = ($lat1 + $lat2) / 2;
+    #$alon = ($lon1 + $lon2) / 2;
+    fg_geo_direct_wgs_84( $lat1, $lon1, $rhdg, ($d_km * 1000) / 3, \$alat, \$alon, \$naz );
+    $tmp = int($hdg + 0.05); # only WHOLE degrees
+    $xg .= "anno $alon $alat Targ: $tmp eta: $eta\n";
     if ($got_wind) {
+        $wspd_kph = $usr_wind_spd * $K2KPH;
+        ##my $wtm = $d_km / $wspd_kph;    # estimate time
+        my $wdist = $wspd_kph * 3600 * $hrs;
+        my $wsize = $wdist / 8; # was 5;
+        $xg .= "# Wind at $wspd_kph for $hrs = $wdist\n";
         my $rh = compute_wind_course($hdg,$g_ias,$usr_wind_dir,$usr_wind_spd);
         $whdg = ${$rh}{'heading'};
         $gspd = ${$rh}{'groundspeed'};
-        $rh = compute_wind_course($rhdg,$g_ias,$usr_wind_dir,$usr_wind_spd);
-        $rwhdg = ${$rh}{'heading'};
-        $rgspd = ${$rh}{'groundspeed'};
+        ######## why add this reverse???? #######
+        #$rh = compute_wind_course($rhdg,$g_ias,$usr_wind_dir,$usr_wind_spd);
+        #$rwhdg = ${$rh}{'heading'};
+        #$rgspd = ${$rh}{'groundspeed'};
+        $gspd_kph = $gspd * $K2KPH;
+        $chrs = $d_km / $gspd_kph; # distance (km) / speed (kph)
+        if ($chrs < 0.001) {
+            $ceta = "weta: BIG problem!";
+        } else {
+            $tmp = int($gspd + 0.05); # only WHOLE knots
+            $ceta = "weta: ".get_hhmmss($chrs)." at $tmp kts";
+        }
+
+        ###################################################################################
+        ### WIND: target lat,lon, in wind direction, for the dist appx covered in that time
+        fg_geo_direct_wgs_84( $lat2, $lon2, $usr_wind_dir, $wdist, \$nlat, \$nlon, \$naz );
+
+        $xg .= "color gray\n";
+        $xg .= get_wind_xg($lat2,$lon2,$nlat,$nlon,$usr_wind_dir,$wsize);
+        ##$xg .= get_wind_xg($nlat,$nlon,$lat2,$lon2,$usr_wind_dir,$wsize);
+
+        $xg .= "color green\n";
+        $xg .= "$lon2 $lat2\n";
+        $xg .= "$nlon $nlat\n";
+        $xg .= "NEXT\n";
+
+        $alat = ($lat2 + $nlat) / 2;
+        $alon = ($lon2 + $nlon) / 2;
+        $xg .= "anno $alon $alat Wind: $usr_wind_dir".'@'."$usr_wind_spd\n";
+
+        ###################################################################################
+        ### TRACK: That should be taken
+        $xg .= "color blue\n";
+        $xg .= "$lon1 $lat1\n";
+        $xg .= "$nlon $nlat\n";
+        $xg .= "NEXT\n";
+        $alat = ($lat1 + $nlat) / 2;
+        $alon = ($lon1 + $nlon) / 2;
+        $tmp = int($whdg + 0.05); # only WHOLE degrees
+        $xg .= "anno $alon $alat Track: $tmp $ceta\n";
+
     }
 
-    # derived
+    if (length($xg_out)) {
+        $xg_out = ($os =~ /win/i) ? path_u2d($xg_out) : path_d2u($xg_out);
+        write2file($xg,$xg_out);
+        prt("Written xg output to $xg_out\n");
+    }
+
+    ########################################################################
+    # derived (for display)
+    ########################################################################
     my $d_m = int(($d_km * 1000) + 0.5);
     my $d_ft = int(($d_km * 1000 * $SG_METER_TO_FEET) + 0.5);
     my $chdg = int($hdg + 0.05); # only WHOLE degrees
@@ -498,8 +629,6 @@ sub show_distance($$$$) {
     $crhdg = "0$crhdg" while (length($crhdg) < 3);
     my $thdg = $hdg;
     
-    my $hrs = $d_km / $g_speed;
-    my $eta = get_hhmmss($hrs);
     #my $ikm = int($d_km + 0.5);
     my $ikm = $d_km;
     set_decimal_stg(\$ikm);
@@ -522,18 +651,20 @@ sub show_distance($$$$) {
         if ($got_wind) {
             $whdg = int($whdg + 0.5);
             $gspd = int($gspd + 0.5);
-            $rwhdg = int($rwhdg + 0.5);
-            $rgspd = int($rgspd + 0.5);
-            prt("Correct : Wind=".$usr_wind_dir.'@'.$usr_wind_spd." hdg $whdg at $gspd, rhdg $rwhdg at $rgspd.");
+            #$rwhdg = int($rwhdg + 0.5);
+            #$rgspd = int($rgspd + 0.5);
+            #prt("Correct : Wind=".$usr_wind_dir.'@'.$usr_wind_spd." hdg $whdg at $gspd, rhdg $rwhdg at $rgspd.");
+            prt("Correct : Wind=".$usr_wind_dir.'@'.$usr_wind_spd." hdg $whdg at $gspd $ceta.\n");
         }
     } else {
         prt("Dist: $ikm Km, $inm Nm, hdg $chdg, $eta, at $g_ias.");
         if ($got_wind) {
             $whdg = int($whdg + 0.5);
             $gspd = int($gspd + 0.5);
-            $rwhdg = int($rwhdg + 0.5);
-            $rgspd = int($rgspd + 0.5);
-            prt(" Wind=".$usr_wind_dir.'@'.$usr_wind_spd." hdg $whdg/$rwhdg at $gspd/$rgspd.");
+            #$rwhdg = int($rwhdg + 0.5);
+            #$rgspd = int($rgspd + 0.5);
+            # prt(" Wind=".$usr_wind_dir.'@'.$usr_wind_spd." hdg $whdg/$rwhdg at $gspd/$rgspd.");
+            prt(" Wind=".$usr_wind_dir.'@'.$usr_wind_spd." hdg $whdg at $gspd $ceta.");
         }
         prt("\n");
     }
@@ -828,6 +959,11 @@ sub parse_args {
                 prt("Set airport data to $aptdat.\n") if (VERB5());
             } elsif ($sarg =~ /^r/) {
                 $rev = 1;
+            } elsif ($sarg =~ /^g/) {
+                need_arg(@av);
+                shift @av;
+                $sarg = $av[0];
+                $xg_out = $sarg;
             } elsif ($sarg =~ /^i/) {
                 need_arg(@av);
                 shift @av;
@@ -1006,6 +1142,7 @@ sub give_help {
     prt(" --xchange       (-x) = Exchange lat and lon\n");
     prt(" --file <file>   (-f) = Set the FG airport dat file to use.\n");
     prt("   Def file $aptdat ".((-f $aptdat) ? "ok" : "*** NOT FOUND *** FIX ME ***")."\n");
+    prt(" --graph <file>  (-g) = Output an xg graph file of points.\n");
     prt(" -v[N]                = Bump or set verbosity. (def=$verbosity).\n");
     prt(" -v1 will show the center lat,lon, heading, and distance in meters.\n");
     prt(" --wind deg\@kt   (-w) = Set wind direction (deg) and speed knots.\n");
