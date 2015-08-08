@@ -39,6 +39,13 @@ my $VERS = "0.0.7 2015-07-15"; # some functions moved to library
 # my $VERS = "0.0.2 2011-08-06"; # updated version
 # my $VERS = "0.0.1 2010-12-01" # premier version
 
+# references
+# air naviagtion - http://www.raeng.org.uk/publications/other/1-aircraft-navigation
+# Cosine Rule
+# aspd^2 = wspd^2 + gspd^2 - 2 * apsd * gspd * cos(whdg);
+#            0 =  b^2   -      2acos(C)b                  + c;
+# quadratic: 0 = gspd^2 - (2 * apsd * cos(whdg)) * gspd + (wspd^2 - aspd^2)
+
 # log file stuff
 our ($LF);
 my $outfile = $temp_dir."/temp.$pgmname.txt";
