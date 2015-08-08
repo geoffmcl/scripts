@@ -966,6 +966,7 @@ sub show_position($) {
         $m_stable_cnt = 0;
     } else {
         $m_stable_cnt++;
+        $turn .= "$m_stable_cnt";
     }
     $msg .= " d=$turn";
 
