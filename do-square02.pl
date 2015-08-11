@@ -54,7 +54,7 @@ require 'fg_wsg84.pl' or die "Unable to load fg_wsg84.pl ...\n";
 require "Bucket2.pm" or die "Unable to load Bucket2.pm ...\n";
 
 # log file stuff
-my $outfile = $temp_dir."/temp.$pgmname.txt";
+my $outfile = $temp_dir."temp.$pgmname.txt";
 open_log($outfile);
 
 # user variables
@@ -81,6 +81,7 @@ my $out_file = '';
 # my $HOST = "localhost";
 my ($fgfs_io,$HOST,$PORT,$CONMSG,$TIMEOUT,$DELAY);
 my $connect_win7 = 0;
+my $connect_dell01 = 0;
 if (defined $ENV{'COMPUTERNAME'}) {
     if (!$connect_win7 && $ENV{'COMPUTERNAME'} eq 'WIN7-PC') {
         # connect to Ubuntu in DELL02
@@ -94,10 +95,18 @@ if (defined $ENV{'COMPUTERNAME'}) {
         $CONMSG = "Assumed in DELL01 connection to WIN7-PC ";
     }
 } else {
-    # assumed in Ubuntu - connect to DELL01
-    $HOST = "192.168.1.11"; # DELL01
-    $PORT = 5551;
-    $CONMSG = "Assumed in Ubuntu DELL02 connection to DELL01 ";
+    # assumed in Ubuntu 
+    if ($connect_dell01) {
+        # 1: connect to DELL01
+        $HOST = "192.168.1.11"; # DELL01
+        $PORT = 5551;
+        $CONMSG = "Assumed in Ubuntu DELL02 connection to DELL01 ";
+    } else {
+        # 2: connect to WIN7-PC
+        $HOST = "192.168.1.33"; # WIN7-PC machine
+        $PORT = 5557;
+        $CONMSG = "Assumed in Ubuntu, connection to WIN7-PC ";
+    }
 }
 $TIMEOUT = 2;
 $DELAY = 5;
@@ -3125,7 +3134,7 @@ Fuel Selector... Both
 Landing Light... On
 Seat Belts... On
 Flaps... As Required
-Mixture... Rich (Below 3000’ MSL)
+Mixture... Rich (Below 3000 ft MSL)
 Autopilot... Off
 Carburetor Heat... As Required
 EOF
@@ -3167,3 +3176,4 @@ EOF
 }
 
 # eof - do-square02.pl
+
