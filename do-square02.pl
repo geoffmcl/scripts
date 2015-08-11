@@ -956,9 +956,12 @@ sub show_position($) {
             $msg .= " B(".get_curr_brake_stg().")";
         }
     }
+
+    #########################################################
     my $prev_hdg = $ind_hdg_degs;
     update_hdg_ind(); # this is changing fast in a TURN
     my $diff = get_hdg_diff($prev_hdg,$ind_hdg_degs);
+    #########################################################
     my $turn = 's';
     $show_postion_hash{'last_turn'} = 's' if (!defined $show_postion_hash{'last_turn'});
     if (($diff < -1.0)||($diff > 1.0)) {
@@ -969,6 +972,7 @@ sub show_position($) {
         $turn .= "$m_stable_cnt";
     }
     $msg .= " d=$turn";
+    #########################################################
 
     $tmp = $ind_hdg_degs;
     ### set_decimal1_stg(\$tmp);
@@ -2807,7 +2811,7 @@ sub process_circuit($) {
         if ($m_stable_cnt > 1) {  # less than 2 degrees between previous ind hdg
             if (${$rch}{'wp_mode'}) {
                  do_wpts_to_rwy($rch,$rp);
-            } elsif (${$rch}{'target_secs'} < 22 ) { # was 20
+            } elsif (${$rch}{'target_secs'} < 25 ) { # was 22, 20
                 # only XX secs to target - choose next target
                 my ($ntlat,$ntlon);
                 my $ptset = ${$rch}{'targ_ptset'};  # passing this target, head for next
