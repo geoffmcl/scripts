@@ -54,7 +54,8 @@ require 'fg_wsg84.pl' or die "Unable to load fg_wsg84.pl ...\n";
 require "Bucket2.pm" or die "Unable to load Bucket2.pm ...\n";
 
 # log file stuff
-my $outfile = $temp_dir."temp.$pgmname.txt";
+my $outfile = $temp_dir."/temp.$pgmname.txt";
+$outfile = ($os =~ /win/i) ? path_u2d($outfile) : path_d2u($outfile);
 open_log($outfile);
 
 # user variables
