@@ -1020,9 +1020,9 @@ sub show_position($) {
                 my $rwh = compute_course($az1,$aspd);
                 my $whdg = ${$rwh}{'heading'};  # get computed hdg, corrected for wind
                 my $wdiff = get_hdg_diff($az1,$whdg);    # get the difference
-                my $thdg = $az1;
+                my $thdg = $az1;    # calculate true heading
                 if ($use_calc_wind_hdg) {
-                    $thdg = $whdg;
+                    $thdg = $whdg;  # use a computed heading due to wind
                 }
                 my $tdiff = get_hdg_diff($chdg,$thdg);
                 # give BOTH headings
@@ -1030,7 +1030,9 @@ sub show_position($) {
                 ${$rch}{'suggest_whdg'} = $whdg;
                 if (${$rch}{'wp_mode'}) {
                     $eta = "wp mode";
-                } elsif (abs($tdiff) > 1) {
+                } elsif (abs($tdiff) > 1.2) { # was 1
+                    #################################################
+                    ### Suggest a new heading
                     my $distnm = get_dist_stg_nm($distm);
                     my $distkm = get_dist_stg_km($distm);
                     $tmp2 = $thdg;
