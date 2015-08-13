@@ -179,7 +179,7 @@ my $test_ll = 0;	# to TEST a LAT,LON search
 my $def_lat = 37.228;    # 37.6;
 my $def_lon = -121.9703; # -122.4;
 
-my $test_icao = 1;	# to TEST an ICAO search
+my $test_icao = 0;	# to TEST an ICAO search
 my $def_icao = 'VHHH'; ## 'KHAF';  ## LFPO'; ## 'KSFO';
 my $dbg1 = 0;	# show airport during finding ...
 my $dbg_fa02 = 0;	# show navaid during finding ...
