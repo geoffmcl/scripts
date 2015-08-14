@@ -3367,7 +3367,7 @@ sub give_help {
 	prt( "Usage: $pgmname options\n" );
 	prt( "Options: A ? anywhere for this help.\n" );
     prt( " --Anno          (-A) = Generate XG(raph) output for airports. (def=".
-        ($add_anno ? "On" : "Off") . "\n");
+        ($add_anno ? "On" : "Off") . ")\n");
     prt( " --bbox          (-b) = Output a bounding box for the airport.\n");
     prt( " --file <file>   (-f) = Load commands from this 'file' of commands...\n");
 	prt( " -icao=$apticao           = Search using icao.\n" );
@@ -3388,14 +3388,14 @@ sub give_help {
     prt( " --sidstar       (-s) = Attempt SID/STAR generation. Implies -n, and needs ICAO search.\n");
     prt( " -tryhard        (-t) = Expand search if no NAVAIDS found in range. " );
     prt( "(Def=". ($tryharder ? "On" : "Off") . ")\n" );
-    prt( " --verbosity (-v[nn]) = Increase or set verbosity.\n");
+    prt( " --verbosity (-v[nn]) = Increase or set verbosity. (def=$verbosity)\n");
     prt( " --VOR           (-V) = List only VOR (+NDB)\n");
     prt( " --loadlog       (-l) = Load log at end of display.\n");
     prt( " --Xml           (-X) = Generate ICAO.threshold.xml file (def=".
         ($gen_threshold_xml ? "on" : "off").")\n");
     prt( " --out <file>    (-o) = Write found information to file. (def=".
         (length($out_file) ? $out_file : "none").")\n");
-    prt( " --xg <file>     (-x) = Write airport xg file. Implies -a\n");
+    prt( " --xg <file>     (-x) = Write airport xg file. Implies -A\n");
     prt( "When searching by lat,lon, use -H to not skip helipads.\n");
 	mydie( "                                                         Happy Searching.\n" );
 }
