@@ -33,6 +33,7 @@ my $in_lat = 400;
 my $in_lon = 400;
 my $verbosity = 0;
 my $out_file = $temp_dir.$PATH_SEP."tempapts.csv";
+my $xg_out   = $temp_dir.$PATH_SEP."tempays.xg";
 
 my $apt_file = $CDATROOT.$PATH_SEP.'Airports'.$PATH_SEP.'apt.dat.gz';
 my $awy_file = $CDATROOT.$PATH_SEP.'Navaids'.$PATH_SEP.'awy.dat.gz';
@@ -421,7 +422,10 @@ sub mycmp_ascend_n0 {
    return -1 if (${$a}[0] > ${$b}[0]);
    return 0;
 }
-
+sub set_lat_lon($) {
+	my $rv = shift;
+	${$rv} = sprintf("%.6f", ${$rv});
+}
 
 sub search_awys_near($$$) {
     my ($raa,$lat,$lon) = @_;
@@ -430,7 +434,7 @@ sub search_awys_near($$$) {
     my ($tlat,$tlon,$from,$to,$hadver);
     my ($cat,$bfl,$efl,$ra,$lnn,$res);
     my ($az1,$az2,$dist);
-    my ($dist1,$dist2);
+    my ($dist1,$dist2,$ccnt);
     my $max_dist = 200000;
     my %h = ();
     $lnn = 0;
@@ -483,9 +487,10 @@ sub search_awys_near($$$) {
     }
     # sort by distance
     my @sarr = sort mycmp_decend_n0 @narr;
-    my ($ra);
     $cnt = 0;
+	my $xg = "# airways near $lat,$lon\n";
     foreach $ra (@sarr) {
+		#              0      1      2      3      4    5      6      7     8     9     10
         # push(@narr, [$dist, $from, $flat, $flon, $to, $tlat, $tlon, $cat, $bfl, $efl, $name ]);
         $dist = ${$ra}[0];
         $from = ${$ra}[1];
@@ -499,12 +504,45 @@ sub search_awys_near($$$) {
         $efl  = ${$ra}[9];
         $name = ${$ra}[10];
         last if ($dist > $max_dist);
+
+		$xg .= "anno $flon $flat $from\n";
+		$xg .= "anno $tlon $tlat $to\n";
+		if ($cat == 1) {
+			$xg .= "color blue\n";
+		} else {
+			$xg .= "color green\n";
+		}
+		$xg .= "$flon $flat\n";
+		$xg .= "$tlon $tlat\n";
+		$xg .= "NEXT\n";
         $cnt++;
-        $dist = int(($dist + 0.5) / 1000);
-        prt("$cnt: $dist, $from, $flat, $flon, $to, $tlat, $tlon, $cat, $bfl, $efl, $name\n");
+
+		# for display
+		$from .= " " while (length($from) < 5);
+		$to   .= " " while (length($to) < 5);
+        $dist = sprintf("%3d",int(($dist + 0.5) / 1000));
+		set_lat_lon(\$flat);
+		set_lat_lon(\$flon);
+		set_lat_lon(\$tlat);
+		set_lat_lon(\$tlon);
+		$ccnt = sprintf("%2d",$cnt);
+        prt("$ccnt: $dist, $from, $flat, $flon, $to, $tlat, $tlon, $cat, $bfl, $efl, $name\n");
         ###last if ($cnt > 10);
     }
-    # return \%h;
+
+	# add the center point
+	$xg .= "color red\n";
+	$xg .= "$lon $lat\n";
+	$xg .= "NEXT\n";
+	$xg .= "anno $lon $lat C: ";
+	if (length($in_icao)) {
+		$xg .= "$in_icao ";
+	}
+	$xg .= "$lat,$lon\n";
+
+	# write xg file
+	write2file($xg,$xg_out);
+	prt("Airways near $lat,$lon written to $xg_out\n");
 }
 
 
@@ -536,8 +574,10 @@ sub need_arg {
 sub parse_args {
     my (@av) = @_;
     my ($arg,$sarg);
+	my $cnt = 0;
     my $verb = VERB2();
     while (@av) {
+		$cnt++;
         $arg = $av[0];
         if ($arg =~ /^-/) {
             $sarg = substr($arg,1);
@@ -569,8 +609,26 @@ sub parse_args {
                 $sarg = $av[0];
                 $out_file = $sarg;
                 prt("Set out file to [$out_file].\n") if ($verb);
+            } elsif ($sarg =~ /^a/) {
+                need_arg(@av);
+                shift @av;
+                $sarg = $av[0];
+                $awy_file = $sarg;
+                prt("Set awy file to [$awy_file].\n") if ($verb);
+				if (! -f $awy_file) {
+					pgm_exit(1,"Error: can NOT locate $awy_file!\n");
+				}
+            } elsif ($sarg =~ /^A/) {
+                need_arg(@av);
+                shift @av;
+                $sarg = $av[0];
+                $apt_file = $sarg;
+                prt("Set apt file to [$apt_file].\n") if ($verb);
+				if (! -f $apt_file) {
+					pgm_exit(1,"Error: can NOT locate $apt_file!\n");
+				}
             } else {
-                pgm_exit(1,"ERROR: Invalid argument [$arg]! Try -?\n");
+                pgm_exit(1,"ERROR:$cnt: Invalid argument [$arg]! Try -?\n");
             }
         } else {
             $in_icao = $arg;
