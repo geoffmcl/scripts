@@ -24,6 +24,8 @@ require 'fg_wsg84.pl' or die "Unable to load fg_wsg84.pl ...\n";
 our ($LF);
 my $outfile = $temp_dir.$PATH_SEP."temp.$pgmname.txt";
 open_log($outfile);
+# Europe - Airways are corridors 10 nautical miles (19 km) wide of controlled airspace 
+# with a defined lower base, usually FL070–FL100, extending to FL195.
 
 # user variables
 my $VERS = "0.0.5 2015-08-16";
@@ -31,9 +33,14 @@ my $load_log = 0;
 my $in_icao = '';
 my $in_lat = 400;
 my $in_lon = 400;
+my $search_rad_km = 200;
+my $airway_width_km = 19;   # 10 nautical miles
+my $add_center_line = 0;
+my $add_end_lines = 0;
+
 my $verbosity = 0;
 my $out_file = $temp_dir.$PATH_SEP."tempapts.csv";
-my $xg_out   = $temp_dir.$PATH_SEP."tempays.xg";
+my $xg_out   = $temp_dir.$PATH_SEP."tempawys.xg";
 
 my $apt_file = $CDATROOT.$PATH_SEP.'Airports'.$PATH_SEP.'apt.dat.gz';
 my $awy_file = $CDATROOT.$PATH_SEP.'Navaids'.$PATH_SEP.'awy.dat.gz';
@@ -100,7 +107,7 @@ sub find_apt_gz($) {
     my $ficao = shift;
     my ($cnt,$msg);
     my $aptdat = $apt_file;
-    ###pgm_exit(1,"TEMP EXIT\n");
+    #### pgm_exit(1,"TEMP EXIT\n");
     prt("[v9] Loading $aptdat file ... moment..\n"); # if (VERB9());
     mydie("ERROR: Can NOT locate $aptdat ...$!...\n") if ( !( -f $aptdat) );
     ###open IF, "<$aptdat" or mydie("OOPS, failed to open [$aptdat] ... check name and location ...\n");
@@ -427,6 +434,101 @@ sub set_lat_lon($) {
 	${$rv} = sprintf("%.6f", ${$rv});
 }
 
+my $add_second_end = 0;
+my $add_arrow_centre = 0;
+
+sub get_arrow_xg($$$$$$) {
+    my ($wlat1,$wlon1,$wlat2,$wlon2,$whdg1,$wsize) = @_;
+    my $xg = '';
+    my ($wlatv1,$wlonv1,$whdg,$wlatv2,$wlonv2,$waz1);
+
+    $xg .= "color gray\n";
+    $whdg = $whdg1 + 30;
+    $whdg -= 360 if ($whdg > 360);
+    fg_geo_direct_wgs_84($wlat1,$wlon1, $whdg, $wsize, \$wlatv1, \$wlonv1, \$waz1 );
+    $xg .= "$wlon1 $wlat1\n";
+    $xg .= "$wlonv1 $wlatv1\n";
+    $xg .= "NEXT\n";
+
+    if ($add_second_end) {
+        fg_geo_direct_wgs_84($wlat2,$wlon2, $whdg, $wsize, \$wlatv2, \$wlonv2, \$waz1 );
+        $xg .= "$wlon2 $wlat2\n";
+        $xg .= "$wlonv2 $wlatv2\n";
+        $xg .= "NEXT\n";
+    }
+    if ($add_arrow_centre) {
+        ## $xg .= "$wlonv1 $wlatv1\n";
+        ## $xg .= "$wlonv2 $wlatv2\n";
+        ## $xg .= "NEXT\n";
+    }
+
+    $whdg = $whdg1 - 30;
+    $whdg += 360 if ($whdg < 0);
+    fg_geo_direct_wgs_84($wlat1,$wlon1, $whdg, $wsize, \$wlatv1, \$wlonv1, \$waz1 );
+    $xg .= "$wlon1 $wlat1\n";
+    $xg .= "$wlonv1 $wlatv1\n";
+    $xg .= "NEXT\n";
+
+    if ($add_second_end) {
+        fg_geo_direct_wgs_84($wlat2,$wlon2, $whdg, $wsize, \$wlatv2, \$wlonv2, \$waz1 );
+        $xg .= "$wlon2 $wlat2\n";
+        $xg .= "$wlonv2 $wlatv2\n";
+        $xg .= "NEXT\n";
+    }
+
+    ## $xg .= "$wlonv1 $wlatv1\n";
+    ## $xg .= "$wlonv2 $wlatv2\n";
+    ## $xg .= "NEXT\n";
+    return $xg;
+}
+
+sub get_airway_strip($$$$) {
+    my ($elat1,$elon1,$elat2,$elon2) = @_;
+    my $widm = $airway_width_km * 1000;
+    my $hwidm = $widm / 2;
+    my ($az1,$az2,$s,$az3,$az4,$az5);
+    my ($lon1,$lon2,$lon3,$lon4,$lat1,$lat2,$lat3,$lat4);
+    my ($clat,$clon);
+    my $xg = '';
+    #################################################
+    my $res = fg_geo_inverse_wgs_84($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$s);
+    $res = fg_geo_direct_wgs_84($elat1,$elon1, $az1, ($s / 2), \$clat, \$clon, \$az5);
+
+    ### my ($wlat1,$wlon1,$wlat2,$wlon2,$whdg1,$wsize) = @_;
+    $xg .= get_arrow_xg($elat1,$elon1,$elat2,$elon2,$az1,$widm);
+
+    # outline of airway, with width
+    $az3 = $az1 + 90;
+    $az3 -= 360 if ($az3 >= 360);
+    $az4 = $az1 - 90;
+    $az4 += 360 if ($az4 < 0);
+
+    $res = fg_geo_direct_wgs_84($elat1,$elon1, $az3, $hwidm, \$lat1, \$lon1, \$az5);
+    $res = fg_geo_direct_wgs_84($elat1,$elon1, $az4, $hwidm, \$lat2, \$lon2, \$az5);
+    $res = fg_geo_direct_wgs_84($elat2,$elon2, $az4, $hwidm, \$lat3, \$lon3, \$az5);
+    $res = fg_geo_direct_wgs_84($elat2,$elon2, $az3, $hwidm, \$lat4, \$lon4, \$az5);
+    $xg .= "color gray\n";
+    if ($add_end_lines) {
+        # make it a closed box
+        $xg .= "$lon1 $lat1\n";
+        $xg .= "$lon2 $lat2\n";
+        $xg .= "$lon3 $lat3\n";
+        $xg .= "$lon4 $lat4\n";
+        $xg .= "$lon1 $lat1\n";
+        $xg .= "NEXT\n";
+    } else {
+        # just draw the sides
+        $xg .= "$lon1 $lat1\n";
+        $xg .= "$lon4 $lat4\n";
+        $xg .= "NEXT\n";
+        $xg .= "$lon2 $lat2\n";
+        $xg .= "$lon3 $lat3\n";
+        $xg .= "NEXT\n";
+    }
+    return $xg;
+}
+
+
 sub search_awys_near($$$) {
     my ($raa,$lat,$lon) = @_;
     my $max = scalar @{$raa};
@@ -435,7 +537,7 @@ sub search_awys_near($$$) {
     my ($cat,$bfl,$efl,$ra,$lnn,$res);
     my ($az1,$az2,$dist);
     my ($dist1,$dist2,$ccnt);
-    my $max_dist = 200000;
+    my $max_dist = $search_rad_km * 1000; # was 200000
     my %h = ();
     $lnn = 0;
     $hadver = 0;
@@ -505,16 +607,20 @@ sub search_awys_near($$$) {
         $name = ${$ra}[10];
         last if ($dist > $max_dist);
 
+        $xg .= get_airway_strip( $flat, $flon, $tlat, $tlon );
+
 		$xg .= "anno $flon $flat $from\n";
 		$xg .= "anno $tlon $tlat $to\n";
-		if ($cat == 1) {
-			$xg .= "color blue\n";
-		} else {
-			$xg .= "color green\n";
-		}
-		$xg .= "$flon $flat\n";
-		$xg .= "$tlon $tlat\n";
-		$xg .= "NEXT\n";
+        if ($add_center_line) {
+            if ($cat == 1) {
+                $xg .= "color blue\n";
+            } else {
+                $xg .= "color green\n";
+            }
+            $xg .= "$flon $flat\n";
+            $xg .= "$tlon $tlat\n";
+            $xg .= "NEXT\n";
+        }
         $cnt++;
 
 		# for display
