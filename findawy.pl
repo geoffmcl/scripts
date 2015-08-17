@@ -33,10 +33,16 @@ my $load_log = 0;
 my $in_icao = '';
 my $in_lat = 400;
 my $in_lon = 400;
-my $search_rad_km = 200;
-my $airway_width_km = 19;   # 10 nautical miles
+my $search_rad_km = 100;	# was 200;
+# but read this reduces closer to target, so try 10
+my $airway_width_km = 10;	# was 19; # or 10 nautical miles
 my $add_center_line = 0;
 my $add_end_lines = 0;
+my $max_count = 20;
+my $add_second_end = 1;
+my $add_arrow_centre = 0;
+my $use_half_arrow = 1;
+my $m_arrow_angle = 30;
 
 my $verbosity = 0;
 my $out_file = $temp_dir.$PATH_SEP."tempapts.csv";
@@ -48,7 +54,7 @@ my $awy_file = $CDATROOT.$PATH_SEP.'Navaids'.$PATH_SEP.'awy.dat.gz';
 my $apts_csv = $perl_dir.'circuits'.$PATH_SEP.'airports2.csv';
 
 # ### DEBUG ###
-my $debug_on = 1;
+my $debug_on = 0;
 my $def_file = 'YGIL';
 
 ### program variables
@@ -434,16 +440,19 @@ sub set_lat_lon($) {
 	${$rv} = sprintf("%.6f", ${$rv});
 }
 
-my $add_second_end = 0;
-my $add_arrow_centre = 0;
-
-sub get_arrow_xg($$$$$$) {
-    my ($wlat1,$wlon1,$wlat2,$wlon2,$whdg1,$wsize) = @_;
+sub get_arrow_xg($$$$$$$$) {
+    my ($from,$wlat1,$wlon1,$to,$wlat2,$wlon2,$whdg1,$wsize) = @_;
     my $xg = '';
-    my ($wlatv1,$wlonv1,$whdg,$wlatv2,$wlonv2,$waz1);
+    my ($wlatv1,$wlonv1,$whdg,$wlatv2,$wlonv2,$waz1,$tmp,$tmp2);
 
-    $xg .= "color gray\n";
-    $whdg = $whdg1 + 30;
+	$tmp = int($whdg1 + 0.5);
+	$tmp2 = int($wsize / 1000);
+	### $xg .= "# end arrows from $wlat1,$wlon1 to $wlat2,$wlon2, hdg $tmp, size $tmp2 km\n";
+	$xg .= "# end arrows from $from to $to, hdg $tmp, size $tmp2 km\n";
+
+    ## $xg .= "color gray\n";
+    $xg .= "color orange\n";
+    $whdg = $whdg1 + $m_arrow_angle; # was 30
     $whdg -= 360 if ($whdg > 360);
     fg_geo_direct_wgs_84($wlat1,$wlon1, $whdg, $wsize, \$wlatv1, \$wlonv1, \$waz1 );
     $xg .= "$wlon1 $wlat1\n";
@@ -462,7 +471,7 @@ sub get_arrow_xg($$$$$$) {
         ## $xg .= "NEXT\n";
     }
 
-    $whdg = $whdg1 - 30;
+    $whdg = $whdg1 - $m_arrow_angle; # was 30
     $whdg += 360 if ($whdg < 0);
     fg_geo_direct_wgs_84($wlat1,$wlon1, $whdg, $wsize, \$wlatv1, \$wlonv1, \$waz1 );
     $xg .= "$wlon1 $wlat1\n";
@@ -482,8 +491,8 @@ sub get_arrow_xg($$$$$$) {
     return $xg;
 }
 
-sub get_airway_strip($$$$) {
-    my ($elat1,$elon1,$elat2,$elon2) = @_;
+sub get_airway_strip($$$$$$) {
+    my ($from,$elat1,$elon1,$to,$elat2,$elon2) = @_;
     my $widm = $airway_width_km * 1000;
     my $hwidm = $widm / 2;
     my ($az1,$az2,$s,$az3,$az4,$az5);
@@ -495,7 +504,8 @@ sub get_airway_strip($$$$) {
     $res = fg_geo_direct_wgs_84($elat1,$elon1, $az1, ($s / 2), \$clat, \$clon, \$az5);
 
     ### my ($wlat1,$wlon1,$wlat2,$wlon2,$whdg1,$wsize) = @_;
-    $xg .= get_arrow_xg($elat1,$elon1,$elat2,$elon2,$az1,$widm);
+	my $wsize = $use_half_arrow ? $hwidm : $widm;
+    $xg .= get_arrow_xg($from,$elat1,$elon1,$to,$elat2,$elon2,$az1,$wsize);
 
     # outline of airway, with width
     $az3 = $az1 + 90;
@@ -507,6 +517,9 @@ sub get_airway_strip($$$$) {
     $res = fg_geo_direct_wgs_84($elat1,$elon1, $az4, $hwidm, \$lat2, \$lon2, \$az5);
     $res = fg_geo_direct_wgs_84($elat2,$elon2, $az4, $hwidm, \$lat3, \$lon3, \$az5);
     $res = fg_geo_direct_wgs_84($elat2,$elon2, $az3, $hwidm, \$lat4, \$lon4, \$az5);
+
+	# XG output
+	$xg .= "# airway strip from $from to $to - add-end=$add_end_lines\n";
     $xg .= "color gray\n";
     if ($add_end_lines) {
         # make it a closed box
@@ -607,7 +620,7 @@ sub search_awys_near($$$) {
         $name = ${$ra}[10];
         last if ($dist > $max_dist);
 
-        $xg .= get_airway_strip( $flat, $flon, $tlat, $tlon );
+        $xg .= get_airway_strip( $from, $flat, $flon, $to, $tlat, $tlon );
 
 		$xg .= "anno $flon $flat $from\n";
 		$xg .= "anno $tlon $tlat $to\n";
@@ -621,7 +634,6 @@ sub search_awys_near($$$) {
             $xg .= "$tlon $tlat\n";
             $xg .= "NEXT\n";
         }
-        $cnt++;
 
 		# for display
 		$from .= " " while (length($from) < 5);
@@ -633,7 +645,10 @@ sub search_awys_near($$$) {
 		set_lat_lon(\$tlon);
 		$ccnt = sprintf("%2d",$cnt);
         prt("$ccnt: $dist, $from, $flat, $flon, $to, $tlat, $tlon, $cat, $bfl, $efl, $name\n");
+
+        $cnt++;
         ###last if ($cnt > 10);
+		last if ($max_count && ($cnt > $max_count));
     }
 
 	# add the center point
@@ -647,8 +662,12 @@ sub search_awys_near($$$) {
 	$xg .= "$lat,$lon\n";
 
 	# write xg file
+	rename_2_old_bak($xg_out);
 	write2file($xg,$xg_out);
-	prt("Airways near $lat,$lon written to $xg_out\n");
+	$line = "Airways near ";
+	$line .= "$in_icao " if (length($in_icao));
+	$line .= "$lat,$lon ";
+	prt("$line, written to $xg_out\n");
 }
 
 
