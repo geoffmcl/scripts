@@ -232,8 +232,8 @@ sub get_arrow_xg($$$$$$$$$) {
 }
 
 
-sub get_path_xg($$$$) {
-    my ($elat1,$elon1,$elat2,$elon2) = @_;
+sub get_path_xg($$$$$) {
+    my ($elat1,$elon1,$elat2,$elon2,$color) = @_;
     my ($az1,$az2,$s,$az3,$az4,$az5);
     my ($lat1,$lon1,$lat2,$lon2,$lat3,$lon3,$lat4,$lon4);
     my $hwidm = $m_path_widthm; # 300; # was 5000;
@@ -258,7 +258,7 @@ sub get_path_xg($$$$) {
     $xg .= "# Rect using $elat1,$elon1 $elat2,$elon2 len $lkm, wid $wkm\n";
     my $from = "";
     my $to   = "";
-    $xg .= get_arrow_xg($from,$elat1,$elon1,$to,$elat2,$elon2,$az1,$hwidm,'orange');
+    $xg .= get_arrow_xg($from,$elat1,$elon1,$to,$elat2,$elon2,$az1,$hwidm,$color); # 'orange'
     ## my ($from,$wlat1,$wlon1,$to,$wlat2,$wlon2,$whdg1,$hwid,$color) = @_;
     if (!$add_arrow_sides) {
         $xg .= "color gray\n";
@@ -391,13 +391,14 @@ sub process_in_file($) {
     my $aref = ${$xref}{'Airport'};
     #prt(Dumper($aref));
     #$load_log = 1;
+	my $options = "star=$add_star_wps, sid=$add_sid_wps, app=$add_app_wps";
     # expect something like Star Approach ICAOcode Sid
     my @arr = keys %{$aref};
     my $cnt = scalar @arr;
     my ($key,$icao,$wprh,$name,$wpra,$wpcnt,$wp);
     my (@arr2,$msg,$wpvcnt);
     my ($nm,$id,$lat,$lon,$typ);
-    my ($plat,$plon,$pxg,$wpxg);
+    my ($plat,$plon,$pxg,$wpxg,$color);
     my %wpkeys = ();
     my @waypoints = ();
     my %tracknames = ();
@@ -408,13 +409,14 @@ sub process_in_file($) {
     my $xg = "# icao found\n";
     if (defined ${$aref}{$key}) {
         $icao = ${$aref}{$key};
-        prt("Have Airport $icao...\n");
-        $xg = "# Airport $icao\n";
+        prt("Have Airport $icao... $options\n");
+        $xg = "# Airport $icao $options\n";
         $xg .= add_airport_xg($icao);
     }
 
     ##################################################################################
     $key = 'Star';
+	$color = 'green';
     if (defined ${$aref}{$key}) {
         my $starra = ${$aref}{$key};
         $cnt = scalar @{$starra};
@@ -444,7 +446,7 @@ sub process_in_file($) {
             prt("  $name - with $wpcnt ($wpvcnt) wps\n") if (VERB5());
             $xg .= "# Star $name $wpvcnt wps\n";
             if ($wpvcnt && $add_star_wps) {
-                $wpxg = "color green\n";
+                $wpxg = "color $color\n";
                 $pxg = '';
                 $wpvcnt = 0;
                 foreach $wp (@{$wpra}) {
@@ -455,7 +457,7 @@ sub process_in_file($) {
                         $id = '' if ($id != 1);
                         $wpxg .= "anno $lon $lat $nm $typ $id\n";
                         if ($wpvcnt) {
-                            $pxg .= get_path_xg($plat,$plon,$lat,$lon);
+                            $pxg .= get_path_xg($plat,$plon,$lat,$lon,$color);
                         } else {
                         }
                         $wpxg .= "$lon $lat # $nm, $id, $typ\n";
@@ -473,6 +475,7 @@ sub process_in_file($) {
     ##################################################################################
     ##################################################################################
     $key = 'Sid';
+	$color = 'blue';
     if (defined ${$aref}{$key}) {
         my $starra = ${$aref}{$key};
         $cnt = scalar @{$starra};
@@ -504,7 +507,7 @@ sub process_in_file($) {
             if ($wpvcnt && $add_sid_wps) {
                 $pxg = '';
                 $wpvcnt = 0;
-                $wpxg = "color blue\n";
+                $wpxg = "color $color\n";
                 foreach $wp (@{$wpra}) {
                     if (is_valid_wp($wp)) {
                         ($nm,$id,$lat,$lon,$typ) = get_wp_info($wp);
@@ -513,7 +516,7 @@ sub process_in_file($) {
                         $id = '' if ($id != 1);
                         $wpxg .= "anno $lon $lat $nm $typ $id\n";
                         if ($wpvcnt) {
-                            $pxg .= get_path_xg($plat,$plon,$lat,$lon);
+                            $pxg .= get_path_xg($plat,$plon,$lat,$lon,$color);
                         } else {
                         }
                         $wpxg .= "$lon $lat # $nm, $id, $typ\n";
@@ -533,6 +536,7 @@ sub process_in_file($) {
     ##################################################################################
     ##################################################################################
     $key = 'Approach';
+	$color = 'white';
     if (defined ${$aref}{$key}) {
         my $starra = ${$aref}{$key};
         $cnt = scalar @{$starra};
@@ -564,7 +568,7 @@ sub process_in_file($) {
             if ($wpvcnt && $add_app_wps) {
                 $pxg = '';
                 $wpvcnt = 0;
-                $wpxg = "color white\n";
+                $wpxg = "color $color\n";
                 foreach $wp (@{$wpra}) {
                     if (is_valid_wp($wp)) {
                         ($nm,$id,$lat,$lon,$typ) = get_wp_info($wp);
@@ -573,7 +577,7 @@ sub process_in_file($) {
                         $id = '' if ($id != 1);
                         $wpxg .= "anno $lon $lat $nm $typ $id\n";
                         if ($wpvcnt) {
-                            $pxg .= get_path_xg($plat,$plon,$lat,$lon);
+                            $pxg .= get_path_xg($plat,$plon,$lat,$lon,$color);
                         } else {
                         }
                         $wpxg .= "$lon $lat # $nm, $id, $typ\n";
@@ -607,6 +611,7 @@ sub process_in_file($) {
     }
     $out_file = path_u2d($out_file) if ($os =~ /win/i);
     ###prt("Writting Xgraph out to $out_file\n");
+    rename_2_old_bak($out_file);
     write2file($xg,$out_file);
     prt("Xgraph out written to $out_file\n");
 
@@ -695,9 +700,9 @@ sub parse_args {
             $in_file = $def_file;
             prt("Set DEFAULT input to [$in_file]\n");
         }
-        $add_star_wps = 0;
+        #$add_star_wps = 0;
         #$add_sid_wps = 0;
-        $add_app_wps = 0;
+        #$add_app_wps = 0;
     }
     if (length($in_file) ==  0) {
 		give_help();
