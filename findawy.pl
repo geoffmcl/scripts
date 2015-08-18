@@ -5,6 +5,8 @@
 use strict;
 use warnings;
 use File::Basename;  # split path ($name,$dir,$ext) = fileparse($file [, qr/\.[^.]*/] )
+use Time::HiRes qw( gettimeofday tv_interval );
+use Math::Trig;
 use Cwd;
 my $cwd = cwd();
 my $os = $^O;
@@ -40,9 +42,13 @@ my $add_center_line = 0;
 my $add_end_lines = 0;
 my $max_count = 20;
 my $add_second_end = 1;
-my $add_arrow_centre = 0;
+my $add_arrow_sides = 1;
 my $use_half_arrow = 1;
 my $m_arrow_angle = 30;
+my $add_low_high = 3;
+my $cat_high = 'green';
+my $cat_low  = 'blue';
+my $cat_both = 'orange';
 
 my $verbosity = 0;
 my $out_file = $temp_dir.$PATH_SEP."tempapts.csv";
@@ -52,13 +58,20 @@ my $apt_file = $CDATROOT.$PATH_SEP.'Airports'.$PATH_SEP.'apt.dat.gz';
 my $awy_file = $CDATROOT.$PATH_SEP.'Navaids'.$PATH_SEP.'awy.dat.gz';
 
 my $apts_csv = $perl_dir.'circuits'.$PATH_SEP.'airports2.csv';
+my $rwys_csv = $perl_dir.'circuits'.$PATH_SEP.'runways.csv';
 
 # ### DEBUG ###
-my $debug_on = 0;
-my $def_file = 'YGIL';
+my $debug_on = 1;
+##my $def_file = 'LFPO';
+#my $def_file = 'KSFO';
+#my $def_file = 'YSSY';
+my $def_file = 'EHAM';
+#my $def_file = 'YGIL';
 
 ### program variables
 my @warnings = ();
+my $apt_xg = '';    # if an ICAO found
+my $apt_icao = '';
 
 sub VERB1() { return $verbosity >= 1; }
 sub VERB2() { return $verbosity >= 2; }
@@ -191,8 +204,10 @@ sub find_apt_gz($) {
                     $csv .= "$alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n";
                     if ($ficao eq $icao) {
                         prt("Found $alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n");
+                        $apt_icao = $icao;
                         $in_lat = $alat;
                         $in_lon = $alon;
+                        $apt_xg = "anno $in_lon $in_lat $icao $name";
                     }
                 } else {
                     prtw("WARNING: apt no runways!!! $aptln\n");
@@ -361,6 +376,10 @@ sub find_apt_gz($) {
             $csv .= "$alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n";
             if ($ficao eq $icao) {
                 prt("Found $alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n");
+                $apt_icao = $icao;
+                $in_lat = $alat;
+                $in_lon = $alon;
+                $apt_xg = "anno $in_lon $in_lat $icao $name";
             }
         } else {
             prtw("WARNING: apt no runways!!! $aptln\n");
@@ -396,8 +415,10 @@ sub find_apt_csv($$) {
         $name = join(' ', splice(@arr,6)); # Name
         if ($icao eq $ficao) {
             prt("Found $alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n");
+            $apt_icao = $icao;
             $in_lat = $alat;
             $in_lon = $alon;
+            $apt_xg = "anno $in_lon $in_lat $icao $name";
             last;
         }
     }
@@ -440,59 +461,67 @@ sub set_lat_lon($) {
 	${$rv} = sprintf("%.6f", ${$rv});
 }
 
-sub get_arrow_xg($$$$$$$$) {
-    my ($from,$wlat1,$wlon1,$to,$wlat2,$wlon2,$whdg1,$wsize) = @_;
-    my $xg = '';
+sub get_arrow_xg($$$$$$$$$) {
+    my ($from,$wlat1,$wlon1,$to,$wlat2,$wlon2,$whdg1,$hwid,$color) = @_;
+    my $wsize = ($hwid / sin(deg2rad($m_arrow_angle)));
     my ($wlatv1,$wlonv1,$whdg,$wlatv2,$wlonv2,$waz1,$tmp,$tmp2);
+    my ($wlatv3,$wlonv3,$wlatv4,$wlonv4);
 
+    my $xg = '';
 	$tmp = int($whdg1 + 0.5);
 	$tmp2 = int($wsize / 1000);
 	### $xg .= "# end arrows from $wlat1,$wlon1 to $wlat2,$wlon2, hdg $tmp, size $tmp2 km\n";
 	$xg .= "# end arrows from $from to $to, hdg $tmp, size $tmp2 km\n";
 
     ## $xg .= "color gray\n";
-    $xg .= "color orange\n";
+    $xg .= "color $color\n";
     $whdg = $whdg1 + $m_arrow_angle; # was 30
     $whdg -= 360 if ($whdg > 360);
     fg_geo_direct_wgs_84($wlat1,$wlon1, $whdg, $wsize, \$wlatv1, \$wlonv1, \$waz1 );
+    fg_geo_direct_wgs_84($wlat2,$wlon2, $whdg, $wsize, \$wlatv2, \$wlonv2, \$waz1 );
+
     $xg .= "$wlon1 $wlat1\n";
     $xg .= "$wlonv1 $wlatv1\n";
     $xg .= "NEXT\n";
 
     if ($add_second_end) {
-        fg_geo_direct_wgs_84($wlat2,$wlon2, $whdg, $wsize, \$wlatv2, \$wlonv2, \$waz1 );
         $xg .= "$wlon2 $wlat2\n";
         $xg .= "$wlonv2 $wlatv2\n";
         $xg .= "NEXT\n";
     }
-    if ($add_arrow_centre) {
-        ## $xg .= "$wlonv1 $wlatv1\n";
-        ## $xg .= "$wlonv2 $wlatv2\n";
-        ## $xg .= "NEXT\n";
+
+    if ($add_arrow_sides) {
+        $xg .= "$wlonv1 $wlatv1\n";
+        $xg .= "$wlonv2 $wlatv2\n";
+        $xg .= "NEXT\n";
     }
 
     $whdg = $whdg1 - $m_arrow_angle; # was 30
     $whdg += 360 if ($whdg < 0);
-    fg_geo_direct_wgs_84($wlat1,$wlon1, $whdg, $wsize, \$wlatv1, \$wlonv1, \$waz1 );
+    fg_geo_direct_wgs_84($wlat1,$wlon1, $whdg, $wsize, \$wlatv3, \$wlonv3, \$waz1 );
+    fg_geo_direct_wgs_84($wlat2,$wlon2, $whdg, $wsize, \$wlatv4, \$wlonv4, \$waz1 );
+
     $xg .= "$wlon1 $wlat1\n";
-    $xg .= "$wlonv1 $wlatv1\n";
+    $xg .= "$wlonv3 $wlatv3\n";
     $xg .= "NEXT\n";
 
     if ($add_second_end) {
-        fg_geo_direct_wgs_84($wlat2,$wlon2, $whdg, $wsize, \$wlatv2, \$wlonv2, \$waz1 );
         $xg .= "$wlon2 $wlat2\n";
-        $xg .= "$wlonv2 $wlatv2\n";
+        $xg .= "$wlonv4 $wlatv4\n";
         $xg .= "NEXT\n";
     }
 
-    ## $xg .= "$wlonv1 $wlatv1\n";
-    ## $xg .= "$wlonv2 $wlatv2\n";
-    ## $xg .= "NEXT\n";
+    if ($add_arrow_sides) {
+        $xg .= "$wlonv3 $wlatv3\n";
+        $xg .= "$wlonv4 $wlatv4\n";
+        $xg .= "NEXT\n";
+    }
+    ### prt($xg);
     return $xg;
 }
 
-sub get_airway_strip($$$$$$) {
-    my ($from,$elat1,$elon1,$to,$elat2,$elon2) = @_;
+sub get_airway_strip($$$$$$$) {
+    my ($from,$elat1,$elon1,$to,$elat2,$elon2,$color) = @_;
     my $widm = $airway_width_km * 1000;
     my $hwidm = $widm / 2;
     my ($az1,$az2,$s,$az3,$az4,$az5);
@@ -505,42 +534,103 @@ sub get_airway_strip($$$$$$) {
 
     ### my ($wlat1,$wlon1,$wlat2,$wlon2,$whdg1,$wsize) = @_;
 	my $wsize = $use_half_arrow ? $hwidm : $widm;
-    $xg .= get_arrow_xg($from,$elat1,$elon1,$to,$elat2,$elon2,$az1,$wsize);
+    $xg .= get_arrow_xg($from,$elat1,$elon1,$to,$elat2,$elon2,$az1,$wsize,$color);
 
-    # outline of airway, with width
-    $az3 = $az1 + 90;
-    $az3 -= 360 if ($az3 >= 360);
-    $az4 = $az1 - 90;
-    $az4 += 360 if ($az4 < 0);
+    if (!$add_arrow_sides) {
+        # outline of airway, with width
+        $az3 = $az1 + 90;
+        $az3 -= 360 if ($az3 >= 360);
+        $az4 = $az1 - 90;
+        $az4 += 360 if ($az4 < 0);
 
-    $res = fg_geo_direct_wgs_84($elat1,$elon1, $az3, $hwidm, \$lat1, \$lon1, \$az5);
-    $res = fg_geo_direct_wgs_84($elat1,$elon1, $az4, $hwidm, \$lat2, \$lon2, \$az5);
-    $res = fg_geo_direct_wgs_84($elat2,$elon2, $az4, $hwidm, \$lat3, \$lon3, \$az5);
-    $res = fg_geo_direct_wgs_84($elat2,$elon2, $az3, $hwidm, \$lat4, \$lon4, \$az5);
+        $res = fg_geo_direct_wgs_84($elat1,$elon1, $az3, $hwidm, \$lat1, \$lon1, \$az5);
+        $res = fg_geo_direct_wgs_84($elat1,$elon1, $az4, $hwidm, \$lat2, \$lon2, \$az5);
+        $res = fg_geo_direct_wgs_84($elat2,$elon2, $az4, $hwidm, \$lat3, \$lon3, \$az5);
+        $res = fg_geo_direct_wgs_84($elat2,$elon2, $az3, $hwidm, \$lat4, \$lon4, \$az5);
 
-	# XG output
-	$xg .= "# airway strip from $from to $to - add-end=$add_end_lines\n";
-    $xg .= "color gray\n";
-    if ($add_end_lines) {
-        # make it a closed box
-        $xg .= "$lon1 $lat1\n";
-        $xg .= "$lon2 $lat2\n";
-        $xg .= "$lon3 $lat3\n";
-        $xg .= "$lon4 $lat4\n";
-        $xg .= "$lon1 $lat1\n";
-        $xg .= "NEXT\n";
-    } else {
-        # just draw the sides
-        $xg .= "$lon1 $lat1\n";
-        $xg .= "$lon4 $lat4\n";
-        $xg .= "NEXT\n";
-        $xg .= "$lon2 $lat2\n";
-        $xg .= "$lon3 $lat3\n";
-        $xg .= "NEXT\n";
+        # XG output
+        $xg .= "# airway strip from $from to $to - add-end=$add_end_lines\n";
+        $xg .= "color $color\n";
+        if ($add_end_lines) {
+            # make it a closed box
+            $xg .= "$lon1 $lat1\n";
+            $xg .= "$lon2 $lat2\n";
+            $xg .= "$lon3 $lat3\n";
+            $xg .= "$lon4 $lat4\n";
+            $xg .= "$lon1 $lat1\n";
+            $xg .= "NEXT\n";
+        } else {
+            # just draw the sides
+            $xg .= "$lon1 $lat1\n";
+            $xg .= "$lon4 $lat4\n";
+            $xg .= "NEXT\n";
+            $xg .= "$lon2 $lat2\n";
+            $xg .= "$lon3 $lat3\n";
+            $xg .= "NEXT\n";
+        }
     }
     return $xg;
 }
 
+# 0    1    2    3    4    5     6
+# icao,lat1,lon1,lat2,lon2,width,sign
+# VHXX,22.32526300,114.19222700,22.30395000,114.21587400,54.86,13
+# E46,29.88083567,-103.70108085,29.86895821,-103.69317249,30.48,15
+sub process_runway_file($$) {
+    my ($inf,$icao) = @_;
+    if (! open INF, "<$inf") {
+        pgm_exit(1,"ERROR: Unable to open file [$inf]\n"); 
+    }
+    my @lines = <INF>;
+    close INF;
+    my $lncnt = scalar @lines;
+    prt("Processing $lncnt lines, from [$inf]...\n") if (VERB9());
+    my ($line,$inc,$lnn,@arr,$txt,$elat1,$elon1,$name);
+    my ($elat2,$elon2,$wid,$sign);
+    my ($az1,$az2,$s,$res,$az3,$az4,$az5);
+    $lnn = 0;
+    my $xg = '';
+    foreach $line (@lines) {
+        chomp $line;
+        $lnn++;
+        next if ($lnn == 1);
+        @arr = split(",",$line);
+        $txt = $arr[0];
+        if ($txt eq $icao) {
+            $elat1 = $arr[1];
+            $elon1 = $arr[2];
+            $elat2 = $arr[3];
+            $elon2 = $arr[4];
+            $wid  = $arr[5];
+            $name = $arr[6];
+            $res = fg_geo_inverse_wgs_84($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$s);
+
+            $xg .= "color blue\n";
+            $xg .= "anno $elon1 $elat1 $name\n";
+            $xg .= "$elon1 $elat1\n";
+            $xg .= "$elon2 $elat2\n";
+            $xg .= "NEXT\n";
+            my ($lat1,$lon1,$lat2,$lon2,$lat3,$lon3,$lat4,$lon4);
+            my $hwidm = $wid / 2;
+            $xg .= "color red\n";
+            $az3 = $az1 + 90;
+            $az3 -= 360 if ($az3 >= 360);
+            $az4 = $az1 - 90;
+            $az4 += 360 if ($az4 < 0);
+            $res = fg_geo_direct_wgs_84($elat1,$elon1, $az3, $hwidm, \$lat1, \$lon1, \$az5);
+            $xg .= "$lon1 $lat1\n";
+            $res = fg_geo_direct_wgs_84($elat1,$elon1, $az4, $hwidm, \$lat2, \$lon2, \$az5);
+            $xg .= "$lon2 $lat2\n";
+            $res = fg_geo_direct_wgs_84($elat2,$elon2, $az4, $hwidm, \$lat3, \$lon3, \$az5);
+            $xg .= "$lon3 $lat3\n";
+            $res = fg_geo_direct_wgs_84($elat2,$elon2, $az3, $hwidm, \$lat4, \$lon4, \$az5);
+            $xg .= "$lon4 $lat4\n";
+            $xg .= "$lon1 $lat1\n";
+            $xg .= "NEXT\n";
+        }
+    }
+    return $xg;
+}
 
 sub search_awys_near($$$) {
     my ($raa,$lat,$lon) = @_;
@@ -549,7 +639,7 @@ sub search_awys_near($$$) {
     my ($tlat,$tlon,$from,$to,$hadver);
     my ($cat,$bfl,$efl,$ra,$lnn,$res);
     my ($az1,$az2,$dist);
-    my ($dist1,$dist2,$ccnt);
+    my ($dist1,$dist2,$ccnt,$color);
     my $max_dist = $search_rad_km * 1000; # was 200000
     my %h = ();
     $lnn = 0;
@@ -600,10 +690,15 @@ sub search_awys_near($$$) {
             push(@narr, [$dist, $from, $flat, $flon, $to, $tlat, $tlon, $cat, $bfl, $efl, $name ]);
         }
     }
+
+    #################################################################
     # sort by distance
     my @sarr = sort mycmp_decend_n0 @narr;
     $cnt = 0;
-	my $xg = "# airways near $lat,$lon\n";
+    my @narr = ();
+    my ($ft,$cnt2,$off,$ra2);
+    my %hash = ();
+    $cnt2 = 0;
     foreach $ra (@sarr) {
 		#              0      1      2      3      4    5      6      7     8     9     10
         # push(@narr, [$dist, $from, $flat, $flon, $to, $tlat, $tlon, $cat, $bfl, $efl, $name ]);
@@ -619,17 +714,71 @@ sub search_awys_near($$$) {
         $efl  = ${$ra}[9];
         $name = ${$ra}[10];
         last if ($dist > $max_dist);
+        if ($cat == 1) {
+            $color = $cat_high;
+            next if (!($add_low_high & 1));
+        } else {
+            $color = $cat_low;
+            next if (!($add_low_high & 2));
+        }
+        $cnt2++;
+        $ft = "$from:$to";
+        if (defined $hash{$ft}) {
+            $off = ($hash{$ft} - 1);
+            $ra2 = $narr[$off];
+            ${$ra2}[7] = 3;
+            next;
+        }
+        push(@narr,$ra);
+        ##$hash{$ft} = $ra;
+        $hash{$ft} = scalar @narr;
+        $cnt++;
+		last if ($max_count && ($cnt > $max_count));
+    }
+    prt("Got $cnt of $cnt2 airways...\n");
+    ##pgm_exit(1,"TEMP EXIT\n");
 
-        $xg .= get_airway_strip( $from, $flat, $flon, $to, $tlat, $tlon );
+    #################################################################
+    # output
+    $cnt = 0;
+	my $xg = "# airways near $lat,$lon\n";
+    if (length($apt_xg)) {
+        $xg .= "# $apt_xg\n";
+    }
+    ##foreach $ra (@sarr) {
+    foreach $ra (@narr) {
+		#              0      1      2      3      4    5      6      7     8     9     10
+        # push(@narr, [$dist, $from, $flat, $flon, $to, $tlat, $tlon, $cat, $bfl, $efl, $name ]);
+        $dist = ${$ra}[0];
+        $from = ${$ra}[1];
+        $flat = ${$ra}[2];
+        $flon = ${$ra}[3];
+        $to   = ${$ra}[4];
+        $tlat = ${$ra}[5];
+        $tlon = ${$ra}[6];
+        $cat  = ${$ra}[7];
+        $bfl  = ${$ra}[8];
+        $efl  = ${$ra}[9];
+        $name = ${$ra}[10];
+        last if ($dist > $max_dist);
+        if ($cat == 1) {
+            $color = $cat_high;
+            next if (!($add_low_high & 1));
+        } elsif ($cat == 2) {
+            $color = $cat_low;
+            next if (!($add_low_high & 2));
+        } elsif ($cat == 3) {
+            $color = $cat_both;
+        } else {
+            pgm_exit(1,"Got INVALID hi/lo $cat!\n");
+        }
+
+        $xg .= get_airway_strip( $from, $flat, $flon, $to, $tlat, $tlon, $color );
 
 		$xg .= "anno $flon $flat $from\n";
 		$xg .= "anno $tlon $tlat $to\n";
         if ($add_center_line) {
-            if ($cat == 1) {
-                $xg .= "color blue\n";
-            } else {
-                $xg .= "color green\n";
-            }
+            $xg .= "color $color\n";
             $xg .= "$flon $flat\n";
             $xg .= "$tlon $tlat\n";
             $xg .= "NEXT\n";
@@ -652,15 +801,21 @@ sub search_awys_near($$$) {
     }
 
 	# add the center point
-	$xg .= "color red\n";
-	$xg .= "$lon $lat\n";
-	$xg .= "NEXT\n";
-	$xg .= "anno $lon $lat C: ";
-	if (length($in_icao)) {
-		$xg .= "$in_icao ";
-	}
-	$xg .= "$lat,$lon\n";
-
+    $xg .= "color red\n";
+    $xg .= "$lon $lat\n";
+    $xg .= "NEXT\n";
+    if (length($apt_xg)) {
+        $xg .= "$apt_xg\n";
+        if (-f $rwys_csv) {     # def  = $perl_dir."circuits/runways.csv";
+            $xg .= process_runway_file($rwys_csv,$apt_icao);
+        }
+    } else {
+        $xg .= "anno $lon $lat C: ";
+        if (length($in_icao)) {
+            $xg .= "$in_icao ";
+        }
+        $xg .= "$lat,$lon\n";
+    }
 	# write xg file
 	rename_2_old_bak($xg_out);
 	write2file($xg,$xg_out);
