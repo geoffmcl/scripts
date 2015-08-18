@@ -32,9 +32,10 @@ my $rwys_csv = $perl_dir."circuits/runways.csv";
 my $add_star_wps = 1;
 my $add_sid_wps = 1;
 my $add_app_wps = 1;
+my $m_path_widthm = 500; # was 300; # was 5000;   
 
 # ### DEBUG ###
-my $debug_on = 0;
+my $debug_on = 1;
 my $def_file = 'circuits\EHAM.procedures.xml';
 my $def_xg = $temp_dir."/tempsidstar.xg";
 
@@ -170,7 +171,7 @@ sub get_path_xg($$$$) {
     my ($elat1,$elon1,$elat2,$elon2) = @_;
     my ($az1,$az2,$s,$az3,$az4,$az5);
     my ($lat1,$lon1,$lat2,$lon2,$lat3,$lon3,$lat4,$lon4);
-    my $hwidm = 300;   # was 5000;   
+    my $hwidm = $m_path_widthm; # 300; # was 5000;
     #################################################
     my $res = fg_geo_inverse_wgs_84($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$s);
     ## $res = fg_geo_direct_wgs_84($elat1,$elon1, $az1, ($s / 2), \$clat, \$clon, \$az5);
