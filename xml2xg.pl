@@ -8,6 +8,7 @@ use File::Basename;  # split path ($name,$dir,$ext) = fileparse($file [, qr/\.[^
 use Cwd;
 use XML::Simple;
 use Data::Dumper;
+use Math::Trig;
 my $os = $^O;
 my ($pgmname,$perl_dir) = fileparse($0);
 my $temp_dir = $perl_dir . "temp";
@@ -33,6 +34,10 @@ my $add_star_wps = 1;
 my $add_sid_wps = 1;
 my $add_app_wps = 1;
 my $m_path_widthm = 500; # was 300; # was 5000;   
+my $m_arrow_angle = 30;
+my $add_second_end = 1;
+my $add_arrow_sides = 1;
+my $add_center_line = 0;
 
 # ### DEBUG ###
 my $debug_on = 1;
@@ -167,11 +172,72 @@ sub get_dist_stg_km($) {
     return $km;
 }
 
+sub get_arrow_xg($$$$$$$$$) {
+    my ($from,$wlat1,$wlon1,$to,$wlat2,$wlon2,$whdg1,$hwid,$color) = @_;
+    my $wsize = ($hwid / sin(deg2rad($m_arrow_angle)));
+    my ($wlatv1,$wlonv1,$whdg,$wlatv2,$wlonv2,$waz1,$tmp,$tmp2);
+    my ($wlatv3,$wlonv3,$wlatv4,$wlonv4);
+
+    my $xg = '';
+	$tmp = int($whdg1 + 0.5);
+	$tmp2 = int($wsize / 1000);
+	### $xg .= "# end arrows from $wlat1,$wlon1 to $wlat2,$wlon2, hdg $tmp, size $tmp2 km\n";
+	$xg .= "# end arrows from $from to $to, hdg $tmp, size $tmp2 km\n";
+
+    ## $xg .= "color gray\n";
+    $xg .= "color $color\n";
+    $whdg = $whdg1 + $m_arrow_angle; # was 30
+    $whdg -= 360 if ($whdg > 360);
+    fg_geo_direct_wgs_84($wlat1,$wlon1, $whdg, $wsize, \$wlatv1, \$wlonv1, \$waz1 );
+    fg_geo_direct_wgs_84($wlat2,$wlon2, $whdg, $wsize, \$wlatv2, \$wlonv2, \$waz1 );
+
+    $xg .= "$wlon1 $wlat1\n";
+    $xg .= "$wlonv1 $wlatv1\n";
+    $xg .= "NEXT\n";
+
+    if ($add_second_end) {
+        $xg .= "$wlon2 $wlat2\n";
+        $xg .= "$wlonv2 $wlatv2\n";
+        $xg .= "NEXT\n";
+    }
+
+    if ($add_arrow_sides) {
+        $xg .= "$wlonv1 $wlatv1\n";
+        $xg .= "$wlonv2 $wlatv2\n";
+        $xg .= "NEXT\n";
+    }
+
+    $whdg = $whdg1 - $m_arrow_angle; # was 30
+    $whdg += 360 if ($whdg < 0);
+    fg_geo_direct_wgs_84($wlat1,$wlon1, $whdg, $wsize, \$wlatv3, \$wlonv3, \$waz1 );
+    fg_geo_direct_wgs_84($wlat2,$wlon2, $whdg, $wsize, \$wlatv4, \$wlonv4, \$waz1 );
+
+    $xg .= "$wlon1 $wlat1\n";
+    $xg .= "$wlonv3 $wlatv3\n";
+    $xg .= "NEXT\n";
+
+    if ($add_second_end) {
+        $xg .= "$wlon2 $wlat2\n";
+        $xg .= "$wlonv4 $wlatv4\n";
+        $xg .= "NEXT\n";
+    }
+
+    if ($add_arrow_sides) {
+        $xg .= "$wlonv3 $wlatv3\n";
+        $xg .= "$wlonv4 $wlatv4\n";
+        $xg .= "NEXT\n";
+    }
+    ### prt($xg);
+    return $xg;
+}
+
+
 sub get_path_xg($$$$) {
     my ($elat1,$elon1,$elat2,$elon2) = @_;
     my ($az1,$az2,$s,$az3,$az4,$az5);
     my ($lat1,$lon1,$lat2,$lon2,$lat3,$lon3,$lat4,$lon4);
     my $hwidm = $m_path_widthm; # 300; # was 5000;
+    my $xg = '';
     #################################################
     my $res = fg_geo_inverse_wgs_84($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$s);
     ## $res = fg_geo_direct_wgs_84($elat1,$elon1, $az1, ($s / 2), \$clat, \$clon, \$az5);
@@ -181,6 +247,7 @@ sub get_path_xg($$$$) {
         $s = (int($s * 10) / 10);
         return "# Dist GT 100Km $elat1,$elon1 $elat2,$elon2 $s\n";
     }
+
     #################################################
     $az3 = $az1 + 90;
     $az3 -= 360 if ($az3 >= 360);
@@ -188,18 +255,24 @@ sub get_path_xg($$$$) {
     $az4 += 360 if ($az4 < 0);
     my $wkm = get_dist_stg_km($hwidm * 2);
     my $lkm = get_dist_stg_km($s);
-    my $xg = "# Rect using $elat1,$elon1 $elat2,$elon2 len $lkm, wid $wkm\n";
-    $xg .= "color gray\n";
-    $res = fg_geo_direct_wgs_84($elat1,$elon1, $az3, $hwidm, \$lat1, \$lon1, \$az5);
-    $xg .= "$lon1 $lat1\n";
-    $res = fg_geo_direct_wgs_84($elat1,$elon1, $az4, $hwidm, \$lat2, \$lon2, \$az5);
-    $xg .= "$lon2 $lat2\n";
-    $res = fg_geo_direct_wgs_84($elat2,$elon2, $az4, $hwidm, \$lat3, \$lon3, \$az5);
-    $xg .= "$lon3 $lat3\n";
-    $res = fg_geo_direct_wgs_84($elat2,$elon2, $az3, $hwidm, \$lat4, \$lon4, \$az5);
-    $xg .= "$lon4 $lat4\n";
-    $xg .= "$lon1 $lat1\n";
-    $xg .= "NEXT\n";
+    $xg .= "# Rect using $elat1,$elon1 $elat2,$elon2 len $lkm, wid $wkm\n";
+    my $from = "";
+    my $to   = "";
+    $xg .= get_arrow_xg($from,$elat1,$elon1,$to,$elat2,$elon2,$az1,$hwidm,'orange');
+    ## my ($from,$wlat1,$wlon1,$to,$wlat2,$wlon2,$whdg1,$hwid,$color) = @_;
+    if (!$add_arrow_sides) {
+        $xg .= "color gray\n";
+        $res = fg_geo_direct_wgs_84($elat1,$elon1, $az3, $hwidm, \$lat1, \$lon1, \$az5);
+        $xg .= "$lon1 $lat1\n";
+        $res = fg_geo_direct_wgs_84($elat1,$elon1, $az4, $hwidm, \$lat2, \$lon2, \$az5);
+        $xg .= "$lon2 $lat2\n";
+        $res = fg_geo_direct_wgs_84($elat2,$elon2, $az4, $hwidm, \$lat3, \$lon3, \$az5);
+        $xg .= "$lon3 $lat3\n";
+        $res = fg_geo_direct_wgs_84($elat2,$elon2, $az3, $hwidm, \$lat4, \$lon4, \$az5);
+        $xg .= "$lon4 $lat4\n";
+        $xg .= "$lon1 $lat1\n";
+        $xg .= "NEXT\n";
+    }
     return $xg;
 }
 
@@ -451,7 +524,9 @@ sub process_in_file($) {
                 }
                 $wpxg .= "NEXT\n";
                 $xg .= $pxg;
-                $xg .= $wpxg;
+                if ($add_center_line) {
+                    $xg .= $wpxg;
+                }
             }
         }
     }
