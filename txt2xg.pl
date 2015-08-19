@@ -82,6 +82,7 @@ sub prtw($) {
 my $apt_file = $CDATROOT.$PATH_SEP.'Airports'.$PATH_SEP.'apt.dat.gz';
 my $awy_file = $CDATROOT.$PATH_SEP.'Navaids'.$PATH_SEP.'awy.dat.gz';
 my $fix_file = $CDATROOT.$PATH_SEP.'Navaids'.$PATH_SEP.'fix.dat.gz';
+my $nav_file = $CDATROOT.$PATH_SEP.'Navaids'.$PATH_SEP.'nav.dat.gz';
 
 my $apts_csv = $perl_dir.'circuits'.$PATH_SEP.'airports2.csv';
 my $rwys_csv = $perl_dir.'circuits'.$PATH_SEP.'runways.csv';
@@ -101,6 +102,7 @@ my ($rfixarr);
 my $done_fix_arr = 0;
 sub load_fix_file {
     return $rfixarr if ($done_fix_arr);
+	prt("Loading fix file $fix_file... moment...\n");
     $rfixarr = load_gzip_file($fix_file);
     $done_fix_arr = 1;
     return $rfixarr;
@@ -178,6 +180,130 @@ sub search_fix_file($) {
     return $cnt;
 }
 
+#######################################################################
+# =============================
+# NAV FILE INFO
+# nav.dat.gz CODES
+my $navNDB = '2';
+my $navVOR = '3';
+my $navILS = '4';
+my $navLOC = '5';
+my $navGS  = '6';
+my $navOM  = '7';
+my $navMM  = '8';
+my $navIM  = '9';
+my $navVDME = '12';
+my $navNDME = '13';
+# my @navset = ($navNDB, $navVOR, $navILS, $navLOC, $navGS, $navOM, $navMM, $navIM, $navVDME, $navNDME);
+my %nav2type = (
+    $navNDB => 'NDB',
+    $navVOR => 'VOR',
+    $navILS => 'ILS',
+    $navLOC => 'LOC',
+    $navGS  => 'GS',
+    $navOM  => 'OM',
+    $navMM  => 'MM',
+    $navIM  => 'IM',
+    $navVDME => 'VDME',
+    $navNDME => 'NDME'
+    );
+
+sub get_nav_type_stg($) {
+    my $typ = shift;
+    if (defined $nav2type{$typ}) {
+        return $nav2type{$typ};
+    }
+    return "Type $typ unknown";
+}
+sub is_defined_nav_type($) {
+    my $typ = shift;
+    return 1 if (defined $nav2type{$typ});
+    return 0;
+}
+
+# =============================
+
+sub load_nav_lines() { 
+	prt("Loading the navaids file $nav_file... moment...\n");
+	return load_gzip_file($nav_file); 
+}
+
+####################################################################
+### load navaids, and keep DISTANCE from the airport given
+sub load_nav_file() {
+    my $rnav = load_nav_lines();
+    my $cnt = scalar @{$rnav};
+    prt("[v1] Loaded $cnt lines, from [$nav_file]...\n") if (VERB1());
+    my ($i,$line,$len,$lnn,@arr,$nc);
+    my ($typ,$nlat,$nlon,$nalt,$nfrq,$nrng,$nfrq2,$nid,$name,$navcnt);
+    my ($s,$az1,$az2);
+    $lnn = 0;
+    $navcnt = 0;
+    my @navlist = ();
+    for ($i = 0; $i < $cnt; $i++) {
+        $line = trim_all(${$rnav}[$i]);
+        $len = length($line);
+        next if ($len == 0);
+        next if ($line =~ /\s+Version\s+/i);
+		@arr = split(/\s+/,$line);
+		$nc = scalar @arr;
+		$typ = $arr[0];
+        next if ($typ eq 'I');
+        last if ($typ eq '99');
+        if (!is_defined_nav_type($typ)) {
+            prtw("WARNING:$lnn: Undefined [$line]\n");
+            next;
+        }
+        $navcnt++;
+		# 0   1 (lat)   2 (lon)        3     4   5           6   7  8++
+		# 2   38.087769 -077.324919  284   396  25       0.000 APH  A P Hill NDB
+		# 3   57.103719  009.995578   57 11670 100       1.000 AAL  Aalborg VORTAC
+		# 4   39.980911 -075.877814  660 10850  18     281.662 IMQS 40N 29 ILS-cat-I
+		# 4  -09.458922  147.231225  128 11010  18     148.650 IWG  AYPY 14L ILS-cat-I
+		# 5   40.034606 -079.023281 2272 10870  18     236.086 ISOZ 2G9 24 LOC
+		# 5   67.018506 -050.682072  165 10955  18      61.600 ISF  BGSF 10 LOC
+		# 6   39.977294 -075.860275  655 10850  10  300281.205 ---  40N 29 GS
+		# 6  -09.432703  147.216444  128 11010  10  302148.785 ---  AYPY 14L GS
+		# 7   39.960719 -075.750778  660     0   0     281.205 ---  40N 29 OM
+		# 7  -09.376150  147.176867  146     0   0     148.785 JSN  AYPY 14L OM
+		# 8  -09.421875  147.208331   91     0   0     148.785 MM   AYPY 14L MM
+		# 8  -09.461050  147.232544  146     0   0     328.777 PY   AYPY 32R MM
+		# 9   65.609444 -018.052222   32     0   0      22.093 ---  BIAR 01 IM
+		# 9   08.425319  004.475597 1126     0   0      49.252 IL   DNIL 05 IM
+		# 12 -09.432703  147.216444   11 11010  18       0.000 IWG  AYPY 14L DME-ILS
+		# 12 -09.449222  147.226589   11 10950  18       0.000 IBB  AYPY 32R DME-ILS
+        $nlat = $arr[1];
+        $nlon = $arr[2];
+        $nalt = $arr[3];
+        $nfrq = $arr[4];
+        $nrng = $arr[5];
+        $nfrq2 = $arr[6];
+        $nid = $arr[7];     # this is an ICAO if it is an ILS
+        $name = '';
+        for (my $i = 8; $i < $nc; $i++) {
+            $name .= ' ' if length($name);
+            $name .= $arr[$i];
+        }
+        #push(@navlist,[$typ,$nlat,$nlon,$nalt,$nfrq,$nrng,$nfrq2,$name,$s,$az1,$az2]);
+        #              0    1     2     3     4     5     6      7    
+        push(@navlist,[$typ,$nlat,$nlon,$nalt,$nfrq,$nrng,$nid  ,$name]);
+    }
+    prt("Loaded $navcnt navigation aids...\n"); # if (VERB5());
+    return \@navlist;
+}
+
+sub find_nav_id($$) {
+    my ($rna,$id) = @_;
+	my $cnt = scalar @{$rna};
+	my ($i,$ra,$nid);
+	my @arr = ();
+	for ($i = 0; $i < $cnt; $i++) {
+		$ra = ${$rna}[$i];
+		$nid = ${$ra}[6];
+		push(@arr,$ra) if ($nid eq $id);
+	}
+	# if more than one, get closest...
+}
 
 #######################################################################
 
@@ -198,6 +324,7 @@ sub process_in_file($) {
     #my $rfh = search_fix_file("MATIX");
     my $rfa = load_fix_file();
     my $rfh = load_fix_hash($rfa);
+	my $rna = load_nav_file();
 
     $section = '';
     foreach $line (@lines) {
@@ -375,6 +502,24 @@ sub parse_args {
                     $load_log = 1;
                 }
                 prt("Set to load log at end. ($load_log)\n") if ($verb);
+            } elsif ($sarg =~ /^f/) {
+                need_arg(@av);
+                shift @av;
+                $sarg = $av[0];
+                $fix_file = $sarg;
+                prt("Set the fix file to [$fix_file].\n") if ($verb);
+				if (! -f $fix_file) {
+					pgm_exit(1,"Error: Can NOT locate $fix_file! Check name, location\n");
+				}
+            } elsif ($sarg =~ /^n/) {
+                need_arg(@av);
+                shift @av;
+                $sarg = $av[0];
+                $nav_file = $sarg;
+                prt("Set the nav file to [$nav_file].\n") if ($verb);
+				if (! -f $nav_file) {
+					pgm_exit(1,"Error: Can NOT locate $nav_file! Check name, location\n");
+				}
             } elsif ($sarg =~ /^o/) {
                 need_arg(@av);
                 shift @av;
@@ -414,6 +559,15 @@ sub give_help {
     prt(" --verb[n]     (-v) = Bump [or set] verbosity. def=$verbosity\n");
     prt(" --load        (-l) = Load LOG at end. ($outfile)\n");
     prt(" --out <file>  (-o) = Write output to this file.\n");
+    my $msg = 'ok';
+    if (! -f $fix_file) {
+        $msg = '**NF**';
+    }
+    prt(" --fix <file>  (-f) = Set the fix.dat.gz file. (def=$fix_file $msg)\n");
+	$msg = 'NF';
+	$msg = 'ok' if (-f $nav_file);
+    prt(" --nav <file>  (-n) = Set the nav.dat.gz file. (def=$nav_file $msg)\n");
+
 }
 
 # eof - template.pl
