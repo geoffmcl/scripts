@@ -31,7 +31,10 @@ my $VERS = "0.0.5 2015-01-09";
 my $load_log = 0;
 my $in_file = '';
 my $verbosity = 0;
-my $out_file = '';
+my $out_file = $temp_dir.$PATH_SEP."temptxt2xg.xg";
+my $star_color = 'green';
+my $sid_color  = 'blue';
+my $app_color  = 'white';
 
 # ### DEBUG ###
 my $debug_on = 1;
@@ -292,10 +295,10 @@ sub load_nav_file() {
     return \@navlist;
 }
 
-sub find_nav_id($$) {
-    my ($rna,$id) = @_;
+sub find_nav_id($$$$) {
+    my ($rna,$id,$rlat,$rlon) = @_;
 	my $cnt = scalar @{$rna};
-	my ($i,$ra,$nid);
+	my ($i,$ra,$nid,$nlat,$nlon);
 	my @arr = ();
 	for ($i = 0; $i < $cnt; $i++) {
 		$ra = ${$rna}[$i];
@@ -303,6 +306,14 @@ sub find_nav_id($$) {
 		push(@arr,$ra) if ($nid eq $id);
 	}
 	# if more than one, get closest...
+    $cnt = scalar @arr;
+    if ($cnt) {
+        $ra = $arr[0];
+        $nlat = ${$ra}[1];
+        $nlon = ${$ra}[2];
+        ${$rlat} = $nlat;
+        ${$rlon} = $nlon;
+    }
 }
 
 #######################################################################
@@ -318,7 +329,7 @@ sub process_in_file($) {
     prt("Processing $lncnt lines, from [$inf]...\n");
     my ($line,$inc,$lnn,$len,$section,@arr,$cnt,$i);
     my ($ns,$ew,$lat,$lon,$dlat,$dlon,$name);
-    my (@arr2,$wp);
+    my (@arr2,$wp,$ra,$color,$plat,$plon,$pcnt);
     $lnn = 0;
     my %waypoints = ();
     #my $rfh = search_fix_file("MATIX");
@@ -381,10 +392,18 @@ sub process_in_file($) {
     foreach $name (@arr) {
         $waypoints{$name} = ${$rfh}{$name}; # [$lat,$lon];
     }
+    foreach $ra (@{$rna}) {
+        $lat = ${$ra}[1];
+        $lon = ${$ra}[2];
+		$name  = ${$ra}[6];
+        $waypoints{$name} = [$lat,$lon];
+	}
 
     $lnn = 0;
     $section = '';
     my %dupes = ();
+    my %setwp = ();
+    my $xg = "# sid/star/app from $inf\n";
     foreach $line (@lines) {
         chomp $line;
         $line = trim_all($line);
@@ -411,6 +430,7 @@ sub process_in_file($) {
             $name = $arr[0];
             $inc  = $arr[1];
             if ($section =~ /^STAR/) {
+                $color = $star_color;
                 @arr2 = split(/\s+/,$name);
                 $name = $arr2[0];
                 @arr2 = split("-",$inc);
@@ -420,10 +440,26 @@ sub process_in_file($) {
                     $arr2[$i] = $inc;
                 }
                 prt("$lnn:star $name = ".join(" ",@arr2)."\n");
+                $pcnt = 0;
                 for ($i = 0; $i < $cnt; $i++) {
                     $wp = $arr2[$i];
                     last if ($wp =~ /^\#/);
-                    if (! defined $waypoints{$wp}) {
+                    if (defined $waypoints{$wp}) {
+                        $ra = $waypoints{$name};
+                        $lat = ${$ra}[0];
+                        $lon = ${$ra}[1];
+                        $xg .= "color $color\n";
+                        if (!defined $setwp{$wp}) {
+                            $setwp{$wp} = 1;
+                            $xg .= "anno $lon $lat $wp\n";
+                        }
+                        $xg .= "$lon $lat\n";
+                        $xg .= "NEXT\n";
+                        if ($pcnt) {
+
+                        }
+                        $pcnt++;
+                    } else {
                         if (! defined $dupes{$wp}) {
                             $dupes{$wp} = 1;
                             prtw("WARNING: star waypoint [$wp] NOT in hash!\n");
@@ -433,7 +469,9 @@ sub process_in_file($) {
 
             } elsif ($section =~ /^SID/) {
                 # to do
+                $color = $sid_color;
             } elsif ($section =~ /^APP/) {
+                $color = $app_color;
                 @arr2 = split("-",$inc);
                 $cnt = scalar @arr2;
                 for ($i = 0; $i < $cnt; $i++) {
@@ -444,7 +482,18 @@ sub process_in_file($) {
                 for ($i = 0; $i < $cnt; $i++) {
                     $wp = $arr2[$i];
                     last if ($wp =~ /^\#/);
-                    if (! defined $waypoints{$wp}) {
+                    if (defined $waypoints{$wp}) {
+                        $ra = $waypoints{$name};
+                        $lat = ${$ra}[0];
+                        $lon = ${$ra}[1];
+                        $xg .= "color $color\n";
+                        if (!defined $setwp{$wp}) {
+                            $setwp{$wp} = 1;
+                            $xg .= "anno $lon $lat $wp\n";
+                        }
+                        $xg .= "$lon $lat\n";
+                        $xg .= "NEXT\n";
+                    } else {
                         if (! defined $dupes{$wp}) {
                             $dupes{$wp} = 1;
                             prtw("WARNING: app waypoint [$wp] NOT in hash!\n");
@@ -458,6 +507,10 @@ sub process_in_file($) {
             }
         }
     }
+
+    rename_2_old_bak($out_file);
+    write2file($xg,$out_file);
+    prt("XG(raph) written to $out_file\n");
 }
 
 #########################################
