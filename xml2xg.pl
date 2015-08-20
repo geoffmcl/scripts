@@ -39,6 +39,10 @@ my $add_second_end = 1;
 my $add_arrow_sides = 1;
 my $add_center_line = 0;
 
+my $star_color = 'green';
+my $sid_color = 'blue';
+my $app_color = 'white';
+
 # ### DEBUG ###
 my $debug_on = 1;
 my $def_file = 'circuits\EHAM.procedures.xml';
@@ -416,7 +420,7 @@ sub process_in_file($) {
 
     ##################################################################################
     $key = 'Star';
-	$color = 'green';
+	$color = $star_color;   # was 'green'
     if (defined ${$aref}{$key}) {
         my $starra = ${$aref}{$key};
         $cnt = scalar @{$starra};
@@ -475,7 +479,7 @@ sub process_in_file($) {
     ##################################################################################
     ##################################################################################
     $key = 'Sid';
-	$color = 'blue';
+	$color = $sid_color; # was 'blue'
     if (defined ${$aref}{$key}) {
         my $starra = ${$aref}{$key};
         $cnt = scalar @{$starra};
@@ -536,7 +540,7 @@ sub process_in_file($) {
     ##################################################################################
     ##################################################################################
     $key = 'Approach';
-	$color = 'white';
+	$color = $app_color; # was 'white'
     if (defined ${$aref}{$key}) {
         my $starra = ${$aref}{$key};
         $cnt = scalar @{$starra};
