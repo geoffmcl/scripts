@@ -37,6 +37,11 @@ my $star_color = 'green';
 my $sid_color  = 'blue';
 my $app_color  = 'white';
 my $usr_anno = '';
+my $in_icao = '';
+
+my $add_star_wps = 1;
+my $add_sid_wps = 1;
+my $add_app_wps = 1;
 
 my $m_max_path = 300000;    # was 100000
 my $m_path_widthm = 500; # was 300; # was 5000;   
@@ -49,10 +54,14 @@ my $debug_on = 1;
 #my $def_file = 'C:\Users\user\Documents\FG\LFPO.procedures.txt';
 my $def_file = $perl_dir.'circuits'.$PATH_SEP.'LFPO.procedures.txt';
 my $def_anno = "anno 2.308119 48.75584 Rue Pernoud, Antony";
+my $def_icao = 'LFPO';
 
 ### program variables
 my @warnings = ();
 my $tmp_xg = $temp_dir.$PATH_SEP."temptemp.xg";
+my $apt_icao = '';
+my ($in_lat,$in_lon);
+my $apt_xg = '';
 
 sub VERB1() { return $verbosity >= 1; }
 sub VERB2() { return $verbosity >= 2; }
@@ -110,6 +119,7 @@ sub load_gzip_file($) {
     prt("[v9] Got ".scalar @arr." lines to scan...\n") if (VERB9());
     return \@arr;
 }
+
 
 my ($rfixarr);
 my $done_fix_arr = 0;
@@ -389,6 +399,409 @@ sub get_dist_stg_km($) {
     return $km;
 }
 
+###################################################################
+### APT XG
+
+sub get_opposite_rwy($) {
+	my $rwy = shift;
+	my $rwy2 = '';
+	if ($rwy =~ /^(\d+)(R|L|C)*$/) {
+		$rwy2 = ($1 > 18) ? $1 - 18 : $1 + 18;
+		$rwy2 = '0'.$rwy2 if ($rwy2 < 10);
+        if (defined $2) {
+			$rwy2 .= 'L' if ($2 eq 'R');
+            $rwy2 .= 'R' if ($2 eq 'L');
+            $rwy2 .= 'C' if ($2 eq 'C');
+        }
+	}
+	return $rwy2;
+}
+
+
+# 0    1    2    3    4    5     6
+# icao,lat1,lon1,lat2,lon2,width,sign
+# VHXX,22.32526300,114.19222700,22.30395000,114.21587400,54.86,13
+# E46,29.88083567,-103.70108085,29.86895821,-103.69317249,30.48,15
+sub process_runway_file($$) {
+    my ($inf,$icao) = @_;
+    if (! open INF, "<$inf") {
+        pgm_exit(1,"ERROR: Unable to open file [$inf]\n"); 
+    }
+    my @lines = <INF>;
+    close INF;
+    my $lncnt = scalar @lines;
+    prt("Processing $lncnt lines, from [$inf]...\n") if (VERB9());
+    my ($line,$inc,$lnn,@arr,$txt,$elat1,$elon1,$name);
+    my ($elat2,$elon2,$wid,$sign);
+    my ($az1,$az2,$s,$res,$az3,$az4,$az5);
+    $lnn = 0;
+    my $xg = '';
+    foreach $line (@lines) {
+        chomp $line;
+        $lnn++;
+        next if ($lnn == 1);
+        @arr = split(",",$line);
+        $txt = $arr[0];
+        if ($txt eq $icao) {
+            $elat1 = $arr[1];
+            $elon1 = $arr[2];
+            $elat2 = $arr[3];
+            $elon2 = $arr[4];
+            $wid  = $arr[5];
+            $name = $arr[6];
+            $res = fg_geo_inverse_wgs_84($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$s);
+			# mark ENDS, and center line
+            $xg .= "color blue\n";
+            $xg .= "anno $elon1 $elat1 $name\n";
+            $xg .= "$elon1 $elat1\n";
+            $xg .= "$elon2 $elat2\n";
+            $xg .= "NEXT\n";
+            my ($lat1,$lon1,$lat2,$lon2,$lat3,$lon3,$lat4,$lon4,$rwy2);
+			$rwy2 = get_opposite_rwy($name);
+            $xg .= "anno $elon2 $elat2 $rwy2\n" if (length($rwy2));
+
+			# draw runway rectangles
+            my $hwidm = $wid / 2;
+            $xg .= "color red\n";
+            $az3 = $az1 + 90;
+            $az3 -= 360 if ($az3 >= 360);
+            $az4 = $az1 - 90;
+            $az4 += 360 if ($az4 < 0);
+            $res = fg_geo_direct_wgs_84($elat1,$elon1, $az3, $hwidm, \$lat1, \$lon1, \$az5);
+            $res = fg_geo_direct_wgs_84($elat1,$elon1, $az4, $hwidm, \$lat2, \$lon2, \$az5);
+            $res = fg_geo_direct_wgs_84($elat2,$elon2, $az4, $hwidm, \$lat3, \$lon3, \$az5);
+            $res = fg_geo_direct_wgs_84($elat2,$elon2, $az3, $hwidm, \$lat4, \$lon4, \$az5);
+            $xg .= "$lon1 $lat1\n";
+            $xg .= "$lon2 $lat2\n";
+            $xg .= "$lon3 $lat3\n";
+            $xg .= "$lon4 $lat4\n";
+            $xg .= "$lon1 $lat1\n";
+            $xg .= "NEXT\n";
+        }
+    }
+    return $xg;
+}
+
+sub find_apt_gz($) {
+    my $ficao = shift;
+    my ($cnt,$msg);
+    my $aptdat = $apt_file;
+    #### pgm_exit(1,"TEMP EXIT\n");
+    prt("[v9] Loading $aptdat file ... moment..\n"); # if (VERB9());
+    mydie("ERROR: Can NOT locate $aptdat ...$!...\n") if ( !( -f $aptdat) );
+    ###open IF, "<$aptdat" or mydie("OOPS, failed to open [$aptdat] ... check name and location ...\n");
+    open IF, "gzip -d -c $aptdat|" or mydie( "ERROR: CAN NOT OPEN $aptdat...$!...\n" );
+    my @lines = <IF>;
+    close IF;
+    $cnt = scalar @lines;
+    prt("[v9] Got $cnt lines to scan for ICAO $ficao...\n"); # if (VERB9());
+    my ($line,$len,$type,@arr);
+    my $g_version = 0;
+    foreach $line (@lines) {
+        chomp $line;
+        $line = trim_all($line);
+        if ($line =~ /\s+Version\s+/i) {
+            @arr = split(/\s+/,$line);
+            $g_version = $arr[0];
+            $msg .= "Version $g_version";
+            last;
+        }
+    }
+    prt("$msg\n") if (VERB1());
+    my $lnn = 0;
+    my ($rlat,$rlon,$glat,$glon,$rwyt,$rwycnt,$got_twr,$alat,$alon);
+    my ($rlat1,$rlon1,$rlat2,$rlon2,$wwcnt,$helicnt,$aptln);
+    my ($aalt,$actl,$abld,$icao,$name,@arr2);
+    #my $acsv = "icao,latitude,longitude,name\n";
+    $glat = 0;
+    $glon = 0;
+    $rwycnt = 0;
+    $wwcnt = 0;
+    $helicnt = 0;
+    $got_twr = 0;
+    $aptln = '';
+    my $csv = "lat,lon,altft,type,rwys,icao,name\n";
+    foreach $line (@lines) {
+        chomp $line;
+        $lnn++;
+        $line = trim_all($line);
+        $len = length($line);
+        next if ($len == 0);
+        next if ($line =~ /^I/);
+        if ($line =~ /^\d+\s+Version\s+/) {
+            #    my $ind = index($line,',');
+            $len = index($line,',');
+            $len = 80 if ($len <= 0);
+            prt(substr($line,0,$len)." ($g_version) file: $aptdat\n");
+            next;
+        }
+        ###prt("$line\n");
+        @arr = split(/ /,$line);
+        $type = $arr[0];
+        ###if ($line =~ /^1\s+/) {	# start with '1'
+        # if 1=Airport, 16=SeaPlane, 17=Heliport
+        if ($type == 99) {
+        ### } elsif ($line =~ /^$lastln\s?/) {	# 99, followed by space, count 0 or more ...
+            prt( "[v9] Reached END OF FILE ... \n" ) if (VERB9());
+            last;
+        }
+        if (($type == 1)||($type == 16)||($type == 17)) {	# start with 1, 16, 17
+            #prt("$lnn: $line\n");
+            $rwycnt += $wwcnt;
+            $rwycnt += $helicnt;
+            if (length($aptln)) {
+                if ($rwycnt > 0) {
+                    if (!$got_twr) {
+                        $alat = $glat / $rwycnt;
+                        $alon = $glon / $rwycnt;
+                    }
+                    @arr2 = split(/\s+/,$aptln);
+                    $aalt = $arr2[1]; # Airport (general) ALTITUDE AMSL
+                    $actl = $arr2[2]; # control tower
+                    $abld = $arr2[3]; # buildings
+                    $icao = $arr2[4]; # ICAO
+                    $name = join(' ', splice(@arr2,5)); # Name
+                    $csv .= "$alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n";
+                    if ($ficao eq $icao) {
+                        prt("Found $alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n");
+                        $apt_icao = $icao;
+                        $in_lat = $alat;
+                        $in_lon = $alon;
+                        $apt_xg = "anno $in_lon $in_lat $icao $name";
+                    }
+                } else {
+                    prtw("WARNING: apt no runways!!! $aptln\n");
+                }
+            }
+            $aptln = $line;
+            $glat = 0;
+            $glon = 0;
+            $rwycnt = 0;
+            $got_twr = 0;
+            $wwcnt = 0;
+            $helicnt = 0;
+        } elsif ($type == 10) {
+            # 10  36.962213  127.031071 14x 131.52  8208 1595.0620 0000.0000   150 321321  1 0 3 0.25 0 0300.0300
+            # 10  36.969145  127.020106 xxx 221.51   329 0.0 0.0    75 161161  1 0 0 0.25 0 
+            $rlat = $arr[1];
+            $rlon = $arr[2];
+            $rwyt = $arr[3]; # text 'xxx'=taxiway, 'H1x'=heleport, else a runway
+            ###prt( "$line [$rlat, $rlon]\n" );
+            if ( $rwyt ne "xxx" ) {
+                # $rwyt =~ s/x//g;    # remove trailing 'x'
+                $glat += $rlat;
+                $glon += $rlon;
+                $rwycnt++;
+                ###my @ar3 = @arr;
+                ###push(@runways, \@ar3);
+                prt("$lnn: $line\n");
+            }
+        } elsif (($type >= 50)&&($type <= 56)) {
+            # frequencies
+        } elsif ($type == 14) {
+            # tower location
+            # 14  52.911007  156.878342    0 0 Tower Viewpoint
+            $got_twr = 1;
+            $alat = $arr[1];
+            $alon = $arr[2];
+        } elsif ($type == 15) {
+            # ramp startup
+        } elsif ($type == 18) {
+            # Airport light beacon
+        } elsif ($type == 19) {
+            # Airport windsock
+        # =============================================================================
+        # 20140110 - Switch to LATEST git fgdata - IE 1000 Version - data cycle 2013.10
+        # So must ADD all the NEW 'types', just like x-plane
+        } elsif ($type == 20) {
+            # 20 22.32152700 114.19750500 224.10 0 3 {@Y,^l}31-13{^r}
+        } elsif ($type == 21) {
+            # 21 22.31928000 114.19800800 3 134.09 3.10 13 PAPI-4R
+        } elsif ($type == 100) {
+            # See full version 1000 specs below
+            # 0   1     2 3 4    5 6 7 8  9           10           11   12   13 14 15 16 17 18          19           20   21   22 23 24 25
+            # 100 29.87 3 0 0.00 1 2 1 16 43.91080605 004.90321905 0.00 0.00 2  0  0  0  34 43.90662331 004.90428974 0.00 0.00 2  0  0  0
+            $rlat1 = $arr[9];  # $of_lat1
+            $rlon1 = $arr[10]; # $of_lon1
+            $rlat2 = $arr[18]; # $of_lat2
+            $rlon2 = $arr[19]; # $of_lon2
+            $rlat = ($rlat1 + $rlat2) / 2;
+            $rlon = ($rlon1 + $rlon2) / 2;
+            ###prt( "$line [$rlat, $rlon]\n" );
+            $glat += $rlat;
+            $glon += $rlon;
+            $rwycnt++;
+            ##my @a2 = @arr;
+            ##push(@runways, \@a2);
+        } elsif ($type == 101) {	# Water runways
+            # 0   1      2 3  4           5             6  7           8
+            # 101 243.84 0 16 29.27763293 -089.35826258 34 29.26458929 -089.35340410
+            # 101 22.86  0 07 29.12988952 -089.39561501 25 29.13389936 -089.38060001
+            # prt("$.: $line\n");
+            $rlat1 = $arr[4];
+            $rlon1 = $arr[5];
+            $rlat2 = $arr[7];
+            $rlon2 = $arr[8];
+            $rlat = sprintf("%.8f",(($rlat1 + $rlat2) / 2));
+            $rlon = sprintf("%.8f",(($rlon1 + $rlon2) / 2));
+            if (!m_in_world_range($rlat,$rlon)) {
+                prtw( "WARNING: $.: $line [$rlat, $rlon] NOT IN WORLD\n" );
+                next;
+            }
+            $glat += $rlat;
+            $glon += $rlon;
+            ##my @a2 = @arr;
+            ##push(@waterways, \@a2);
+            $wwcnt++;
+        } elsif ($type == 102) {	# Heliport
+            # my $heli =   '102'; # Helipad
+            # 0   1  2           3            4      5     6     7 8 9 10   11
+            # 102 H2 52.48160046 013.39580674 355.00 18.90 18.90 2 0 0 0.00 0
+            # 102 H3 52.48071507 013.39937648 2.64   13.11 13.11 1 0 0 0.00 0
+            # prt("$.: $line\n");
+            $rlat = sprintf("%.8f",$arr[2]);
+            $rlon = sprintf("%.8f",$arr[3]);
+            if (!m_in_world_range($rlat,$rlon)) {
+                prtw( "WARNING: $.: $line [$rlat, $rlon] NOT IN WORLD\n" );
+                next;
+            }
+            $glat += $rlat;
+            $glon += $rlon;
+            #my @a2 = @arr;
+            #push(@heliways, \@a2);
+            $helicnt++;
+        } elsif ($type == 110) {
+            # 110 2 0.00 134.10 runway sholder
+        } elsif ($type == 111) {
+            # 111 22.30419700 114.21613100
+        } elsif ($type == 112) {
+            # 112 22.30449500 114.21644400 22.30480900 114.21677000 51 102
+        } elsif ($type == 113) {
+            # 113 22.30370300 114.21561700
+        } elsif ($type == 114) {
+            # 114 43.29914799 -008.38013558 43.29965322 -008.37970933
+        } elsif ($type == 115) {
+            # 115 22.31009400 114.21038500
+        } elsif ($type == 116) {
+            # 116 43.30240028 -008.37799316 43.30271076 -008.37878407
+        } elsif ($type == 120) {
+            # 120 hold lines W A13
+        } elsif ($type == 130) {
+            # 130 Airport Boundary
+        } elsif ($type == 1000) {
+            # 1000 Northerly flow
+        } elsif ($type == 1001) {
+            # 1001 KGRB 270 020 999
+        } elsif ($type == 1002) {
+            # 1002 KGRB 0
+        } elsif ($type == 1003) {
+            # 1003 KGRB 0
+        } elsif ($type == 1004) {
+            # 1004 0000 2400
+        } elsif ($type == 1100) {
+            # 1100 36 12654 all heavy|jets|turboprops|props 000360 000360 Northerly
+        } elsif ($type == 1101) {
+            # 1101 36 left
+        } elsif ($type == 1200) {
+            # ????
+        } elsif ($type == 1201) {
+            # 1201 42.75457409 -073.80880021 both 2110 _start
+        } elsif ($type == 1202) {
+            # 1202 2110 2112 twoway taxiway
+        } elsif ($type == 1204) {
+            # 1204 arrival 01,19
+        } elsif ($type == 1300) {
+            # 1300 30.32875704 -009.41140596 323.85 misc jets|props Ramp
+        # ===============================================================================
+        } else {
+            pgm_exit(1,"Uncase line $line\n");
+        }
+    }
+    ################################
+    # process LAST airport
+    $rwycnt += $wwcnt;
+    $rwycnt += $helicnt;
+    if (length($aptln)) {
+        if ($rwycnt > 0) {
+            if (!$got_twr) {
+                $alat = $glat / $rwycnt;
+                $alon = $glon / $rwycnt;
+            }
+            @arr2 = split(/\s+/,$aptln);
+            $aalt = $arr2[1]; # Airport (general) ALTITUDE AMSL
+            $actl = $arr2[2]; # control tower
+            $abld = $arr2[3]; # buildings
+            $icao = $arr2[4]; # ICAO
+            $name = join(' ', splice(@arr2,5)); # Name
+            $csv .= "$alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n";
+            if ($ficao eq $icao) {
+                prt("Found $alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n");
+                $apt_icao = $icao;
+                $in_lat = $alat;
+                $in_lon = $alon;
+                $apt_xg = "anno $in_lon $in_lat $aalt $icao $name\n";
+				$apt_xg .= "color red\n";
+		        $apt_xg .= "$in_lon $in_lat\n";
+				$apt_xg .= "NEXT\n";
+            }
+        } else {
+            prtw("WARNING: apt no runways!!! $aptln\n");
+        }
+    }
+    rename_2_old_bak($apts_csv);
+    write2file($csv,$apts_csv);
+    prt("Scanned $lnn lines... written csv to $apts_csv\n");
+}
+
+sub find_apt_csv($$) {
+    my ($ficao,$inf) = @_;
+    if (! open INF, "<$inf") {
+        pgm_exit(1,"ERROR: Unable to open file [$inf]\n"); 
+    }
+    my @lines = <INF>;
+    close INF;
+    my $lncnt = scalar @lines;
+    prt("Processing $lncnt lines, from [$inf]...\n");
+    my ($line,$inc,$lnn,@arr);
+    $lnn = 0;
+    my ($alat,$alon,$aalt,$type,$rwycnt,$icao,$name);
+	# $apt_xg = # seek airport $ficao\n";
+    foreach $line (@lines) {
+        chomp $line;
+        $lnn++;
+        @arr = split(',',$line);
+        $icao = $arr[5];
+        if ($icao eq $ficao) {
+			$alat = $arr[0];
+			$alon = $arr[1];
+			$aalt = $arr[2];
+			$type = $arr[3];
+			$rwycnt = $arr[4];
+			$name = join(' ', splice(@arr,6)); # Name
+            prt("Found $alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n");
+            $apt_icao = $icao;
+            $in_lat = $alat;
+            $in_lon = $alon;
+			$apt_xg .= "color red\n";
+            $apt_xg .= "$in_lon $in_lat\n";
+			$apt_xg .= "NEXT\n";
+            $apt_xg .= "anno $in_lon $in_lat $aalt $icao $name\n";
+            last;
+        }
+    }
+}
+
+sub find_apt($) {
+    my $ficao = shift;
+    my $inf = $apts_csv;
+    if (-f $inf) {
+        find_apt_csv($ficao,$inf);
+    } else {
+        find_apt_gz($ficao);
+    }
+}
+
+
 #######################################################################
 sub get_arrow_xg($$$$$$$$$) {
     my ($from,$wlat1,$wlon1,$to,$wlat2,$wlon2,$whdg1,$hwid,$color) = @_;
@@ -559,6 +972,7 @@ sub process_in_file($) {
         }
     }
 
+    rename_2_old_bak($tmp_xg);
     write2file($wpxg,$tmp_xg);
     prt("Written waypoints collected to $tmp_xg\n");
 
@@ -605,12 +1019,14 @@ sub process_in_file($) {
 	}
     prt("Added $len navaids to waypoints hash...\n");
 
+    my ($msg);
     $lnn = 0;
     $section = '';
     my %dupes = ();
     my %setwp = ();
-    my $xg = "# sid/star/app from $inf\n";
-    my ($msg);
+    $msg = "sid/star/app from $inf opts: star=$add_star_wps, sid=$add_sid_wps, app=$add_app_wps";
+    my $xg = "# $msg\n";
+	prt("$msg\n");
     foreach $line (@lines) {
         chomp $line;
         $line = trim_all($line);
@@ -638,6 +1054,7 @@ sub process_in_file($) {
             $inc  = $arr[1];
             if ($section =~ /^STAR/) {
                 $color = $star_color;
+				next if (!$add_star_wps);
                 @arr2 = split(/\s+/,$name);
                 $name = $arr2[0];
                 @arr2 = split("-",$inc);
@@ -683,8 +1100,8 @@ sub process_in_file($) {
                 }
 
             } elsif ($section =~ /^SID/) {
-                # to do
                 $color = $sid_color;
+				next if (!$add_sid_wps);
                 @arr2 = split(/\s+/,$name);
                 $wp = $arr2[0]; # destination of this departure
 
@@ -734,6 +1151,7 @@ sub process_in_file($) {
                 }
             } elsif ($section =~ /^APP/) {
                 $color = $app_color;
+				next if (!$add_app_wps);
                 @arr2 = split("-",$inc);
                 $cnt = scalar @arr2;
                 for ($i = 0; $i < $cnt; $i++) {
@@ -806,6 +1224,15 @@ sub process_in_file($) {
         # $xg .= "$clon $clat\n"; # no this is just the center of the wapoints collected
         $xg .= "NEXT\n";
     }
+	if (length($apt_icao)) {
+		find_apt($apt_icao);
+	    if (length($apt_xg)) {
+		    $xg .= "$apt_xg";
+			if (-f $rwys_csv) {     # def  = $perl_dir."circuits/runways.csv";
+				$xg .= process_runway_file($rwys_csv,$apt_icao);
+			}
+		}
+	}
 
     rename_2_old_bak($out_file);
     write2file($xg,$out_file);
@@ -897,6 +1324,9 @@ sub parse_args {
         if (length($usr_anno) == 0) {
             $usr_anno = $def_anno;
         }
+		$add_star_wps = 0;
+		$add_app_wps  = 0;
+		$apt_icao = $def_icao;
     }
     if (length($in_file) ==  0) {
         pgm_exit(1,"ERROR: No input files found in command!\n");
