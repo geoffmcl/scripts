@@ -38,6 +38,7 @@ my $sid_color  = 'blue';
 my $app_color  = 'white';
 my $usr_anno = '';
 my $in_icao = '';
+my $usr_line = '';
 
 my $add_star_wps = 1;
 my $add_sid_wps = 1;
@@ -54,6 +55,11 @@ my $debug_on = 1;
 #my $def_file = 'C:\Users\user\Documents\FG\LFPO.procedures.txt';
 my $def_file = $perl_dir.'circuits'.$PATH_SEP.'LFPO.procedures.txt';
 my $def_anno = "anno 2.308119 48.75584 Rue Pernoud, Antony";
+my $def_line = "color gray\n".
+"2.306127,48.756332\n".
+"2.308844,48.755655\n".
+"NEXT\n";
+
 my $def_icao = 'LFPO';
 
 ### program variables
@@ -1215,6 +1221,7 @@ sub process_in_file($) {
     }
 
     if (length($usr_anno)) {
+		$xg .= "# User annon\n";
         $xg .= "$usr_anno\n";
         @arr = split(/\s+/,$usr_anno);
         $lon = $arr[1];
@@ -1232,6 +1239,10 @@ sub process_in_file($) {
 				$xg .= process_runway_file($rwys_csv,$apt_icao);
 			}
 		}
+	}
+    if (length($usr_line)) {
+		$xg .= "# User line\n";
+		$xg .= $usr_line;
 	}
 
     rename_2_old_bak($out_file);
@@ -1324,9 +1335,10 @@ sub parse_args {
         if (length($usr_anno) == 0) {
             $usr_anno = $def_anno;
         }
-		$add_star_wps = 0;
-		$add_app_wps  = 0;
+		#$add_star_wps = 0;
+		#$add_app_wps  = 0;
 		$apt_icao = $def_icao;
+		$usr_line = $def_line;
     }
     if (length($in_file) ==  0) {
         pgm_exit(1,"ERROR: No input files found in command!\n");
