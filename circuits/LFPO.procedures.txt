@@ -25,7 +25,10 @@ LUMAN 5E, 5W = LUMAN - CAD - SOTIP - ODILO
 
 [APP ROUTING]
 
-VEBEK = LARPO - PO617 - PO619 - # on 182
+# Rwy 02: to 3000' to EPR, EPR R-107, at D23 EPR turn LEFT, intercept final
+# Rwy 06: to 4000' to EPR, EPR R-107, intercept final
+# Rwy 08: to 3000' to EPR, EPR R-107, intercept final
+VEBEK = LARPO - PO617 - PO619 - EPR - # on 182
 VEBEK = CTL - VALPO - # on 226
 VEBEK = CTL - VALPO - MLN - PO621 - # on 273
 
@@ -102,6 +105,7 @@ PO086 = N48 38.9 E002 20.3
 PO088 = N48 44.9 E002 00.8
 PO090 = N49 08.2 E002 05.5
 MTD   = N49 33.2 E002 29.4
+EPR   = N48 37.5 E001 39.4
 
 [EOF]
 
