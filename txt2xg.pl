@@ -423,6 +423,7 @@ sub get_opposite_rwy($) {
 	return $rwy2;
 }
 
+my %runwayhash = ();
 
 # 0    1    2    3    4    5     6
 # icao,lat1,lon1,lat2,lon2,width,sign
@@ -438,7 +439,7 @@ sub process_runway_file($$) {
     my $lncnt = scalar @lines;
     prt("Processing $lncnt lines, from [$inf]...\n") if (VERB9());
     my ($line,$inc,$lnn,@arr,$txt,$elat1,$elon1,$name);
-    my ($elat2,$elon2,$wid,$sign);
+    my ($elat2,$elon2,$wid,$sign,$key);
     my ($az1,$az2,$s,$res,$az3,$az4,$az5);
     $lnn = 0;
     my $xg = '';
@@ -463,8 +464,15 @@ sub process_runway_file($$) {
             $xg .= "$elon2 $elat2\n";
             $xg .= "NEXT\n";
             my ($lat1,$lon1,$lat2,$lon2,$lat3,$lon3,$lat4,$lon4,$rwy2);
+
+            $key = "RWY".$name;
+            $runwayhash{$key} = [$elat1,$elon1];
 			$rwy2 = get_opposite_rwy($name);
-            $xg .= "anno $elon2 $elat2 $rwy2\n" if (length($rwy2));
+            if (length($rwy2)) {
+                $xg .= "anno $elon2 $elat2 $rwy2\n";
+                $key = "RWY".$rwy2;
+                $runwayhash{$key} = [$elat2,$elon2];
+            }
 
 			# draw runway rectangles
             my $hwidm = $wid / 2;
@@ -911,6 +919,15 @@ sub process_in_file($) {
     my $rfh = load_fix_hash($rfa);
 	my $rna = load_nav_file();
 
+	if (length($apt_icao)) {    # given an airport ICAO, load info
+		find_apt($apt_icao);    # find airport in csv, or apt.dat.gz file - gen $apt_xg if found...
+	    if (length($apt_xg)) {
+			if (-f $rwys_csv) {     # def  = $perl_dir."circuits/runways.csv";
+				$apt_xg .= process_runway_file($rwys_csv,$apt_icao);    # draw the runways and label
+			}
+		}
+	}
+
     my $max_lat = -400;
     my $max_lon = -400;
     my $min_lat = 400;
@@ -1220,6 +1237,9 @@ sub process_in_file($) {
         }
     }
 
+    if (length($apt_xg)) {
+	    $xg .= "$apt_xg";   # add the airport anno to the output...
+	}
     if (length($usr_anno)) {
 		$xg .= "# User annon\n";
         $xg .= "$usr_anno\n";
@@ -1231,15 +1251,7 @@ sub process_in_file($) {
         # $xg .= "$clon $clat\n"; # no this is just the center of the wapoints collected
         $xg .= "NEXT\n";
     }
-	if (length($apt_icao)) {
-		find_apt($apt_icao);
-	    if (length($apt_xg)) {
-		    $xg .= "$apt_xg";
-			if (-f $rwys_csv) {     # def  = $perl_dir."circuits/runways.csv";
-				$xg .= process_runway_file($rwys_csv,$apt_icao);
-			}
-		}
-	}
+
     if (length($usr_line)) {
 		$xg .= "# User line\n";
 		$xg .= $usr_line;
