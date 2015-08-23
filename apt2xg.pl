@@ -25,7 +25,7 @@ my $outfile = $temp_dir.$PATH_SEP."temp.$pgmname.txt";
 open_log($outfile);
 
 # user variables
-my $VERS = "0.0.5 2015-01-09";
+my $VERS = "0.0.6 2015-08-23";
 my $load_log = 0;
 my $in_icao = '';
 my $verbosity = 0;
@@ -38,7 +38,7 @@ my $rwys_csv = $perl_dir.'circuits'.$PATH_SEP.'runways.csv';
 my $ils_csv = $perl_dir.'circuits'.$PATH_SEP.'ils.csv';
 
 # ### DEBUG ###
-my $debug_on = 1;
+my $debug_on = 0;
 my $def_icao = 'LFPO';
 
 ### program variables
@@ -434,4 +434,4 @@ sub give_help {
     prt(" --out <file>  (-o) = Write output to this file.\n");
 }
 
-# eof - template.pl
+# eof - apt2xg.pl
