@@ -2,6 +2,7 @@
 # NAME: txt2xg.pl
 # AIM: SPECIALISED! Just to load a sid/star/... txt file in a little like INI format,
 # and out an xg(raph) of any esults found.
+# 24/08/2015 - Add json output as well...
 # 19/08/2015 geoff mclane http://geoffair.net/mperl
 use strict;
 use warnings;
@@ -56,7 +57,8 @@ my $ils_sep_degs = 3;
 # ### DEBUG ###
 my $debug_on = 1;
 #my $def_file = 'C:\Users\user\Documents\FG\LFPO.procedures.txt';
-my $def_file = $perl_dir.'circuits'.$PATH_SEP.'LFPO.procedures.txt';
+#my $def_file = $perl_dir.'circuits'.$PATH_SEP.'LFPO.procedures.txt';
+my $def_file = $perl_dir.'circuits'.$PATH_SEP.'LFPO.procedure2.txt';
 my $def_anno = "anno 2.308119 48.75584 Rue Pernoud, Antony";
 my $def_line = "color gray\n".
 "2.306127,48.756332\n".
@@ -69,10 +71,12 @@ my $def_icao = 'LFPO';
 my @warnings = ();
 my $tmp_xg = $temp_dir.$PATH_SEP."temptemp.xg";
 my $apt_icao = '';
-my ($in_lat,$in_lon);
+my ($in_lat,$in_lon,$apt_alt,$apt_name);
 my $apt_xg = '';
 my $METER2NM = 0.000539957;
 my $NM2METER = 1852;
+
+my $apt_json = '';
 
 sub VERB1() { return $verbosity >= 1; }
 sub VERB2() { return $verbosity >= 2; }
@@ -502,6 +506,26 @@ sub process_runway_file($$) {
     return $xg;
 }
 
+sub set_apt_xg() {
+    if (defined $apt_alt && defined $apt_icao && defined $apt_name) {
+        $apt_xg = "anno $in_lon $in_lat $apt_alt $apt_icao $apt_name\n";
+        $apt_xg .= "color red\n";
+        $apt_xg .= "$in_lon $in_lat\n";
+        $apt_xg .= "NEXT\n";
+        prt("Set apt xg 'anno $in_lon $in_lat $apt_alt $apt_icao $apt_name'\n");
+        $apt_json = "    \"airport\": {\n".
+            "        \"apt_code\": \"$apt_icao\",\n".
+            "        \"apt_name\": \"$apt_name\",\n".
+            "        \"center_lat\": $in_lat,\n".
+            "        \"center_lon\": $in_lon\n".
+            "    }";
+    } else {
+        prtw("WARNING: Failed to set apt_xg anno $in_lon $in_lat $apt_alt $apt_icao $apt_name\n");
+    }
+}
+
+
+
 sub find_apt_gz($) {
     my $ficao = shift;
     my ($cnt,$msg);
@@ -541,6 +565,7 @@ sub find_apt_gz($) {
     $got_twr = 0;
     $aptln = '';
     my $csv = "lat,lon,altft,type,rwys,icao,name\n";
+    my $add_xg = 0;
     foreach $line (@lines) {
         chomp $line;
         $lnn++;
@@ -587,7 +612,9 @@ sub find_apt_gz($) {
                         $apt_icao = $icao;
                         $in_lat = $alat;
                         $in_lon = $alon;
-                        $apt_xg = "anno $in_lon $in_lat $icao $name";
+                        $apt_alt = $aalt;
+                        $apt_name = $name;
+                        $add_xg = 1;
                     }
                 } else {
                     prtw("WARNING: apt no runways!!! $aptln\n");
@@ -759,15 +786,16 @@ sub find_apt_gz($) {
                 $apt_icao = $icao;
                 $in_lat = $alat;
                 $in_lon = $alon;
-                $apt_xg = "anno $in_lon $in_lat $aalt $icao $name\n";
-				$apt_xg .= "color red\n";
-		        $apt_xg .= "$in_lon $in_lat\n";
-				$apt_xg .= "NEXT\n";
+                $apt_alt = $aalt;
+                $apt_name = $name;
+                $add_xg = 1;
+
             }
         } else {
             prtw("WARNING: apt no runways!!! $aptln\n");
         }
     }
+    set_apt_xg() if ($add_xg);
     rename_2_old_bak($apts_csv);
     write2file($csv,$apts_csv);
     prt("Scanned $lnn lines... written csv to $apts_csv\n");
@@ -802,10 +830,9 @@ sub find_apt_csv($$) {
             $apt_icao = $icao;
             $in_lat = $alat;
             $in_lon = $alon;
-			$apt_xg .= "color red\n";
-            $apt_xg .= "$in_lon $in_lat\n";
-			$apt_xg .= "NEXT\n";
-            $apt_xg .= "anno $in_lon $in_lat $aalt $icao $name\n";
+            $apt_alt = $aalt;
+            $apt_name = $name;
+            set_apt_xg();
             last;
         }
     }
@@ -1000,6 +1027,203 @@ sub process_ils_csv($$) {
     return $xg;
 }
 
+
+# PO 402 = 48°32'16,2'' N 002°17'13,0'' E
+# PO 061 = 48° 45’ 14.0” N - 002° 32’ 47.1” E
+# ($dlat,$dlon) = get_lat_lon_from_stg($inc);
+sub get_lat_lon_from_stg($$$) {
+    my ($inc,$rlat,$rlon) = @_;
+    my $iret = 0;
+    my ($i,$len,$ch,$stage,$tag,$lat,$lon,$get_dec);
+    $stage = 0;
+    $len = length($inc);
+    $lat = 0;
+    $lon = 0;
+    $tag = 0;
+    for ($i = 0; $i < $len; $i++) {
+        $ch = substr($inc,$i,1);
+        last if (!($ch =~ /\d/));
+        $tag *= 10;
+        $tag += $ch;
+    }
+    return 0 if ($i >= $len);
+    $lat = $tag;    # got lat
+    for (; $i < $len; $i++) {
+        $ch = substr($inc,$i,1);
+        last if ($ch =~ /\d/);
+    }
+    return 0 if ($i >= $len);
+    $tag = 0;
+    for (; $i < $len; $i++) {
+        $ch = substr($inc,$i,1);
+        last if (!($ch =~ /\d/));
+        $tag *= 10;
+        $tag += $ch;
+    }
+    return 0 if ($i >= $len);
+    $lat += $tag / 60;
+    for (; $i < $len; $i++) {
+        $ch = substr($inc,$i,1);
+        last if ($ch =~ /\d/);
+    }
+    return 0 if ($i >= $len);
+    # get seconds
+    $tag = 0;
+    for (; $i < $len; $i++) {
+        $ch = substr($inc,$i,1);
+        last if (!($ch =~ /\d/));
+        $tag *= 10;
+        $tag += $ch;
+    }
+    return 0 if ($i >= $len);
+    $lat += $tag / 3600;
+    # either at end of secs (if integer)
+    $get_dec = 0;
+    if ($ch eq ',') {
+        $get_dec = 1;
+        $i++;
+    } elsif ($ch eq '.') {
+        $get_dec = 1;
+        $i++;
+    }
+    if ($get_dec) {
+        $tag = 0;
+        for (; $i < $len; $i++) {
+            $ch = substr($inc,$i,1);
+            last if (!($ch =~ /\d/));
+            $tag /= 10;
+            $tag += $ch / 10;
+        }
+    }
+    return 0 if ($i >= $len);
+    $lat += $tag / 3600;
+
+    for (; $i < $len; $i++) {
+        $ch = substr($inc,$i,1);
+        last if (($ch eq 'N')||($ch eq 'S'));
+    }
+    return 0 if (!(($ch eq 'N')||($ch eq 'S')));
+    return 0 if ($i >= $len);
+    $lat *= -1 if ($ch eq 'S');
+
+
+    # march to the lon degrees
+    for (; $i < $len; $i++) {
+        $ch = substr($inc,$i,1);
+        last if ($ch =~ /\d/);
+    }
+    return 0 if ($i >= $len);
+    
+    $tag = 0;
+    for (; $i < $len; $i++) {
+        $ch = substr($inc,$i,1);
+        last if (!($ch =~ /\d/));
+        $tag *= 10;
+        $tag += $ch;
+    }
+    return 0 if ($i >= $len);
+    $lon = $tag;    # got lon
+    for (; $i < $len; $i++) {
+        $ch = substr($inc,$i,1);
+        last if ($ch =~ /\d/);
+    }
+    return 0 if ($i >= $len);
+    $tag = 0;
+    for (; $i < $len; $i++) {
+        $ch = substr($inc,$i,1);
+        last if (!($ch =~ /\d/));
+        $tag *= 10;
+        $tag += $ch;
+    }
+    return 0 if ($i >= $len);
+    $lon += $tag / 60;
+    for (; $i < $len; $i++) {
+        $ch = substr($inc,$i,1);
+        last if ($ch =~ /\d/);
+    }
+    return 0 if ($i >= $len);
+    # get seconds
+    $tag = 0;
+    for (; $i < $len; $i++) {
+        $ch = substr($inc,$i,1);
+        last if (!($ch =~ /\d/));
+        $tag *= 10;
+        $tag += $ch;
+    }
+    return 0 if ($i >= $len);
+    $lon += $tag / 3600;
+    # either at end of secs (if integer)
+    $get_dec = 0;
+    if ($ch eq ',') {
+        $get_dec = 1;
+        $i++;
+    } elsif ($ch eq '.') {
+        $get_dec = 1;
+        $i++;
+    }
+    if ($get_dec) {
+        $tag = 0;
+        for (; $i < $len; $i++) {
+            $ch = substr($inc,$i,1);
+            last if (!($ch =~ /\d/));
+            $tag /= 10;
+            $tag += $ch / 10;
+        }
+    }
+    return 0 if ($i >= $len);
+    $lon += $tag / 3600;
+
+    for (; $i < $len; $i++) {
+        $ch = substr($inc,$i,1);
+        last if (($ch eq 'E')||($ch eq 'W'));
+    }
+    return 0 if (!(($ch eq 'E')||($ch eq 'W')));
+    return 0 if ($i >= $len);
+    $lon *= -1 if ($ch eq 'W');
+
+    ${$rlat} = $lat;
+    ${$rlon} = $lon;
+    
+    return 1;
+}
+
+sub test_stg() {
+    my ($inc);
+    my ($lat,$lon);
+
+    $inc = "48 6 2 N 7 3 0 E";
+    if (get_lat_lon_from_stg($inc,\$lat,\$lon)) {
+        prt("From $inc, got $lat,$lon\n");
+    } else {
+        prt("Failed $inc!\n");
+    }
+    $inc = "48°32'16,2'' N 002°17'13,0'' E";
+    if (get_lat_lon_from_stg($inc,\$lat,\$lon)) {
+        prt("From $inc, got $lat,$lon\n");
+    } else {
+        prt("Failed $inc!\n");
+    }
+    $inc = "48°32'16,9'' N 002°17'13,9'' E";
+    if (get_lat_lon_from_stg($inc,\$lat,\$lon)) {
+        prt("From $inc, got $lat,$lon\n");
+    } else {
+        prt("Failed $inc!\n");
+    }
+    $inc = "48° 45’ 14.0” N - 002° 32’ 47.1” E";
+    if (get_lat_lon_from_stg($inc,\$lat,\$lon)) {
+        prt("From $inc, got $lat,$lon\n");
+    } else {
+        prt("Failed $inc!\n");
+    }
+    $inc = "48° 45’ 14.9” N - 002° 32’ 47.9” E";
+    if (get_lat_lon_from_stg($inc,\$lat,\$lon)) {
+        prt("From $inc, got $lat,$lon\n");
+    } else {
+        prt("Failed $inc!\n");
+    }
+    pgm_exit(1,"TEST EXIT\n");
+}
+
 #######################################################################
 sub process_in_file($) {
     my ($inf) = @_;
@@ -1013,6 +1237,7 @@ sub process_in_file($) {
     my ($line,$inc,$lnn,$len,$section,@arr,$cnt,$i);
     my ($ns,$ew,$lat,$lon,$dlat,$dlon,$name);
     my (@arr2,$wp,$ra,$color,$plat,$plon,$pcnt,$pwp);
+    my ($latmin,$latsec,$lonmin,$lonsec);
     $lnn = 0;
     my %waypoints = ();
     #my $rfh = search_fix_file("MATIX");
@@ -1067,6 +1292,7 @@ sub process_in_file($) {
             if ($section =~ /^STAR/) {
             } elsif ($section =~ /^SID/) {
             } elsif ($section =~ /^APP/) {
+            } elsif ($section =~ /^NAV/) {
             } elsif ($section eq 'WAYPOINTS') {
                 # if ($inc =~ /^[NS]([0-8][0-9](\.[0-5]\d){2}|90(\.00){2})\040[EW]((0\d\d|1[0-7]\d)(\.[0-5]\d){2}|180(\.00){2})$/)
                 # VEBEK = N49 16.1 E003 41.0 At FL110 MAX 280 KT
@@ -1093,16 +1319,75 @@ sub process_in_file($) {
                 } else {
                     prtw("WARNING:$lnn: [$inc] failed regex\n");
                 }
+            } elsif ($section eq 'WAYPOINTS2') {
+                if ($inc =~ /^(\d+).+(\d+).+(\d+|,|\.).+(N|S).+(\d+).+(\d+).+(\d+|,|\.).+(E|W)/) {
+                    $lat = $1;
+                    $latmin = $2;
+                    $latsec = $3;
+                    $ns = $4;
+                    $lon = $5;
+                    $lonmin = $6;
+                    $lonsec = $7;
+                    $ew = $8;
+                    $latsec =~ s/,/\./;
+                    $lonsec =~ s/,/\./;
+                    prt("$name = $lat $latmin $latsec $ns $lon $lonmin $lonsec $ew\n") if (VERB9());
+                    if (get_lat_lon_from_stg($inc,\$dlat,\$dlon)) {
+                        $name =~ s/\s+//;
+                        prt("$name $dlat,$dlon\n") if (VERB5());
+                        $lat = $dlat;
+                        $lon = $dlon;
+                        $waypoints{$name} = [$lat,$lon];
+                        $max_lat = $lat if ($lat > $max_lat);
+                        $max_lon = $lon if ($lon > $max_lon);
+                        $min_lat = $lat if ($lat < $min_lat);
+                        $min_lon = $lon if ($lon < $min_lon);
+                        $wpxg .= "anno $lon $lat $name\n";
+                        $wpxg .= "$lon $lat\n";
+                        $wpxg .= "NEXT\n";
+                        $pcnt++;
+                    } else {
+                        pgm_exit(1,"Error: FIX ME $inc FAILED\n");
+                    }
+                } else {
+                    prtw("WARNING:$lnn: [$inc] failed regex\n");
+                }
+            } elsif ($section eq 'RUNWAYS2') {
+                if (get_lat_lon_from_stg($inc,\$dlat,\$dlon)) {
+                    prt("$name $dlat,$dlon\n") if (VERB5());
+                    $lat = $dlat;
+                    $lon = $dlon;
+                    $waypoints{$name} = [$lat,$lon];
+                    $max_lat = $lat if ($lat > $max_lat);
+                    $max_lon = $lon if ($lon > $max_lon);
+                    $min_lat = $lat if ($lat < $min_lat);
+                    $min_lon = $lon if ($lon < $min_lon);
+                    $wpxg .= "anno $lon $lat $name\n";
+                    $wpxg .= "$lon $lat\n";
+                    $wpxg .= "NEXT\n";
+                    $pcnt++;
+#                    my $ryw1 = $name;
+#                    $ryw1 = s/RWY//;
+#                    my $rwy2 = get_opposite_rwy($rwy1);
+#                    if (length($rwy2)) {
+#                        #$xg .= "anno $elon2 $elat2 $rwy2\n";
+#                        #$key = "RWY".$rwy2;
+#                        #$runwayhash{$key} = [$elat2,$elon2];
+#                    }
+                } else {
+                    prtw("WARNING:$lnn: [$inc] failed get_lat_lon...\n");
+                }
+
             } else {
                 pgm_exit(1,"Error: Section [$section] not coded! *** FIX ME ***\n");
             }
         }
     }
-
+    
     rename_2_old_bak($tmp_xg);
     write2file($wpxg,$tmp_xg);
     prt("Written waypoints collected to $tmp_xg\n");
-
+    #pgm_exit(1,"TEMP EXIT\n");
     $clat = ($max_lat + $min_lat) / 2;
     $clon = ($max_lon + $min_lon) / 2;
     @arr = keys %{$rfh};
@@ -1227,6 +1512,7 @@ sub process_in_file($) {
                 }
 
             } elsif ($section =~ /^SID/) {
+
                 $color = $sid_color;
 				next if (!$add_sid_wps);
                 @arr2 = split(/\s+/,$name);
@@ -1239,6 +1525,7 @@ sub process_in_file($) {
                     $arr2[$i] = $inc;
                 }
                 prt("$lnn:sid $name = ".join(" ",@arr2)."\n");
+                ### next if ($section =~ /\s+PATHS/);
                 $pcnt = 0;
                 if (defined $waypoints{$wp}) {
                     for ($i = 0; $i < $cnt; $i++) {
@@ -1262,11 +1549,30 @@ sub process_in_file($) {
                             $plat = $lat;
                             $plon = $lon;
                             $pwp  = $wp;
+                            if ($wp =~ /^RWY/) {
+                                my $rwy1 = $wp;
+                                $rwy1 =~ s/^RWY//;
+                                my $rwy2 = get_opposite_rwy($rwy1);
+                                if (length($rwy2)) {
+                                    my $key = "RWY".$rwy2;
+                                    if (defined $runwayhash{$key}) {
+                                        $ra = $runwayhash{$key};
+                                        $lat = ${$ra}[0];
+                                        $lon = ${$ra}[1];
+                                        $xg .= get_path_xg($pwp,$plat,$plon,$key,$lat,$lon,$color);
+                                        $plat = $lat;
+                                        $plon = $lon;
+                                        $pwp  = $key;
+                                        $pcnt++;
+                                    }
+                                }
+                            }
                             $pcnt++;
                         } else {
                             if (! defined $dupes{$wp}) {
                                 $dupes{$wp} = 1;
                                 prtw("WARNING: app waypoint [$wp] NOT in hash!\n");
+                                last;
                             }
                         }
                     }
@@ -1333,8 +1639,11 @@ sub process_in_file($) {
                         }
                     }
                 }
+            } elsif ($section =~ /^NAV/) {
             } elsif ($section eq 'WAYPOINTS') {
                 # done WAYPOINTS, if any
+            } elsif ($section eq 'WAYPOINTS2') {
+            } elsif ($section eq 'RUNWAYS2') {
             } else {
                 pgm_exit(1,"Error: Section [$section] not coded! *** FIX ME ***\n");
             }
@@ -1368,6 +1677,7 @@ sub process_in_file($) {
 
 #########################################
 ### MAIN ###
+###test_stg();
 parse_args(@ARGV);
 process_in_file($in_file);
 pgm_exit(0,"");
