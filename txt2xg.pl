@@ -54,6 +54,9 @@ my $add_arrow_sides = 1;
 my $add_ils_point = 0;  # add the start point with anno of an ILS
 my $ils_sep_degs = 3;
 
+my $add_altern_apts = 0;
+my @add_icaos = ();
+
 # ### DEBUG ###
 my $debug_on = 1;
 #my $def_file = 'C:\Users\user\Documents\FG\LFPO.procedures.txt';
@@ -66,6 +69,8 @@ my $def_line = "color gray\n".
 "NEXT\n";
 
 my $def_icao = 'LFPO';
+my $def_alt_icao1 = 'LFPG';
+my $def_alt_icao2 = 'LFPB';
 
 ### program variables
 my @warnings = ();
@@ -1366,14 +1371,6 @@ sub process_in_file($) {
                     $wpxg .= "$lon $lat\n";
                     $wpxg .= "NEXT\n";
                     $pcnt++;
-#                    my $ryw1 = $name;
-#                    $ryw1 = s/RWY//;
-#                    my $rwy2 = get_opposite_rwy($rwy1);
-#                    if (length($rwy2)) {
-#                        #$xg .= "anno $elon2 $elat2 $rwy2\n";
-#                        #$key = "RWY".$rwy2;
-#                        #$runwayhash{$key} = [$elat2,$elon2];
-#                    }
                 } else {
                     prtw("WARNING:$lnn: [$inc] failed get_lat_lon...\n");
                 }
@@ -1431,7 +1428,7 @@ sub process_in_file($) {
 	}
     prt("Added $len navaids to waypoints hash...\n");
 
-    my ($msg);
+    my ($msg,$icao);
     $lnn = 0;
     $section = '';
     my %dupes = ();
@@ -1653,6 +1650,20 @@ sub process_in_file($) {
     if (length($apt_xg)) {
 	    $xg .= "$apt_xg";   # add the airport anno to the output...
 	}
+
+	if ($add_altern_apts) {
+		foreach $icao (@add_icaos) {
+			$apt_xg = '';
+			find_apt($icao);
+			if (-f $rwys_csv) {     # def  = $perl_dir."circuits/runways.csv";
+				$apt_xg .= process_runway_file($rwys_csv,$apt_icao);    # draw the runways and label
+			}
+			if (-f $ils_csv) {
+				$apt_xg .= process_ils_csv($ils_csv,$apt_icao);
+			}
+			$xg .= $apt_xg;
+		}
+	}
     if (length($usr_anno)) {
 		$xg .= "# User annon\n";
         $xg .= "$usr_anno\n";
@@ -1765,6 +1776,14 @@ sub parse_args {
 		#$add_app_wps  = 0;
 		$apt_icao = $def_icao;
 		$usr_line = $def_line;
+		if (length($def_alt_icao1)) {
+			$add_altern_apts = 1;
+			push(@add_icaos,$def_alt_icao1);
+		}
+		if (length($def_alt_icao2)) {
+			$add_altern_apts = 1;
+			push(@add_icaos,$def_alt_icao2);
+		}
     }
     if (length($in_file) ==  0) {
         pgm_exit(1,"ERROR: No input files found in command!\n");
