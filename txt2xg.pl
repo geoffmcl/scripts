@@ -389,7 +389,7 @@ sub find_nav_id($$$$) {
         $nlon = ${$ra}[2];
         ${$rlat} = $nlat;
         ${$rlon} = $nlon;
-        prt("Found $id $nlat,$nlon\n");
+        prt("Found NAVAID $id $nlat,$nlon\n") if (VERB5());
     }
 }
 
@@ -520,7 +520,7 @@ sub set_apt_xg() {
         $apt_xg .= "color red\n";
         $apt_xg .= "$in_lon $in_lat\n";
         $apt_xg .= "NEXT\n";
-        prt("Set apt xg 'anno $in_lon $in_lat $apt_alt $apt_icao $apt_name'\n");
+        prt("Set apt xg 'anno $in_lon $in_lat $apt_alt $apt_icao $apt_name'\n") if (VERB5());
         $apt_json = "    \"airport\": {\n".
             "        \"apt_code\": \"$apt_icao\",\n".
             "        \"apt_name\": \"$apt_name\",\n".
@@ -616,7 +616,7 @@ sub find_apt_gz($) {
                     $name = join(' ', splice(@arr2,5)); # Name
                     $csv .= "$alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n";
                     if ($ficao eq $icao) {
-                        prt("Found $alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n");
+                        prt("Found APT $alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n") if (VERB5());
                         $apt_icao = $icao;
                         $in_lat = $alat;
                         $in_lon = $alon;
@@ -790,7 +790,7 @@ sub find_apt_gz($) {
             $name = join(' ', splice(@arr2,5)); # Name
             $csv .= "$alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n";
             if ($ficao eq $icao) {
-                prt("Found $alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n");
+                prt("Found APT $alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n") if (VERB5());
                 $apt_icao = $icao;
                 $in_lat = $alat;
                 $in_lon = $alon;
@@ -817,7 +817,7 @@ sub find_apt_csv($$) {
     my @lines = <INF>;
     close INF;
     my $lncnt = scalar @lines;
-    prt("Processing $lncnt lines, from [$inf]...\n");
+    prt("Processing $lncnt lines, from [$inf]...\n") if (VERB9());
     my ($line,$inc,$lnn,@arr);
     $lnn = 0;
     my ($alat,$alon,$aalt,$type,$rwycnt,$icao,$name);
@@ -834,7 +834,7 @@ sub find_apt_csv($$) {
 			$type = $arr[3];
 			$rwycnt = $arr[4];
 			$name = join(' ', splice(@arr,6)); # Name
-            prt("Found $alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n");
+            prt("Found APT $alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n") if (VERB5());
             $apt_icao = $icao;
             $in_lat = $alat;
             $in_lon = $alon;
@@ -952,7 +952,7 @@ sub process_ils_csv($$) {
     my @lines = <INF>;
     close INF;
     my $lncnt = scalar @lines;
-    prt("Processing $lncnt lines, from [$inf]...\n");   # if (VERB9());
+    prt("Processing $lncnt lines, from [$inf]...\n") if (VERB9());
     my ($line,@arr,$cnt,$freq);
     my ($res,$az1,$az2,$dist,$lat1,$lon1,$rhdg,$lat2,$lon2,$elat1,$elon1);
     my $lnn = 0;
@@ -1031,7 +1031,7 @@ sub process_ils_csv($$) {
         }
 
     }
-    prt("Found $ilscnt ILS for $icao, rwys ".join(" ",@rwys)."\n");
+    prt("Found $ilscnt ILS for $icao, rwys ".join(" ",@rwys)."\n") if (VERB5());
     return $xg;
 }
 
@@ -1241,7 +1241,7 @@ sub process_in_file($) {
     my @lines = <INF>;
     close INF;
     my $lncnt = scalar @lines;
-    prt("Processing $lncnt lines, from [$inf]...\n");
+    prt("Processing $lncnt lines, from [$inf]...\n") if (VERB2());
     my ($line,$inc,$lnn,$len,$section,@arr,$cnt,$i);
     my ($ns,$ew,$lat,$lon,$dlat,$dlon,$name);
     my (@arr2,$wp,$ra,$color,$plat,$plon,$pcnt,$pwp);
@@ -1658,6 +1658,8 @@ sub process_in_file($) {
     ### Add surrounding airports
 	if ($add_altern_apts) {
         my $all_apts_xg = '';
+		$pcnt = scalar @add_icaos;
+		prt("Processing $pcnt addtional airport icaos... moment...\n");
         $pcnt = 0;
         if (length($apt_xg)) {
    			$all_apts_xg .= $apt_xg;
