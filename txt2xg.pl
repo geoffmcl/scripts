@@ -40,6 +40,7 @@ my $app_color  = 'white';
 my $usr_anno = '';
 my $in_icao = '';
 my $usr_line = '';
+my $out_apts = $temp_dir.$PATH_SEP."tempapts.xg";
 
 my $add_star_wps = 1;
 my $add_sid_wps = 1;
@@ -69,6 +70,8 @@ my $def_line = "color gray\n".
 "NEXT\n";
 
 my $def_icao = 'LFPO';
+my @def_icaos = qw(LFPV LFPI LFPY LFPN LFPL LFPZ LFPH LFFQ LFPM LFPB LFPX
+    LFPG LFFE LFPF LFPQ LFPE LFFB LFXU LFOX);
 my $def_alt_icao1 = 'LFPG';
 my $def_alt_icao2 = 'LFPB';
 
@@ -1651,7 +1654,15 @@ sub process_in_file($) {
 	    $xg .= "$apt_xg";   # add the airport anno to the output...
 	}
 
+    ##############################################################
+    ### Add surrounding airports
 	if ($add_altern_apts) {
+        my $all_apts_xg = '';
+        $pcnt = 0;
+        if (length($apt_xg)) {
+   			$all_apts_xg .= $apt_xg;
+            $pcnt++;
+        }
 		foreach $icao (@add_icaos) {
 			$apt_xg = '';
 			find_apt($icao);
@@ -1661,9 +1672,18 @@ sub process_in_file($) {
 			if (-f $ils_csv) {
 				$apt_xg .= process_ils_csv($ils_csv,$apt_icao);
 			}
-			$xg .= $apt_xg;
+            if (length($apt_xg)) {
+    			$all_apts_xg .= $apt_xg;
+                $pcnt++;
+            }
 		}
-	}
+        if ($pcnt) {
+            rename_2_old_bak($out_apts);
+            write2file($all_apts_xg,$out_apts);
+            prt("Written $pcnt airports to $out_apts\n");
+        }
+    }
+
     if (length($usr_anno)) {
 		$xg .= "# User annon\n";
         $xg .= "$usr_anno\n";
@@ -1776,14 +1796,17 @@ sub parse_args {
 		#$add_app_wps  = 0;
 		$apt_icao = $def_icao;
 		$usr_line = $def_line;
-		if (length($def_alt_icao1)) {
-			$add_altern_apts = 1;
-			push(@add_icaos,$def_alt_icao1);
-		}
-		if (length($def_alt_icao2)) {
-			$add_altern_apts = 1;
-			push(@add_icaos,$def_alt_icao2);
-		}
+		#if (length($def_alt_icao1)) {
+		#	$add_altern_apts = 1;
+		#	push(@add_icaos,$def_alt_icao1);
+		#}
+		#if (length($def_alt_icao2)) {
+		#	$add_altern_apts = 1;
+		#	push(@add_icaos,$def_alt_icao2);
+		#}
+		$add_altern_apts = 1;
+        @add_icaos = @def_icaos;
+
     }
     if (length($in_file) ==  0) {
         pgm_exit(1,"ERROR: No input files found in command!\n");
