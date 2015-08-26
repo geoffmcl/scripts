@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 # NAME: findaps.pl
 # AIM: There is a BIG findap[nn].pl - This is a SIMPLER version
+# 25/08/2015 - add to scripts repo
 # 17/10/2014 - Change -i -c = no case change on name
 # 16/10/2014 - Use later fgdata 3.3, thus add typ=100
 # 14/04/2013 - Use later fgdata 2.10
@@ -14,18 +15,17 @@ use warnings;
 use File::Basename;  # split path ($name,$dir,$ext) = fileparse($file [, qr/\.[^.]*/] )
 use Cwd;
 my $os = $^O;
-my $perl_dir = 'C:\GTools\perl';
-my $out_dir = $perl_dir;
-my $dir_sep = "\\";
-my $CDATROOT="C:/FG/fgdata";
-my $XDROOT="X:\\fgdata";
-#my $CDATROOT="C:/FGCVS/FlightGear/data";
-if ( !($os =~ /Win/i) ) {
-    $perl_dir = "/home/geoff/bin";
-    $out_dir = "/tmp";
-    $dir_sep = '/';
-    $CDATROOT="/home/geoff/fg/fg16/fgfs/data";
+my $cwd = cwd();
+my ($pgmname,$perl_dir) = fileparse($0);
+my $temp_dir = $perl_dir . "temp";
+unshift(@INC, $perl_dir);
+my $PATH_SEP = '/';
+my $CDATROOT="/media/Disk2/FG/fg22/fgdata"; # 20150716 - 3.5++
+if ($os =~ /win/i) {
+    $PATH_SEP = "\\";
+    $CDATROOT="F:/fgdata"; # 20140127 - 3.1
 }
+my $XDROOT="X:\\fgdata";
 unshift(@INC, $perl_dir);
 require 'lib_utils.pl' or die "Unable to load 'lib_utils.pl' Check paths in \@INC...\n";
 require 'fg_wsg84.pl' or die "Unable to load fg_wsg84.pl ...\n";
@@ -52,12 +52,7 @@ my $SG_METER_TO_NM = 0.0005399568034557235;
 
 # log file stuff
 our ($LF);
-my $pgmname = $0;
-if ($pgmname =~ /(\\|\/)/) {
-    my @tmpsp = split(/(\\|\/)/,$pgmname);
-    $pgmname = $tmpsp[-1];
-}
-my $outfile = $out_dir.$dir_sep."temp.$pgmname.txt";
+my $outfile = $temp_dir.$PATH_SEP."temp.$pgmname.txt";
 open_log($outfile);
 
 # user variables
@@ -99,7 +94,6 @@ my $del_icao = 'KTEX';
 
 ### program variables
 my @warnings = ();
-my $cwd = cwd();
 
 my $rnavaids;
 
