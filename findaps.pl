@@ -395,14 +395,14 @@ sub sgGeodToCart($$$$) {
 # rwy lat        lon        num true    feet displament/extension  wid lights surf shld mark smooth signs VASI
 sub load_apt_data {
     my ($i,$max,$msg);
-    prt("[v1] Loading $aptdat file ...\n") if (VERB1());
+    prt("Loading $aptdat file ... moment...\n"); # if (VERB1());
     mydie("ERROR: Can NOT locate $aptdat ...$!...\n") if ( !( -f $aptdat) );
     ###open IF, "<$aptdat" or mydie("OOPS, failed to open [$aptdat] ... check name and location ...\n");
     open IF, "gzip -d -c $aptdat|" or mydie( "ERROR: CAN NOT OPEN $aptdat...$!...\n" );
     my @lines = <IF>;
     close IF;
     $max = scalar @lines;
-    prt("[v9] Got $max lines to scan...\n") if (VERB9());
+    prt("Got $max lines to scan... moment...\n"); # if (VERB9());
     my ($add,$alat,$alon);
     $add = 0;
     my ($off,$atyp,$az,@arr,@arr2,$rwyt,$glat,$glon,$rlat,$rlon);
@@ -686,7 +686,7 @@ sub load_apt_data {
         $totaptcnt++;	# count another AIRPORT
     }
     my $cnt = scalar @g_aptlist;
-    prt("[v1] Done scan of $max lines for $cnt airports, $totrwycnt runways...\n") if (VERB1());
+    prt("Done scan of $max lines for $cnt airports, $totrwycnt runways...\n"); # if (VERB1());
 }
 
 sub mycmp_decend_dist {
@@ -1708,6 +1708,7 @@ sub give_help {
     out_xclude_list();
     prt(")\n");
     prt(" Sources:\n");
+	prt(" --aptdata=<file>    = Set apt.dat.gz file.\n");
     prt("  airports: [$aptdat] ".((-f $aptdat) ? "ok" : "NOT FOUND!")."\n");
     prt("  navaids:  [$navdat] ".((-f $navdat) ? "ok" : "NOT FOUND!")."\n");
     prt("  fixes:    [$g_fixfile] ".((-f $g_fixfile) ? "ok" : "NOT FOUND!")."\n");
@@ -1719,6 +1720,39 @@ sub give_help {
 sub need_arg {
     my ($arg,@av) = @_;
     pgm_exit(1,"ERROR: [$arg] must have a following argument!\n") if (!@av);
+}
+
+sub set_apt_dat($) {
+	my $file = shift;
+	if (-f $file) {
+		$aptdat = $file;
+        prt("Set apt.dat.gz to $aptdat\n") if (VERB1());
+		# my $APTFILE 	  = "$FGROOT/Airports/apt.dat.gz";	# the airports data file
+		# my $NAVFILE 	  = "$FGROOT/Navaids/nav.dat.gz";	# the NAV, NDB, etc. data file
+		# $navdat = $NAVFILE;
+		# $g_fixfile = $FIXFILE;
+		# $g_awyfile = $AWYFILE;
+		my ($name,$dir) = fileparse($file);
+		$dir =~ s/(\\|\/)$//;
+		my ($n,$d) = fileparse($dir);
+		my $nd = $d."Navaids".$PATH_SEP."nav.dat.gz";
+		my $fd = $d."Navaids".$PATH_SEP."fix.dat.gz";
+		my $ad = $d."Navaids".$PATH_SEP."awy.dat.gz";
+		if (-f $nd) {
+			$navdat = $nd;
+	        prt("Set nav.dat.gz to $navdat\n") if (VERB1());
+		}
+		if (-f $fd) {
+			$g_fixfile = $fd;
+	        prt("Set fix.dat.gz to $g_fixfile\n") if (VERB1());
+		}
+		if (-f $ad) {
+			$g_awyfile = $ad;
+	        prt("Set awy.dat.gz to $g_awyfile\n") if (VERB1());
+		}
+	} else {
+		pgm_exit(1,"Can NOT locate file $file!\n");
+	}
 }
 
 sub parse_args {
@@ -1733,8 +1767,20 @@ sub parse_args {
                 give_help();
                 pgm_exit(0,"Help exit(0)");
             } elsif ($sarg =~ /^a/) {
-                $show_airways = 1;
-                prt("Set to load and display closest airways.\n") if (VERB1());
+				if ($sarg =~ /^aptdata/) {
+					if ($sarg =~ /^aptdata=/) {
+						@arr = split("=",$sarg);
+						$sarg = $arr[1];
+					} else {
+		                need_arg(@av);
+						shift @av;
+						$sarg = $av[0];
+					}
+					set_apt_dat($sarg);
+				} else {
+	                $show_airways = 1;
+		            prt("Set to load and display closest airways.\n") if (VERB1());
+				}
             } elsif ($sarg =~ /^b/) {
                 $show_bounds = 1;
                 prt("Show max/min bounds.\n") if (VERB1());
@@ -1839,6 +1885,7 @@ sub parse_args {
         }
     }
     if (length($in_icao) ==  0) {
+		give_help();
         pgm_exit(1,"ERROR: No input ICAO found in command!\n");
     }
 }
