@@ -56,7 +56,8 @@ my $outfile = $temp_dir.$PATH_SEP."temp.$pgmname.txt";
 open_log($outfile);
 
 # user variables
-my $VERS = "0.0.4 2014-10-16";  # output nicely cased airport names, and add nav, fixes and airways
+my $VERS = "0.0.5 2015-08-28";  # adapt to use in scripts repo
+#my $VERS = "0.0.4 2014-10-16";  # output nicely cased airport names, and add nav, fixes and airways
 # $VERS = "0.0.3 2012-01-20";  # output nicely cased airport names, and add nav, fixes and airways
 # $VERS = "0.0.2 2011-12-12";
 my $load_log = 0;
