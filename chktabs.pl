@@ -93,8 +93,16 @@ sub process_in_file($) {
         return;
     }
     $done_files{$inf} = 1;
+	my $oinf = $inf;
+	if (($inf =~ /\.(\\|\/)/)||($inf =~ /(\\|\/)\.\.(\\|\/)/)) {
+		$inf = fix_rel_path($inf);
+		if (defined $done_files{$inf}) {
+			return;
+		}
+	    $done_files{$inf} = 1;
+	}
     if (! open INF, "<$inf") {
-        pgm_exit(1,"ERROR: Unable to open file [$inf]\n"); 
+        pgm_exit(1,"ERROR: Unable to open file [$inf] ($oinf)\n"); 
     }
     my @lines = <INF>;
     close INF;
@@ -133,17 +141,19 @@ sub process_in_file($) {
             $lnswtsp++;
             $spcount += length($txt);
         }
-        $tline = trim_all($line);
-        $len = length($tline);
+
+		# add a leading and tailing NEWLINE count
+        $tline = trim_all($line);	# trim ALL leading/trailing SPACE
+        $len = length($tline);		# get length of result
         if ($len) {
-            $had_len = 1;
-            $tailblks = 0;
+            $had_len = 1;		# has a LENGTH
+            $tailblks = 0;		# restart tail counter
         } else {
-            # blank line
+            # is a blank line...
             if ($had_len) {
-                $tailblks++;
+                $tailblks++;	# had a length, count a tailing newline only
             } else {
-                $leadblks++;
+                $leadblks++;	# no line with length yet, add a leading newline only
             }
         }
     }
@@ -152,19 +162,16 @@ sub process_in_file($) {
         $files_with_tab{$inf} = [$lnn,$lnswtab,$tabcount,$lnswtsp,$spcount];
         prt("$inf: Have $lnswtab lines contain a 'tab'. Total of $tabcount tabs. $lnswtsp end w/space\n") if (VERB2());
     }
+	# keep leading and tailing newline stats
     if ($tailblks | $leadblks) {
         $files_with_htb{$inf} = [$lnn,$leadblks,$tailblks];
     }
 }
 
-sub process_in_files() {
-    foreach $in_file (@in_files) {
-        process_in_file($in_file);
-    }
-
+sub show_results() {
     my $have_out = length($out_file);
     my @arr = keys %files_with_tab;
-    my ($ra,$lns,$wtab,$tcnt,$tscnt,$endsp,$pct,$tsp,$pct2,$tmp);
+    my ($ra,$lns,$wtab,$tcnt,$tscnt,$endsp,$pct,$tsp,$pct2,$tmp,$len);
     my $txt = '';
     $tmp = "\nFrom user input '$usr_input'\n".
         "processed $total_files files, $total_lines lines, appx $total_bytes bytes...\n";
@@ -179,6 +186,7 @@ sub process_in_files() {
     my $total_tabs = 0;
     my $total_lwtsp = 0;
     my $total_tsp = 0;
+	my $min_len = 0;
     #                         0    1        2         3        4
     #$files_with_tab{$inf} = [$lnn,$lnswtab,$tabcount,$lnswtsp,$spcount];
     foreach $in_file (@arr) {
@@ -205,12 +213,27 @@ sub process_in_files() {
     } else {
         prt($tmp);
     }
+	$min_len = 0;
+    foreach $in_file (@arr) {
+        $ra = $files_with_tab{$in_file};
+        $cnt = ${$ra}[2];
+        if ($cnt) {
+			$len = length($in_file);
+			$min_len = $len if ($len > $min_len);
+        }
+        $cnt = ${$ra}[3];
+        if ($cnt) {
+			$len = length($in_file);
+			$min_len = $len if ($len > $min_len);
+        }
+    }
     foreach $in_file (@arr) {
         $ra = $files_with_tab{$in_file};
         $lns = ${$ra}[0];
         $wtab = ${$ra}[1];
         $cnt = ${$ra}[2];
         if ($cnt) {
+			$in_file .= ' ' while (length($in_file) < $min_len);
             $tmp = "$in_file - $lns lines, $wtab w/tab, $cnt tabs\n";
             if ($have_out) {
                 $txt .= $tmp;
@@ -232,12 +255,21 @@ sub process_in_files() {
 
     foreach $in_file (@arr) {
         $ra = $files_with_tab{$in_file};
+        $cnt = ${$ra}[3];
+        if ($cnt) {
+			$len = length($in_file);
+			$min_len = $len if ($len > $min_len);
+		}
+	}
+    foreach $in_file (@arr) {
+        $ra = $files_with_tab{$in_file};
         $lns = ${$ra}[0];
         $wtab = ${$ra}[1];
         $tcnt = ${$ra}[2];
         $cnt = ${$ra}[3];
         $tsp = ${$ra}[4];
         if ($cnt) {
+			$in_file .= ' ' while (length($in_file) < $min_len);
             $tmp = "$in_file - $lns lines, $wtab w/tab, $tcnt tabs, $cnt lines with trailing spaces $tsp\n";
             if ($have_out) {
                 $txt .= $tmp;
@@ -267,7 +299,21 @@ sub process_in_files() {
         } else {
             prt($tmp);
         }
+		foreach $in_file (@arr) {
+			$ra = $files_with_tab{$in_file};
+			$lns = ${$ra}[0];
+			$wtab = ${$ra}[1];
+			$tcnt = ${$ra}[2];
+			$in_file .= ' ' while (length($in_file) < $min_len);
+			$tmp = "$in_file: leading $wtab, tailing $tcnt\n";
+			if ($have_out) {
+				$txt .= $tmp;
+			} else {
+				prt($tmp);
+			}
+		}
     }
+
     if ($have_out) {
         $txt .= "\n";
     } else {
@@ -281,10 +327,17 @@ sub process_in_files() {
 
 }
 
+sub process_in_files() {
+    foreach $in_file (@in_files) {
+        process_in_file($in_file);
+    }
+}
+
 #########################################
 ### MAIN ###
 parse_args(@ARGV);
 process_in_files();
+show_results();
 pgm_exit(0,"");
 ########################################
 
