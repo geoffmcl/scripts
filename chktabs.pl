@@ -163,8 +163,9 @@ sub process_in_file($) {
         prt("$inf: Have $lnswtab lines contain a 'tab'. Total of $tabcount tabs. $lnswtsp end w/space\n") if (VERB2());
     }
 	# keep leading and tailing newline stats
-    if ($tailblks | $leadblks) {
+    if (($tailblks > 0) || ($leadblks > 0)) {
         $files_with_htb{$inf} = [$lnn,$leadblks,$tailblks];
+		prt("$inf: Have $leadblks leading and $tailblks trailing newlines\n") if (VERB2());
     }
 }
 
@@ -279,12 +280,13 @@ sub show_results() {
         }
     }
 
+	# deal with leading and trailing newlines
     @arr = keys %files_with_htb;    # {$inf} = [$lnn,$leadblks,$tailblks];
     $cnt = scalar @arr;
     my $t_leadblks = 0;
     my $t_tailblks = 0;
     foreach $in_file (@arr) {
-        $ra = $files_with_tab{$in_file};
+        $ra = $files_with_htb{$in_file};
         $lns = ${$ra}[0];
         $wtab = ${$ra}[1];
         $tcnt = ${$ra}[2];
@@ -292,7 +294,7 @@ sub show_results() {
         $t_tailblks += $tcnt;
     }
 
-    if ($cnt | $t_leadblks | $t_tailblks) {
+    if (($cnt > 0) || ($t_leadblks > 0) || ($t_tailblks > 0)) {
         $tmp = "\nHave $cnt with leading $t_leadblks tailing $t_tailblks blank lines\n";
         if ($have_out) {
             $txt .= $tmp;
@@ -391,6 +393,7 @@ sub process_in_dir($$) {
         prtw("WARNING: Unable to open dir $dir\n");
         return;
     }
+	my $len = scalar @in_files;
     my @files = readdir(DIR);
     closedir(DIR);
     my ($file,$ff);
@@ -414,6 +417,13 @@ sub process_in_dir($$) {
             process_in_dir($dir,($lev+1));
         }
     }
+	if ($lev == 0) {
+		my $ncnt = scalar @in_files;
+		if ($ncnt > $len) {
+			my $d = $ncnt - $len;
+			prt("Directory $dir added $d files to input...\n"); 
+		}
+	}
 }
 
 
@@ -455,6 +465,7 @@ sub parse_args {
                 prt("Set out file to [$out_file].\n") if ($verb);
             } elsif ($sarg =~ /^r/) {
                 $g_recurse = 1;
+                prt("Set recursive into directories.\n") if ($verb);
             } else {
                 pgm_exit(1,"ERROR: Invalid argument [$arg]! Try -?\n");
             }
