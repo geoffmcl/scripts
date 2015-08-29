@@ -269,6 +269,11 @@ sub process_in_files() {
         }
     }
     if ($have_out) {
+        $txt .= "\n";
+    } else {
+        prt("\n");
+    }
+    if ($have_out) {
         rename_2_old_bak($out_file);
         write2file($txt,$out_file);
         prt("Results written to $out_file\n");
