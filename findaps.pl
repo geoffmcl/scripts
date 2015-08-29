@@ -18,7 +18,6 @@ my $os = $^O;
 my $cwd = cwd();
 my ($pgmname,$perl_dir) = fileparse($0);
 my $temp_dir = $perl_dir . "temp";
-unshift(@INC, $perl_dir);
 my $PATH_SEP = '/';
 my $CDATROOT="/media/Disk2/FG/fg22/fgdata"; # 20150716 - 3.5++
 if ($os =~ /win/i) {
