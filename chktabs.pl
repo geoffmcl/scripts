@@ -35,6 +35,11 @@ my $verbosity = 0;
 my $out_file = '';
 my $g_recurse = 0;
 my $all_files = 0;
+my $ignore_repo_dirs = 1;
+my @repo_dirs = qw( CVS .svn .git .hg );
+my $max_file_len = 80;
+my $ignore_bin_files = 1;
+my @bin_extents = qw( .obj .sdf .pdb .bin .exe .lib .dll .exp .ilk .suo .res .ipch );
 
 my %files_with_tab = ();
 my %files_with_htb = ();
@@ -84,10 +89,30 @@ sub prtw($) {
    push(@warnings,$tx);
 }
 
+sub is_repo_dir($) {
+    my $dir = shift;
+    my ($d);
+    foreach $d (@repo_dirs) { # = qw( CVS .svn .git .hg );
+        return 1 if ($d eq $dir);
+    }
+    return 0;
+}
+
+sub has_bin_extent($) {
+    my $file = shift;
+    my ($n,$d,$e) = fileparse($file, qr/\.[^.]*/);
+    my ($t);
+    foreach $t (@bin_extents) {
+        return 1 if ($t eq $e);
+    }
+    return 0;
+}
+
 my %done_files = ();
 my $total_files = 0;
 my $total_lines = 0;
 my $total_bytes = 0;
+
 sub process_in_file($) {
     my ($inf) = @_;
     if (defined $done_files{$inf}) {
@@ -176,7 +201,7 @@ sub show_results() {
     my @arr = keys %files_with_tab;
     my ($ra,$lns,$wtab,$tcnt,$tscnt,$endsp,$pct,$tsp,$pct2,$tmp,$len,$clns);
     my $txt = '';
-    $tmp = "\nFrom user input '$usr_input'\n".
+    $tmp = "\nFrom user input '$usr_input' opts: v=$verbosity, all=$all_files, recur=$g_recurse\n".
         "processed $total_files files, $total_lines lines, appx $total_bytes bytes...\n";
     if ($have_out) {
         $txt .= $tmp;
@@ -216,6 +241,7 @@ sub show_results() {
     } else {
         prt($tmp);
     }
+    # just to get minimum length
 	$min_len = 0;
     foreach $in_file (@arr) {
         $ra = $files_with_tab{$in_file};
@@ -230,6 +256,8 @@ sub show_results() {
 			$min_len = $len if ($len > $min_len);
         }
     }
+    $min_len = $max_file_len if ($min_len > $max_file_len);
+
     foreach $in_file (@arr) {
         $ra = $files_with_tab{$in_file};
         $lns = ${$ra}[0];
@@ -275,7 +303,8 @@ sub show_results() {
         if ($cnt) {
 			$in_file .= ' ' while (length($in_file) < $min_len);
             $clns = sprintf("%5d",$lns);
-            $tmp = "$in_file - $clns lines, $wtab w/tab, $tcnt tabs, $cnt lines with trailing spaces $tsp\n";
+            # $tmp = "$in_file - $clns lines, $wtab w/tab, $tcnt tabs, $cnt w/sp.tail, t=$tsp\n";
+            $tmp = "$in_file - $clns lines, $cnt w/tail space, tot=$tsp\n";
             if ($have_out) {
                 $txt .= $tmp;
             } else {
@@ -415,9 +444,18 @@ sub process_in_dir($$) {
         next if ($file eq '..');
         $ff = $dir.$file;
         if (-d $ff) {
+            if ($ignore_repo_dirs && is_repo_dir($file)) {
+                next;
+            }
             push(@dirs,$ff);
         } elsif (-f $ff) {
-            if (is_c_source($file) || is_h_source($file) || $all_files) {
+            if ($all_files) {
+                if ($ignore_bin_files && has_bin_extent($file)) {
+                    next;
+                }
+                $in_file = $ff;
+                push(@in_files,$ff);
+            } elsif (is_c_source($file) || is_h_source($file)) {
                 $in_file = $ff;
                 push(@in_files,$ff);
             }
