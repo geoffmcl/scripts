@@ -34,6 +34,7 @@ my @in_files = ();
 my $verbosity = 0;
 my $out_file = '';
 my $g_recurse = 0;
+my $all_files = 0;
 
 my %files_with_tab = ();
 my %files_with_htb = ();
@@ -113,13 +114,13 @@ sub process_in_file($) {
     my ($line,$ch,$lnn,$i,$len,$txt,$tline);
     my $lnswtab = 0;
     my $tabcount = 0;
-    $lnn = 0;
     my $gottab = 0;
     my $lnswtsp = 0;
     my $spcount = 0;
     my $leadblks = 0;
     my $tailblks = 0;
     my $had_len = 0;
+    $lnn = 0;
     foreach $line (@lines) {
         chomp $line;
         $lnn++;
@@ -164,15 +165,16 @@ sub process_in_file($) {
     }
 	# keep leading and tailing newline stats
     if (($tailblks > 0) || ($leadblks > 0)) {
+        #                        0    1         2
         $files_with_htb{$inf} = [$lnn,$leadblks,$tailblks];
-		prt("$inf: Have $leadblks leading and $tailblks trailing newlines\n") if (VERB2());
+		prt("$inf: Have $lnn lines, with $leadblks leading and $tailblks trailing newlines\n") if (VERB2());
     }
 }
 
 sub show_results() {
     my $have_out = length($out_file);
     my @arr = keys %files_with_tab;
-    my ($ra,$lns,$wtab,$tcnt,$tscnt,$endsp,$pct,$tsp,$pct2,$tmp,$len);
+    my ($ra,$lns,$wtab,$tcnt,$tscnt,$endsp,$pct,$tsp,$pct2,$tmp,$len,$clns);
     my $txt = '';
     $tmp = "\nFrom user input '$usr_input'\n".
         "processed $total_files files, $total_lines lines, appx $total_bytes bytes...\n";
@@ -235,7 +237,8 @@ sub show_results() {
         $cnt = ${$ra}[2];
         if ($cnt) {
 			$in_file .= ' ' while (length($in_file) < $min_len);
-            $tmp = "$in_file - $lns lines, $wtab w/tab, $cnt tabs\n";
+            $clns = sprintf("%5d",$lns);
+            $tmp = "$in_file - $clns lines, $wtab w/tab, $cnt tabs\n";
             if ($have_out) {
                 $txt .= $tmp;
             } else {
@@ -271,7 +274,8 @@ sub show_results() {
         $tsp = ${$ra}[4];
         if ($cnt) {
 			$in_file .= ' ' while (length($in_file) < $min_len);
-            $tmp = "$in_file - $lns lines, $wtab w/tab, $tcnt tabs, $cnt lines with trailing spaces $tsp\n";
+            $clns = sprintf("%5d",$lns);
+            $tmp = "$in_file - $clns lines, $wtab w/tab, $tcnt tabs, $cnt lines with trailing spaces $tsp\n";
             if ($have_out) {
                 $txt .= $tmp;
             } else {
@@ -280,39 +284,46 @@ sub show_results() {
         }
     }
 
+    ###########################################################
 	# deal with leading and trailing newlines
+    ###########################################################
     @arr = keys %files_with_htb;    # {$inf} = [$lnn,$leadblks,$tailblks];
     $cnt = scalar @arr;
     my $t_leadblks = 0;
     my $t_tailblks = 0;
+    $cnt = 0;
     foreach $in_file (@arr) {
         $ra = $files_with_htb{$in_file};
-        $lns = ${$ra}[0];
+        $lns  = ${$ra}[0];
         $wtab = ${$ra}[1];
         $tcnt = ${$ra}[2];
         $t_leadblks += $wtab;
         $t_tailblks += $tcnt;
+        $cnt++;
     }
 
-    if (($cnt > 0) || ($t_leadblks > 0) || ($t_tailblks > 0)) {
-        $tmp = "\nHave $cnt with leading $t_leadblks tailing $t_tailblks blank lines\n";
+    if (($t_leadblks > 0) || ($t_tailblks > 0)) {
+        $tmp = "\nHave $cnt file with total leading $t_leadblks, tailing $t_tailblks blank lines\n";
         if ($have_out) {
             $txt .= $tmp;
         } else {
             prt($tmp);
         }
 		foreach $in_file (@arr) {
-			$ra = $files_with_tab{$in_file};
-			$lns = ${$ra}[0];
+			$ra = $files_with_htb{$in_file};
+			$lns  = ${$ra}[0];
 			$wtab = ${$ra}[1];
 			$tcnt = ${$ra}[2];
-			$in_file .= ' ' while (length($in_file) < $min_len);
-			$tmp = "$in_file: leading $wtab, tailing $tcnt\n";
-			if ($have_out) {
-				$txt .= $tmp;
-			} else {
-				prt($tmp);
-			}
+            if ($wtab || $tcnt) {
+                $in_file .= ' ' while (length($in_file) < $min_len);
+                $clns = sprintf("%5d",$lns);
+                $tmp = "$in_file - $clns lines, leading $wtab, tailing $tcnt\n";
+                if ($have_out) {
+                    $txt .= $tmp;
+                } else {
+                    prt($tmp);
+                }
+            }
 		}
     }
 
@@ -406,8 +417,10 @@ sub process_in_dir($$) {
         if (-d $ff) {
             push(@dirs,$ff);
         } elsif (-f $ff) {
-            $in_file = $ff;
-            push(@in_files,$ff);
+            if (is_c_source($file) || is_h_source($file) || $all_files) {
+                $in_file = $ff;
+                push(@in_files,$ff);
+            }
         } else {
             pgm_exit(1,"What is this $ff! ($file)!\n *** FIX ME ***\n");
         }
@@ -426,19 +439,37 @@ sub process_in_dir($$) {
 	}
 }
 
-
-sub parse_args {
-    my (@av) = @_;
-    my ($arg,$sarg);
-    my $verb = VERB2();
-    while (@av) {
-        $arg = $av[0];
+sub chk_for_recursive($) {
+    my $ra = shift;
+    my ($arg,$sarg,$i);
+    my $max = scalar @{$ra};
+    for ($i = 0; $i < $max; $i++) {
+        $arg = ${$ra}[$i];
         if ($arg =~ /^-/) {
             $sarg = substr($arg,1);
             $sarg = substr($sarg,1) while ($sarg =~ /^-/);
-            if (($sarg =~ /^h/i)||($sarg eq '?')) {
-                give_help();
-                pgm_exit(0,"Help exit(0)");
+            if ($sarg =~ /^o/) {
+                $i++;
+            } elsif ($sarg =~ /^r/) {
+                $g_recurse = 1;
+            } elsif ($sarg =~ /^a/) {
+                $all_files = 1;
+            }
+        }
+    }
+}
+
+sub chk_for_verbosity($) {
+    my $ra = shift;
+    my ($arg,$sarg,$i);
+    my $max = scalar @{$ra};
+    for ($i = 0; $i < $max; $i++) {
+        $arg = ${$ra}[$i];
+        if ($arg =~ /^-/) {
+            $sarg = substr($arg,1);
+            $sarg = substr($sarg,1) while ($sarg =~ /^-/);
+            if ($sarg =~ /^o/) {
+                $i++;
             } elsif ($sarg =~ /^v/) {
                 if ($sarg =~ /^v.*(\d+)$/) {
                     $verbosity = $1;
@@ -448,8 +479,33 @@ sub parse_args {
                         $sarg = substr($sarg,1);
                     }
                 }
-                $verb = VERB2();
-                prt("Verbosity = $verbosity\n") if ($verb);
+            }
+        }
+    }
+}
+
+
+
+sub parse_args {
+    my (@av) = @_;
+    my ($arg,$sarg);
+    chk_for_verbosity(\@av);
+    chk_for_recursive(\@av);
+    my $verb = VERB2();
+    while (@av) {
+        $arg = $av[0];
+        if ($arg =~ /^-/) {
+            $sarg = substr($arg,1);
+            $sarg = substr($sarg,1) while ($sarg =~ /^-/);
+            if (($sarg =~ /^h/i)||($sarg eq '?')) {
+                give_help();
+                pgm_exit(0,"Help exit(0)");
+            } elsif ($sarg =~ /^a/) {
+                # already done
+                prt("Set all files in directories.\n") if ($verb);
+            } elsif ($sarg =~ /^v/) {
+                # already done
+                prt("Set Verbosity = $verbosity\n") if ($verb);
             } elsif ($sarg =~ /^l/) {
                 if ($sarg =~ /^ll/) {
                     $load_log = 2;
@@ -505,6 +561,8 @@ sub give_help {
     prt(" --load        (-l) = Load LOG at end. ($outfile)\n");
     prt(" --out <file>  (-o) = Write output to this file.\n");
     prt(" --recursive   (-r) = Given a directory, recurse into sub directories. (def=$g_recurse)\n");
+    prt(" --all         (-a) = Given a directory, add ALL files. Default is to add\n");
+    prt("                      only C/C++ source or headers.\n");
     prt("\n");
     prt(" Will process input files as text, and count total lines, advise\n");
     prt(" lines containing tabs, and trailing spcaes. Inputs containing wild\n");
