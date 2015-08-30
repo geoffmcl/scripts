@@ -605,6 +605,7 @@ sub give_help {
     prt(" Will process input files as text, and count total lines, advise\n");
     prt(" lines containing tabs, and trailing spcaes. Inputs containing wild\n");
     prt(" cards '?' or '*', and directories are accepted.\n");
+    prt(" Simple usage: '$pgmname -r .' = recursively scan current dir for all C/C++ src and hdrs.\n");
 }
 
 # eof - chktabs.pl
