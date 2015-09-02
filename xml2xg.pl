@@ -44,7 +44,7 @@ my $sid_color = 'blue';
 my $app_color = 'white';
 
 # ### DEBUG ###
-my $debug_on = 1;
+my $debug_on = 0;
 my $def_file = 'circuits\EHAM.procedures.xml';
 my $def_xg = $temp_dir."/tempsidstar.xg";
 
