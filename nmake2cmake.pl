@@ -378,6 +378,7 @@ sub process_in_file($) {
         $cmake .= "#         RUNTIME DESTINATION bin\n";
         $cmake .= "#         LIBRARY DESTINATION lib\n";
         $cmake .= "#         ARCHIVE DESTINATION lib )\n";
+        $cmake .= "# install (FILES \${\${name}_HDRS} DESTINATION include)\n";
         $cmake .= "\n";
     }
 
