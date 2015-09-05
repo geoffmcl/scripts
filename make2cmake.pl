@@ -66,6 +66,8 @@ my $def_proj_name = 'gmpq';
 my $def_out_file = $temp_dir.$PATH_SEP."temp-make2cmake.txt";
 my $def_usr_type = 'Static Library';
 my $debug_rel_fix = 0;
+my $tmp_out_mak = $temp_dir.$PATH_SEP."tempout";
+my $tmp_out_cnt = 0;
 
 #my $def_targ_dir = 'C:\Projects\wput-0.6.1';
 #my $def_file = $def_targ_dir.'\src\Makefile';
@@ -530,6 +532,7 @@ sub process_in_file($) {
     my $rd2 = $root_dir;
     ut_fix_directory(\$rd2);
     my $skip_count = 0;
+    my @nlines = ();
     for ($i = 0; $i < $lncnt; $i++) {
         $line = $lines[$i];
         chomp $line;
@@ -559,6 +562,7 @@ sub process_in_file($) {
             prt("$blnn-$elnn: $len [$tline] after SUBS\n") if (VERB9());
         }
         next if ($tline =~ /^=====(.+)=$/); # skip these lines
+        push(@nlines,$tline);
         # Lines beginning '!...'
         #############################################################
         if ($tline =~ /^!/) {
@@ -668,7 +672,7 @@ sub process_in_file($) {
             ######################################
             } elsif ($tline =~ /^(\w+)\s*:/) {
             ######################################
-                $targ = $1;
+                $targ = $1; # a target item to be build
                 $act = '';
                 $deps = '';
                 if ($tline =~ /^\w+\s*:\s*(.+)$/) {
@@ -769,9 +773,11 @@ sub process_in_file($) {
                     if ((defined $targets_deps{$targ}) && ($targets_deps{$targ} ne $deps) && !curr_dep_incs_prev($targets_deps{$targ},$deps)){
                         prtw("WARNING: Target [$targ] deps [".$targets_deps{$targ}."] being over written\nwith [$deps]") if (VERB2());
                     }
+                    ##################################################################################
                     $targets_deps{$targ} = $deps;
                     $targets_acts{$targ} = $act;
-                    $targets_file{$targ} = $minf;   # Makefile src - for rel dir fixes
+                    $targets_file{$targ} = $minf;   # Makefile sources - needed for relative dir fixes
+                    ##################################################################################
                 } elsif ($tline =~ /^-*include\s+(.+)$/) {
                     # include a file, like -
                     $tmp2 = $1;
@@ -826,6 +832,16 @@ sub process_in_file($) {
         $inc = join(" ",@ifstack);
         prtw("WARNING: Exit file with $tmp items on IF-STACK!\n $inc\n");
     }
+
+    # for DEBUG only - look at trimmed line collected
+    $tmp_out_cnt++;
+    $tmp = $tmp_out_mak.$tmp_out_cnt.".mak";
+    rename_2_old_bak($tmp) if (-f $tmp);
+    $tline = "# Lines from '$minf'\n";
+    $tline .= join("\n",@nlines);
+    $tline .= "\n# eof\n";
+    write2file($tline,$tmp);
+    prt("Written makefile lines to [$tmp]\n");
 }
 
 my %dhashes = ();
@@ -1010,6 +1026,8 @@ sub check_h_extensions($$) {
     return 0;
 }
 
+# have a target like
+# SciLexer.dll: with a list of OBJECTS it depends on...
 sub can_find_source_for_obj($$$) {
     my ($ff,$rsrc,$rhdr) = @_;
     prt("Trying to find source for [$ff]\n");
@@ -1160,6 +1178,7 @@ sub sort_target_deps() {
                                     ###prtw("WARNING:$proj_name: Duplicate HEADER of [$ff] avoided!\n") if (VERB9());
                                 }
                             } else {
+                                # add this source to this project, according to type
                                 if (is_c_source($fil3)) {
                                     if ($prefix_rel_file) {
                                         push(@c_files,$fil3);
@@ -1173,6 +1192,13 @@ sub sort_target_deps() {
                                     } else {
                                         push(@h_files,$ff);
                                     }
+                                } elsif ($fil3 =~ /\.rc$/) {
+                                    if ($prefix_rel_file) {
+                                        push(@c_files,$fil3);
+                                    } else {
+                                        push(@c_files,$ff);
+                                    }
+                                    prt("Added RESOURCE file $ff to $proj_name\n");
                                 }
                                 if ($prefix_rel_file) {
                                     push(@srcs,$fil3);
@@ -1440,13 +1466,15 @@ if(WIN32)
         set( CMAKE_DEBUG_POSTFIX "d" )
     endif(MSVC)
     set( NOMINMAX 1 )
-endif(WIN32)
+else()
+    # unix/mac stuff
+endif()
 
 set( CMAKE_C_FLAGS "\${CMAKE_C_FLAGS} \${WARNING_FLAGS} \${MSVC_FLAGS} -D_REENTRANT" )
 set( CMAKE_CXX_FLAGS "\${CMAKE_CXX_FLAGS} \${WARNING_FLAGS} \${MSVC_FLAGS} -D_REENTRANT" )
 set( CMAKE_EXE_LINKER_FLAGS "\${CMAKE_EXE_LINKER_FLAGS} \${MSVC_LD_FLAGS}" )
 
-add_definitions( -DHAVE_CONFIG_H )
+# add_definitions( -DHAVE_CONFIG_H )
 
 if(BUILD_SHARED_LIB)
    set(LIB_TYPE SHARED)
@@ -1520,22 +1548,22 @@ sub enumerate_project_hashes() {
             foreach $src (sort @{$rca}) {
                 $src = sub_targ_dir($src,$minf);
                 $src = path_d2u($src);
-                $cmake .= "   $src\n";
+                $cmake .= $ind."$src\n";
             }
-            $cmake =~ s/\n$//;
-            $cmake .= " )\n";
+            #$cmake =~ s/\n$//;
+            $cmake .= $ind.")\n";
             if ($hcnt) {
                 $var2 = $pn."_HDRS";
                 $cmake .= "set( $var2\n";
                 foreach $src (sort @{$rha}) {
                     $src = sub_targ_dir($src,$minf);
                     $src = path_d2u($src);
-                    $cmake .= "   $src\n";
+                    $cmake .= $ind."$src\n";
                     accumulate_incs(\%inc_dirs,$src);
                     $hdrlist .= " $src";
                 }
-                $cmake =~ s/\n$//;
-                $cmake .= " )\n";
+                #$cmake =~ s/\n$//;
+                $cmake .= $ind.")\n";
                 $cmake .= "list (APPEND inst_HDRS \${$var2})\n";
             }
 
@@ -1596,21 +1624,21 @@ sub enumerate_project_hashes() {
             foreach $src (sort @{$rca}) {
                 $src = sub_targ_dir($src,$minf);
                 $src = path_d2u($src);
-                $cmake .= "   $src\n";
+                $cmake .= $ind."$src\n";
             }
-            $cmake =~ s/\n$//;
-            $cmake .= " )\n";
+            #$cmake =~ s/\n$//;
+            $cmake .= $ind.")\n";
             if ($hcnt) {
                 $var2 = $pn."_HDRS";
                 $cmake .= "set( $var2\n";
                 foreach $src (sort @{$rha}) {
                     $src = sub_targ_dir($src,$minf);
                     $src = path_d2u($src);
-                    $cmake .= "   $src\n";
+                    $cmake .= $ind."$src\n";
                     accumulate_incs(\%inc_dirs,$src);
                 }
-                $cmake =~ s/\n$//;
-                $cmake .= " )\n";
+                #$cmake =~ s/\n$//;
+                $cmake .= $ind.")\n";
             }
         } else {
             prtw("WARNING: Project [$pn] NO SOURCES!\n");
