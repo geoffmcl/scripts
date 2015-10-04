@@ -121,6 +121,9 @@ sub add_compiler_block($) {
     my $rcm = shift;
     my $txt = <<EOF;
 
+# if additional cmake modules needed and stored in the source
+# set(CMAKE_MODULE_PATH "\${PROJECT_SOURCE_DIR}/CMakeModules")
+
 # Allow developers to select if Dynamic or static libraries are built.
 set( LIB_TYPE STATIC )  # set default static
 option( BUILD_SHARED_LIB    "Set ON to build Shared Libraries"      OFF )
@@ -180,6 +183,11 @@ if (BUILD_SHARED_LIB)
 else ()
     message(STATUS "*** Building STATIC library...")
 endif ()
+
+# if using a configure header file to pass some of the CMake settings to the source code
+# configure_file ( "\${PROJECT_SOURCE_DIR}/config_cmake.h.in" "\${PROJECT_BINARY_DIR}/config.h" )
+# add_definitions( -DHAVE_CONFIG_H )
+# include_directories( \${PROJECT_BINARY_DIR} )
 
 EOF
     ${$rcm} .= $txt;
