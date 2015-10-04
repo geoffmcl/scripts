@@ -33,7 +33,7 @@ my $outfile = $temp_dir.$PATH_SEP."temp.$pgmname.txt";
 open_log($outfile);
 
 # user variables
-my $VERS = "0.0.4 2015-09-03";  # on move to scripts repo
+my $VERS = "0.0.4 2015-09-20";  # on move to scripts repo
 ##my $VERS = "0.0.3 2013-09-02";
 #my $VERS = "0.0.2 2013-01-09";
 #my $VERS = "0.0.1 2012-07-18";
@@ -1456,7 +1456,7 @@ if(WIN32)
         set(WARNING_FLAGS "\${WARNING_FLAGS} /wd4996")
         # foreach(warning 4244 4251 4267 4275 4290 4786 4305)
         #     set(WARNING_FLAGS "\${WARNING_FLAGS} /wd\${warning}")
-        # endforeach(warning)
+        # endforeach()
 
         set( MSVC_FLAGS "-DNOMINMAX -D_USE_MATH_DEFINES -D_CRT_SECURE_NO_WARNINGS -D_SCL_SECURE_NO_WARNINGS -D__CRT_NONSTDC_NO_WARNINGS" )
         # if (\${MSVC_VERSION} EQUAL 1600)
@@ -1474,7 +1474,14 @@ set( CMAKE_C_FLAGS "\${CMAKE_C_FLAGS} \${WARNING_FLAGS} \${MSVC_FLAGS} -D_REENTR
 set( CMAKE_CXX_FLAGS "\${CMAKE_CXX_FLAGS} \${WARNING_FLAGS} \${MSVC_FLAGS} -D_REENTRANT" )
 set( CMAKE_EXE_LINKER_FLAGS "\${CMAKE_EXE_LINKER_FLAGS} \${MSVC_LD_FLAGS}" )
 
+# configuration file, if needed
+# configure_file( \${CMAKE_SOURCE_DIR}/config.h.cmake \${CMAKE_BINARY_DIR}/config.h )
 # add_definitions( -DHAVE_CONFIG_H )
+# include_directories( \${CMAKE_BINARY_DIR} )
+
+# Added for DEBUG only
+# get_property(inc_dirs DIRECTORY PROPERTY INCLUDE_DIRECTORIES)
+# message(STATUS "*** inc_dirs = \${inc_dirs}")
 
 if(BUILD_SHARED_LIB)
    set(LIB_TYPE SHARED)
@@ -1517,6 +1524,7 @@ sub enumerate_project_hashes() {
 
     # pass one - ADD LIBRARIES
     # ========================
+    my $libcount = 0;
     foreach $pn (keys %{$rph}) {
         $rp  = ${$rph}{$pn};
         $type = ${$rp}{'PROJECT_TYPE'};
@@ -1531,6 +1539,10 @@ sub enumerate_project_hashes() {
         $ccnt = scalar @{$rca};
         $hcnt = scalar @{$rha};
         $ocnt = $cnt - ($ccnt + $hcnt);
+        if ($ccnt == 0) {
+            prtw("WARNING: LIBRARY Project [$pn] NO SOURCES!\n");
+            next;
+        }
         prt("Project: [$pn], type $type, with $cnt sources, $ccnt C/C++, $hcnt Hdrs, $ocnt O.\n");
         $cmake .= "\n# Project: [$pn], type $type, with $cnt sources, $ccnt C/C++, $hcnt Hdrs, $ocnt O.\n";
         #if ($type eq 'Dynamic-Link Library') {
@@ -1566,11 +1578,8 @@ sub enumerate_project_hashes() {
                 $cmake .= $ind.")\n";
                 $cmake .= "list (APPEND inst_HDRS \${$var2})\n";
             }
-
-        } else {
-            prtw("WARNING: Project [$pn] NO SOURCES!\n");
-            next;
         }
+        $libcount++;
         $cmake .= "add_library( $pn ";
         #if ($type eq 'Dynamic-Link Library') {
         #    $cmake .= 'SHARED';
@@ -1589,9 +1598,26 @@ sub enumerate_project_hashes() {
         $cmake .= "list (APPEND inst_LIBS $pn )\n";
         push(@libs,$pn);
     }
+    if ($libcount == 0) {
+        # no libraries - add template
+        $cmake .= "# library template\n";
+        $cmake .= "#set(name ???)\n";
+        $cmake .= "#set(dir ???)\n";
+        $cmake .= "#set(\${name}_SRCS\n";
+        $cmake .= "#    \${dir}/????.c\n";
+        $cmake .= "#    )\n";
+        $cmake .= "#set(\${name}_HDRS\n";
+        $cmake .= "#    \${dir}/????.h\n";
+        $cmake .= "#    )\n";
+        $cmake .= "#add_library( \${name} \${LIB_TYPE} \${\${name}_SRCS} \${\${name}_HDRS} )\n";
+        $cmake .= "#list(APPEND add_LIBS \${name})\n";
+        $cmake .= "# set_target_properties(\${name} PROPERTIES COMPILE_FLAGS \"-DMONOLITH\")\n";
+
+    }
 
     # pass two - Add EXECUTABLES
     # ==========================
+    my $execount = 0;
     foreach $pn (keys %{$rph}) {
         $rp  = ${$rph}{$pn};
         $type = ${$rp}{'PROJECT_TYPE'};
@@ -1606,6 +1632,10 @@ sub enumerate_project_hashes() {
         $ccnt = scalar @{$rca};
         $hcnt = scalar @{$rha};
         $ocnt = $cnt - ($ccnt + $hcnt);
+        if ($ccnt == 0) {
+            prtw("WARNING: EXECUTALE Project [$pn] NO SOURCES!\n");
+            next;
+        }
         prt("Project: [$pn], type $type, with $cnt sources, $ccnt C/C++, $hcnt Hdrs, $ocnt O.\n");
         $cmake .= "\n# Project: [$pn], type $type, with $cnt sources, $ccnt C/C++, $hcnt Hdrs, $ocnt O.\n";
         if ($type eq 'Console Application') {
@@ -1640,10 +1670,8 @@ sub enumerate_project_hashes() {
                 #$cmake =~ s/\n$//;
                 $cmake .= $ind.")\n";
             }
-        } else {
-            prtw("WARNING: Project [$pn] NO SOURCES!\n");
-            next;
         }
+        $execount++;
         $cmake .= "add_executable( $pn $mod\n";
         $cmake .= "      \${$var1}\n";
         if (length($var2)) {
@@ -1660,6 +1688,25 @@ sub enumerate_project_hashes() {
         $cmake .= "list (APPEND inst_BINS $pn)\n";
         push(@bins,$pn);
     }
+    if ($execount == 0) {
+        # no executables - add template
+        $cmake .= "# executable template\n";
+        $cmake .= "#set(name ???)\n";
+        $cmake .= "#set(dir ???)\n";
+        $cmake .= "#set(\${name}_SRCS\n";
+        $cmake .= "#    \${dir}/????.c\n";
+        $cmake .= "#    )\n";
+        $cmake .= "#set(\${name}_HDRS\n";
+        $cmake .= "#    \${dir}/????.h\n";
+        $cmake .= "#    )\n";
+        $cmake .= "#add_executable( \${name} \${EXE_TYPE} \${\${name}_SRCS} \${\${name}_HDRS} )\n";
+        $cmake .= "#if (add_LIBS OR extra_LIBS)\n";
+        $cmake .= "#    target_link_libraries( \${name} \${add_LIBS} \${extra_LIBS} )\n";
+        $cmake .= "#endif ()\n";
+        $cmake .= "#if (MSVC)\n";
+        $cmake .= "#    set_target_properties( \${name} PROPERTIES DEBUG_POSTFIX d )\n";
+        $cmake .= "#endif ()\n";
+    }
 
     # INSTALLATION
     $cmake .= "\n# deal with INSTALL\n";
@@ -1673,11 +1720,18 @@ sub enumerate_project_hashes() {
         $var1 = "include_directories( ".join(" ",@arr)." )\n\n";
         $cmake = $var1.$cmake;
     }
-    $var1 = "# CMakeLists.txt generated ".lu_get_YYYYMMDD_hhmmss(time())."\n";
-    $var1 .= "# by $pgmname from $in_file\n\n";
+
+    #############################################################
+    $var1 = "#\n";
+    $var1 .= "# Original CMakeLists.txt generated ".lu_get_YYYYMMDD_hhmmss(time())."\n";
+    $var1 .= "# by $pgmname $VERS from $in_file\n\n";
+
     $var1 .= "cmake_minimum_required (VERSION 2.8.8)\n\n";
     $var1 .= "project ($proj_name)\n\n";
-    $ind = '';
+
+    $var1 .= "# local CMake Scripts\n";
+    $var1 .= "#set(CMAKE_MODULE_PATH \${CMAKE_SOURCE_DIR}/CMakeModules)\n\n";
+
     if (length($project_version)) {
         $var1 .= "# ### NOTE: *** CHECK ME ***\n";
         @arr = split(/\./,$project_version);
