@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 # NAME: findap03.pl
 # AIM: Read FlightGear apt.dat, and find an airport given the name,
+# 10/04/2016 - Add xg output options
 # 16/07/2015 - Move into scripts repo
 # 18/12/2014 - Switch to using the terrasync update directory, if AVAILABLE
 # 17/11/2014 - Use -s to attempt generate SID/STAR patterns - TODO - how to show well???
@@ -77,7 +78,8 @@ my $NAVFILE 	  = "$FGROOT/Navaids/nav.dat.gz";	# the NAV, NDB, etc. data file
 my $FIXFILE 	  = "$FGROOT/Navaids/fix.dat.gz";	# the FIX data file
 my $AWYFILE       = "$FGROOT/Navaids/awy.dat.gz";   # Airways data
 # =============================================================================
-my $VERS="Jul 16, 2015. version 1.0.7";
+my $VERS="Apr 10, 2016. version 1.0.8";
+###my $VERS="Jul 16, 2015. version 1.0.7";
 ###my $VERS="Nov 17, 2014. version 1.0.6";
 ###my $VERS="Sep 3, 2014. version 1.0.5";
 ###my $VERS="Jan 10, 2014. version 1.0.4";
@@ -138,6 +140,7 @@ my $ex_helipads = 1;    # exclude helipads if a lat/lon search
 my $g_version = 0;
 my $gen_sidstar = 0;    # TODO: This is HARD - maybe should be another app...
 my $add_bbox = 0;
+my $new_x_opts = 1; # xg airport gen options, with anno, etc...
 
 # radio frequency listing
 my $use_full_list = 0; # seems better to GROUP frequencies
@@ -149,8 +152,9 @@ my $exclude_markers = 1;    # in NAVAID search EXCLUDE OM, MM and IM marker beac
 my $exclude_gs_ils  = 1;     # exclude the GS, since has the same frequency as associated ILS
 my $min_nav_aids = 10;
 my $out_file = '';
-my $add_anno = 0;   # -a - add xgraph anno output for airport
+my $add_anno = 0;   # -Xa == -a - add xgraph anno output for airport
 my $xg_output = '';
+my $add_xg = 0;
 
 my $HOST = "localhost";
 my $PORT = 5556;
@@ -819,43 +823,60 @@ sub rwy_xg_stg($$$$$$$) {
     $r_tr_lon = $plon11;
     # RIGHT CIRCUIT
     $xg .= "color green\n";
-    $xg .= "anno $r_tr_lon $r_tr_lat ____ R-TR\n";
+    if ($add_anno) {
+        $xg .= "anno $r_tr_lon $r_tr_lat ____ R-TR\n";
+    }
     $xg .= "$r_tr_lon $r_tr_lat\n";
 
     get_mid_point($r_tr_lat,$r_tr_lon,$r_tl_lat,$r_tl_lon,\$m_lat,\$m_lon); # TR->TL - cross
-    if ($use_full_msg) {
-        $xg .= "anno $m_lon $m_lat cross TR->TL\n";
-    } else {
-        $xg .= "anno $m_lon $m_lat cross\n";
+
+    if ($add_anno) {
+        if ($use_full_msg) {
+            $xg .= "anno $m_lon $m_lat cross TR->TL\n";
+        } else {
+            $xg .= "anno $m_lon $m_lat cross\n";
+        }
+
+        $xg .= "anno $r_tl_lon $r_tl_lat R-TL\n";
     }
 
-    $xg .= "anno $r_tl_lon $r_tl_lat R-TL\n";
     $xg .= "$r_tl_lon $r_tl_lat\n";
 
     get_mid_point($r_tl_lat,$r_tl_lon,$r_bl_lat,$r_bl_lon,\$m_lat,\$m_lon); # TL->BL - downwind
-    if ($use_full_msg) {
-        $xg .= "anno $m_lon $m_lat downwind TL->BL\n";
-    } else {
-        $xg .= "anno $m_lon $m_lat downwind\n";
+
+    if ($add_anno) {
+        if ($use_full_msg) {
+            $xg .= "anno $m_lon $m_lat downwind TL->BL\n";
+        } else {
+            $xg .= "anno $m_lon $m_lat downwind\n";
+        }
+
+        $xg .= "anno $r_bl_lon $r_bl_lat R-BL\n";
     }
 
-    $xg .= "anno $r_bl_lon $r_bl_lat R-BL\n";
     $xg .= "$r_bl_lon $r_bl_lat\n";
 
     get_mid_point($r_bl_lat,$r_bl_lon,$r_br_lat,$r_br_lon,\$m_lat,\$m_lon); # BL->BR - base
-    if ($use_full_msg) {
-        $xg .= "anno $m_lon $m_lat base BL->BR\n";
-    } else {
-        $xg .= "anno $m_lon $m_lat base\n";
-    } 
 
-    $xg .= "anno $r_br_lon $r_br_lat ____ R-BR\n";
+    if ($add_anno) {
+        if ($use_full_msg) {
+            $xg .= "anno $m_lon $m_lat base BL->BR\n";
+        } else {
+            $xg .= "anno $m_lon $m_lat base\n";
+        } 
+
+        $xg .= "anno $r_br_lon $r_br_lat ____ R-BR\n";
+    }
+
     $xg .= "$r_br_lon $r_br_lat\n";
 
     # on final
     # get_mid_point($r_br_lat,$r_br_lon,$r_tr_lat,$r_tr_lon,\$m_lat,\$m_lon); # BR->TR - runway
     get_mid_point($r_br_lat,$r_br_lon,$elat2,$elon2,\$m_lat,\$m_lon); # BR->RWY - final
-    $xg .= "anno $m_lon $m_lat final $rwy1\n";
+
+    if ($add_anno) {
+        $xg .= "anno $m_lon $m_lat final $rwy1\n";
+    }
 
     $xg .= "$r_tr_lon $r_tr_lat\n";
     $xg .= "NEXT\n";
@@ -873,43 +894,60 @@ sub rwy_xg_stg($$$$$$$) {
     ###########################################################
     # LEFT circuit
     $xg .= "color white\n";
-    $xg .= "anno $l_tr_lon $l_tr_lat L-TR\n";
+
+    if ($add_anno) {
+        $xg .= "anno $l_tr_lon $l_tr_lat L-TR\n";
+    }
 
     get_mid_point($l_tr_lat,$l_tr_lon,$l_tl_lat,$l_tl_lon,\$m_lat,\$m_lon); # TR->TL - cross
-    if ($use_full_msg) {
-        $xg .= "anno $m_lon $m_lat cross TR->TL\n";
-    } else {
-        $xg .= "anno $m_lon $m_lat cross\n";
+
+    if ($add_anno) {
+        if ($use_full_msg) {
+            $xg .= "anno $m_lon $m_lat cross TR->TL\n";
+        } else {
+            $xg .= "anno $m_lon $m_lat cross\n";
+        }
+        $xg .= "anno $l_tl_lon $l_tl_lat L-TL\n";
     }
 
     $xg .= "$l_tr_lon $l_tr_lat\n";
-    $xg .= "anno $l_tl_lon $l_tl_lat L-TL\n";
     $xg .= "$l_tl_lon $l_tl_lat\n";
 
     get_mid_point($l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,\$m_lat,\$m_lon); # TL->BL - downwind
-    if ($use_full_msg) {
-        $xg .= "anno $m_lon $m_lat downwind TL->BL\n";
-    } else {
-        $xg .= "anno $m_lon $m_lat downwind\n";
-    } 
 
-    $xg .= "anno $l_bl_lon $l_bl_lat L-BL\n";
+    if ($add_anno) {
+        if ($use_full_msg) {
+            $xg .= "anno $m_lon $m_lat downwind TL->BL\n";
+        } else {
+            $xg .= "anno $m_lon $m_lat downwind\n";
+        } 
+
+        $xg .= "anno $l_bl_lon $l_bl_lat L-BL\n";
+    }
+
     $xg .= "$l_bl_lon $l_bl_lat\n";
 
     get_mid_point($l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,\$m_lat,\$m_lon); # BL->BR - base
-    if ($use_full_msg) {
-        $xg .= "anno $m_lon $m_lat base BL->BR\n";
-    } else {
-        $xg .= "anno $m_lon $m_lat base\n";
-    } 
 
-    $xg .= "anno $l_br_lon $l_br_lat L-BR\n";
+    if ($add_anno) {
+        if ($use_full_msg) {
+            $xg .= "anno $m_lon $m_lat base BL->BR\n";
+        } else {
+            $xg .= "anno $m_lon $m_lat base\n";
+        } 
+
+        $xg .= "anno $l_br_lon $l_br_lat L-BR\n";
+    }
+
     $xg .= "$l_br_lon $l_br_lat\n";
 
     # on final
     # get_mid_point($l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon,\$m_lat,\$m_lon); # BR->TR - runway
     get_mid_point($l_br_lat,$l_br_lon,$elat1,$elon1,\$m_lat,\$m_lon); # BR->RWY - final
-    $xg .= "anno $m_lon $m_lat final $rwy2\n";
+
+    if ($add_anno) {
+        $xg .= "anno $m_lon $m_lat final $rwy2\n";
+    }
 
     $xg .= "$l_tr_lon $l_tr_lat\n";
     $xg .= "NEXT\n";
@@ -1001,7 +1039,9 @@ sub show_airports_found {
         $rrwys = $aptlist2[$i][14]; # extract RUNWAY reference
         $rwycnt = scalar @{$rrwys};
         # anno 148.636305809373 -31.6965632128734 YGIL Airport circuit 33
-        $annoxg .= "anno $dlon $dlat $icao $name circuit $g_circuit\n";
+        if ($add_anno) {
+            $annoxg .= "anno $dlon $dlat $icao $name circuit $g_circuit\n";
+        }
         $alat = $dlat;
         $alon = $dlon;
         $oicao = $icao;
@@ -1287,23 +1327,29 @@ sub show_airports_found {
         prt("bounds: $min_lat $min_lon $max_lat $max_lon\n") if ($add_bbox);
 	}
     prt("bounds: $min_lats $min_lons $max_lats $max_lons\n") if ($add_bbox && ($scnt > 1));
-    if ($add_anno && length($annoxg)) {
-        $name = trim_all($name);
-        $annoxg = "# Airport:[ icao=\"$icao\", name:\"$name\", lon:$dlon, lat:$dlat, alt:$aalt, rwys:$rwycnt";
-        my @a = keys %g_rwy_ends;
-        if (@a) {
-            $annoxg .= ", ids:\"";
-            $annoxg .= join("/",@a);
-            $annoxg .= "\"";
+    if ($add_xg) {
+        if (length($annoxg)) {
+            $name = trim_all($name);
+            $annoxg = "# Airport:[ icao=\"$icao\", name:\"$name\", lon:$dlon, lat:$dlat, alt:$aalt, rwys:$rwycnt";
+            my @a = keys %g_rwy_ends;
+            if (@a) {
+                $annoxg .= ", ids:\"";
+                $annoxg .= join("/",@a);
+                $annoxg .= "\"";
+            }
+            $annoxg .= "]\n";
+            $annoxg .= "anno $dlon $dlat $apticao Airport circuit $g_circuit\n";
         }
-        $annoxg .= "]\n";
-        $annoxg .= "anno $dlon $dlat $apticao Airport circuit $g_circuit\n";
         $annoxg .= $apt_xg;
         #prt("$annoxg");
-        $out_xg1 = $xg_output if (length($xg_output));
-        rename_2_old_bak($out_xg1); # never overwrite previous
-        write2file($annoxg,$out_xg1);
-        prt("Written airport XG file $out_xg1\n");
+        if (length($xg_output) && length($annoxg)) {
+            $out_xg1 = $xg_output;
+            rename_2_old_bak($out_xg1); # never overwrite previous
+            write2file($annoxg,$out_xg1);
+            prt("Written airport XG file $out_xg1\n");
+        } else {
+            prt("No \$xg_output, or \$apt_xg to write...\n");
+        }
     }
     # ==========================================================
 	prt("[v2] Done $scnt list ...\n" ) if (VERB2());
@@ -3366,7 +3412,7 @@ sub give_help {
 	prt( "*** FLIGHTGEAR AIRPORT SEARCH UTILITY - $VERS ***\n" );
 	prt( "Usage: $pgmname options\n" );
 	prt( "Options: A ? anywhere for this help.\n" );
-    prt( " --Anno          (-A) = Generate XG(raph) output for airports. (def=".
+    prt( " --Anno          (-A) = Anno the XG(raph) output for airports. (def=".
         ($add_anno ? "On" : "Off") . ")\n");
     prt( " --bbox          (-b) = Output a bounding box for the airport.\n");
     prt( " --file <file>   (-f) = Load commands from this 'file' of commands...\n");
@@ -3391,11 +3437,17 @@ sub give_help {
     prt( " --verbosity (-v[nn]) = Increase or set verbosity. (def=$verbosity)\n");
     prt( " --VOR           (-V) = List only VOR (+NDB)\n");
     prt( " --loadlog       (-l) = Load log at end of display.\n");
-    prt( " --Xml           (-X) = Generate ICAO.threshold.xml file (def=".
-        ($gen_threshold_xml ? "on" : "off").")\n");
+    if (!$new_x_opts) {
+        prt( " --Xml           (-X) = Generate ICAO.threshold.xml file (def=".
+            ($gen_threshold_xml ? "on" : "off").")\n");
+    }
     prt( " --out <file>    (-o) = Write found information to file. (def=".
         (length($out_file) ? $out_file : "none").")\n");
-    prt( " --xg <file>     (-x) = Write airport xg file. Implies -A\n");
+    # prt( " --xg <file>     (-x) = Write airport xg file. Implies -A\n");
+    prt( " --xg <file>     (-x) = Write airport xg file.\n");
+    if ($new_x_opts) {
+        prt( " --XA??          (-X) = set xg output options. A=Anno=$add_anno, ...\n");
+    }
     prt( "When searching by lat,lon, use -H to not skip helipads.\n");
 	mydie( "                                                         Happy Searching.\n" );
 }
@@ -3487,6 +3539,7 @@ sub deal_with_verbosity($) {
 sub parse_args {
 	my (@av) = @_;
 	my (@arr,$arg,$sarg,$lcarg,$ch);
+    my ($len,$i);
     $arg = scalar @av;
     #prt("Deal with $arg command arguments...\n");
     deal_with_verbosity(\@av);
@@ -3795,15 +3848,36 @@ sub parse_args {
                 $tryharder = 1;  # Expand the search for NAVAID, until at least 1 found
                 prt( "[v1] Set NAVAID search 'tryharder'...\n" ) if (VERB1());
             } elsif ($sarg =~ /^X/) {
-                $gen_threshold_xml = 1;
-                prt( "[v1] Generate threshold xml for airport(s) found\n" ) if (VERB1());
+                if ($new_x_opts) {
+                    # parse X opts
+                    $sarg = substr($sarg,1);
+                    $len = length($sarg);
+                    if ($len) {
+                        for ($i = 0; $i < $len; $i++) {
+                            $ch = substr($sarg,$i,1);
+                            if (uc($ch) eq 'A') {
+                                $add_anno = 1;
+                                prt("[v1] Add xgraph anno output for airports.\n") if (VERB1());
+                            } else {
+                                pgm_exit(1,"Error: Unknown -Xxxxx option, '$ch'\n");
+                            }
+                        }
+                    } else {
+                        pgm_exit(1,"Error: -X must be followed by option\n");
+                    }
+                } else {
+                    $gen_threshold_xml = 1;
+                    prt( "[v1] Generate threshold xml for airport(s) found\n" ) if (VERB1());
+                }
             } elsif ( $sarg =~ /^x/ ) {
+                # set xg output for an airport
                 require_arg(@av);
                 shift @av;
                 $sarg = $av[0];
                 $xg_output = $sarg;
-                $add_anno = 1;
-                prt( "[v1] Generate runway xg for airport(s) found\n" ) if (VERB1());
+                ### $add_anno = 1;
+                $add_xg = 1;
+                prt( "[v1] Generate circuit xg $xg_output, for ap(s) found\n" ) if (VERB1());
             } elsif ($sarg =~ /^o/) {
                 require_arg(@av);
                 shift @av;
