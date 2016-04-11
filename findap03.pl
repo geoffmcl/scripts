@@ -155,7 +155,7 @@ my $out_file = '';
 my $add_anno = 0;   # -Xa == -a - add xgraph anno output for airport
 my $xg_output = '';
 my $add_xg = 0;
-
+my $add_circuit = 3;    # -XR == 1, -XL == 2
 my $HOST = "localhost";
 my $PORT = 5556;
 my $TIMEOUT = 1;
@@ -761,6 +761,8 @@ sub rwy_xg_stg($$$$$$$) {
     # We have the RUNWAY ends - now extend out to first turn to crosswind leg, and turn to final
     # but by how MUCH - ok decide from runway end, out to where it is a 3 degree glide from 1000 feet
     my $dist = ($stand_patt_alt * $SG_FEET_TO_METER) / tan($stand_glide_degs * $SGD_DEGREES_TO_RADIANS);
+
+    ######################################################################################
     my ($plat11,$plon11,$plat12,$plon12,$plat13,$plon13,$paz1);
     my ($plat21,$plon21,$plat22,$plon22,$plat23,$plon23,$paz2);
     my ($hdg1L,$hdg1R,$crossd,$tmp);
@@ -813,6 +815,7 @@ sub rwy_xg_stg($$$$$$$) {
     #################################################
     # RIGHT CIRCUIT
     # At YGIL, this is a 15 circuit (the prevailing wind! SSE...
+    # At LEIG, runway 17 circuit
     $r_tl_lat = $plat12;
     $r_tl_lon = $plon12;
     $r_bl_lat = $plat13;
@@ -822,64 +825,69 @@ sub rwy_xg_stg($$$$$$$) {
     $r_tr_lat = $plat11;
     $r_tr_lon = $plon11;
     # RIGHT CIRCUIT
-    $xg .= "color green\n";
-    if ($add_anno) {
-        $xg .= "anno $r_tr_lon $r_tr_lat ____ R-TR\n";
-    }
-    $xg .= "$r_tr_lon $r_tr_lat\n";
+    ###############
+    if ($add_circuit & 1) {
+        $xg .= "# RIGHT circuit - green\n";
+        $xg .= "color green\n";
+        if ($add_anno) {
+            $xg .= "anno $r_tr_lon $r_tr_lat ____ R-TR\n";
+        }
+        $xg .= "$r_tr_lon $r_tr_lat\n";
 
-    get_mid_point($r_tr_lat,$r_tr_lon,$r_tl_lat,$r_tl_lon,\$m_lat,\$m_lon); # TR->TL - cross
+        get_mid_point($r_tr_lat,$r_tr_lon,$r_tl_lat,$r_tl_lon,\$m_lat,\$m_lon); # TR->TL - cross
 
-    if ($add_anno) {
-        if ($use_full_msg) {
-            $xg .= "anno $m_lon $m_lat cross TR->TL\n";
-        } else {
-            $xg .= "anno $m_lon $m_lat cross\n";
+        if ($add_anno) {
+            if ($use_full_msg) {
+                $xg .= "anno $m_lon $m_lat cross TR->TL\n";
+            } else {
+                $xg .= "anno $m_lon $m_lat cross\n";
+            }
+
+            $xg .= "anno $r_tl_lon $r_tl_lat R-TL\n";
         }
 
-        $xg .= "anno $r_tl_lon $r_tl_lat R-TL\n";
-    }
+        $xg .= "$r_tl_lon $r_tl_lat\n";
 
-    $xg .= "$r_tl_lon $r_tl_lat\n";
+        get_mid_point($r_tl_lat,$r_tl_lon,$r_bl_lat,$r_bl_lon,\$m_lat,\$m_lon); # TL->BL - downwind
 
-    get_mid_point($r_tl_lat,$r_tl_lon,$r_bl_lat,$r_bl_lon,\$m_lat,\$m_lon); # TL->BL - downwind
+        if ($add_anno) {
+            if ($use_full_msg) {
+                $xg .= "anno $m_lon $m_lat downwind TL->BL\n";
+            } else {
+                $xg .= "anno $m_lon $m_lat downwind\n";
+            }
 
-    if ($add_anno) {
-        if ($use_full_msg) {
-            $xg .= "anno $m_lon $m_lat downwind TL->BL\n";
-        } else {
-            $xg .= "anno $m_lon $m_lat downwind\n";
+            $xg .= "anno $r_bl_lon $r_bl_lat R-BL\n";
         }
 
-        $xg .= "anno $r_bl_lon $r_bl_lat R-BL\n";
+        $xg .= "$r_bl_lon $r_bl_lat\n";
+
+        get_mid_point($r_bl_lat,$r_bl_lon,$r_br_lat,$r_br_lon,\$m_lat,\$m_lon); # BL->BR - base
+
+        if ($add_anno) {
+            if ($use_full_msg) {
+                $xg .= "anno $m_lon $m_lat base BL->BR\n";
+            } else {
+                $xg .= "anno $m_lon $m_lat base\n";
+            } 
+
+            $xg .= "anno $r_br_lon $r_br_lat ____ R-BR\n";
+        }
+
+        $xg .= "$r_br_lon $r_br_lat\n";
+
+        # on final
+        # get_mid_point($r_br_lat,$r_br_lon,$r_tr_lat,$r_tr_lon,\$m_lat,\$m_lon); # BR->TR - runway
+        get_mid_point($r_br_lat,$r_br_lon,$elat2,$elon2,\$m_lat,\$m_lon); # BR->RWY - final
+
+        if ($add_anno) {
+            $xg .= "anno $m_lon $m_lat final $rwy1\n";
+        }
+
+        $xg .= "$r_tr_lon $r_tr_lat\n";
+        $xg .= "NEXT\n";
+
     }
-
-    $xg .= "$r_bl_lon $r_bl_lat\n";
-
-    get_mid_point($r_bl_lat,$r_bl_lon,$r_br_lat,$r_br_lon,\$m_lat,\$m_lon); # BL->BR - base
-
-    if ($add_anno) {
-        if ($use_full_msg) {
-            $xg .= "anno $m_lon $m_lat base BL->BR\n";
-        } else {
-            $xg .= "anno $m_lon $m_lat base\n";
-        } 
-
-        $xg .= "anno $r_br_lon $r_br_lat ____ R-BR\n";
-    }
-
-    $xg .= "$r_br_lon $r_br_lat\n";
-
-    # on final
-    # get_mid_point($r_br_lat,$r_br_lon,$r_tr_lat,$r_tr_lon,\$m_lat,\$m_lon); # BR->TR - runway
-    get_mid_point($r_br_lat,$r_br_lon,$elat2,$elon2,\$m_lat,\$m_lon); # BR->RWY - final
-
-    if ($add_anno) {
-        $xg .= "anno $m_lon $m_lat final $rwy1\n";
-    }
-
-    $xg .= "$r_tr_lon $r_tr_lat\n";
-    $xg .= "NEXT\n";
 
     #################################################
     # At YGIL, this is a 33 circuit
@@ -893,64 +901,68 @@ sub rwy_xg_stg($$$$$$$) {
     $l_tr_lon = $plon21; #148.649139;
     ###########################################################
     # LEFT circuit
-    $xg .= "color white\n";
+    ########################
+    if ($add_circuit & 2) {
+        $xg .= "# LEFT circuit - white\n";
+        $xg .= "color white\n";
 
-    if ($add_anno) {
-        $xg .= "anno $l_tr_lon $l_tr_lat L-TR\n";
-    }
-
-    get_mid_point($l_tr_lat,$l_tr_lon,$l_tl_lat,$l_tl_lon,\$m_lat,\$m_lon); # TR->TL - cross
-
-    if ($add_anno) {
-        if ($use_full_msg) {
-            $xg .= "anno $m_lon $m_lat cross TR->TL\n";
-        } else {
-            $xg .= "anno $m_lon $m_lat cross\n";
+        if ($add_anno) {
+            $xg .= "anno $l_tr_lon $l_tr_lat L-TR\n";
         }
-        $xg .= "anno $l_tl_lon $l_tl_lat L-TL\n";
+
+        get_mid_point($l_tr_lat,$l_tr_lon,$l_tl_lat,$l_tl_lon,\$m_lat,\$m_lon); # TR->TL - cross
+
+        if ($add_anno) {
+            if ($use_full_msg) {
+                $xg .= "anno $m_lon $m_lat cross TR->TL\n";
+            } else {
+                $xg .= "anno $m_lon $m_lat cross\n";
+            }
+            $xg .= "anno $l_tl_lon $l_tl_lat L-TL\n";
+        }
+
+        $xg .= "$l_tr_lon $l_tr_lat\n";
+        $xg .= "$l_tl_lon $l_tl_lat\n";
+
+        get_mid_point($l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,\$m_lat,\$m_lon); # TL->BL - downwind
+
+        if ($add_anno) {
+            if ($use_full_msg) {
+                $xg .= "anno $m_lon $m_lat downwind TL->BL\n";
+            } else {
+                $xg .= "anno $m_lon $m_lat downwind\n";
+            } 
+
+            $xg .= "anno $l_bl_lon $l_bl_lat L-BL\n";
+        }
+
+        $xg .= "$l_bl_lon $l_bl_lat\n";
+
+        get_mid_point($l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,\$m_lat,\$m_lon); # BL->BR - base
+
+        if ($add_anno) {
+            if ($use_full_msg) {
+                $xg .= "anno $m_lon $m_lat base BL->BR\n";
+            } else {
+                $xg .= "anno $m_lon $m_lat base\n";
+            } 
+
+            $xg .= "anno $l_br_lon $l_br_lat L-BR\n";
+        }
+
+        $xg .= "$l_br_lon $l_br_lat\n";
+
+        # on final
+        # get_mid_point($l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon,\$m_lat,\$m_lon); # BR->TR - runway
+        get_mid_point($l_br_lat,$l_br_lon,$elat1,$elon1,\$m_lat,\$m_lon); # BR->RWY - final
+
+        if ($add_anno) {
+            $xg .= "anno $m_lon $m_lat final $rwy2\n";
+        }
+
+        $xg .= "$l_tr_lon $l_tr_lat\n";
+        $xg .= "NEXT\n";
     }
-
-    $xg .= "$l_tr_lon $l_tr_lat\n";
-    $xg .= "$l_tl_lon $l_tl_lat\n";
-
-    get_mid_point($l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,\$m_lat,\$m_lon); # TL->BL - downwind
-
-    if ($add_anno) {
-        if ($use_full_msg) {
-            $xg .= "anno $m_lon $m_lat downwind TL->BL\n";
-        } else {
-            $xg .= "anno $m_lon $m_lat downwind\n";
-        } 
-
-        $xg .= "anno $l_bl_lon $l_bl_lat L-BL\n";
-    }
-
-    $xg .= "$l_bl_lon $l_bl_lat\n";
-
-    get_mid_point($l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,\$m_lat,\$m_lon); # BL->BR - base
-
-    if ($add_anno) {
-        if ($use_full_msg) {
-            $xg .= "anno $m_lon $m_lat base BL->BR\n";
-        } else {
-            $xg .= "anno $m_lon $m_lat base\n";
-        } 
-
-        $xg .= "anno $l_br_lon $l_br_lat L-BR\n";
-    }
-
-    $xg .= "$l_br_lon $l_br_lat\n";
-
-    # on final
-    # get_mid_point($l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon,\$m_lat,\$m_lon); # BR->TR - runway
-    get_mid_point($l_br_lat,$l_br_lon,$elat1,$elon1,\$m_lat,\$m_lon); # BR->RWY - final
-
-    if ($add_anno) {
-        $xg .= "anno $m_lon $m_lat final $rwy2\n";
-    }
-
-    $xg .= "$l_tr_lon $l_tr_lat\n";
-    $xg .= "NEXT\n";
 
     $xg .= "# end runway description\n";
     ###############################################################################
@@ -3858,6 +3870,10 @@ sub parse_args {
                             if (uc($ch) eq 'A') {
                                 $add_anno = 1;
                                 prt("[v1] Add xgraph anno output for airports.\n") if (VERB1());
+                            } elsif (uc($ch) eq 'R') {
+                                $add_circuit = 1;
+                            } elsif (uc($ch) eq 'L') {
+                                $add_circuit = 2;
                             } else {
                                 pgm_exit(1,"Error: Unknown -Xxxxx option, '$ch'\n");
                             }
