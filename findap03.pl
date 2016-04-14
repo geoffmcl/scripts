@@ -1,7 +1,8 @@
 #!/usr/bin/perl
 # NAME: findap03.pl
 # AIM: Read FlightGear apt.dat, and find an airport given the name,
-# 10/04/2016 - Add xg output options
+# 12/04/2016 - Add to -Xopts, L/R only, H500, ...
+# 10/04/2016 - Add xg output options - see $add_anno
 # 16/07/2015 - Move into scripts repo
 # 18/12/2014 - Switch to using the terrasync update directory, if AVAILABLE
 # 17/11/2014 - Use -s to attempt generate SID/STAR patterns - TODO - how to show well???
@@ -140,6 +141,7 @@ my $ex_helipads = 1;    # exclude helipads if a lat/lon search
 my $g_version = 0;
 my $gen_sidstar = 0;    # TODO: This is HARD - maybe should be another app...
 my $add_bbox = 0;
+my $xgbbox = '';
 my $new_x_opts = 1; # xg airport gen options, with anno, etc...
 
 # radio frequency listing
@@ -154,6 +156,7 @@ my $min_nav_aids = 10;
 my $out_file = '';
 my $add_anno = 0;   # -Xa == -a - add xgraph anno output for airport
 my $xg_output = '';
+my $xgmsg = ''; # header for XG file otuput...
 my $add_xg = 0;
 my $add_circuit = 3;    # -XR == 1, -XL == 2
 my $HOST = "localhost";
@@ -684,7 +687,7 @@ sub get_ll_stg($$) {
 #####################################################################
 ### control the size of the circuit
 my $stand_glide_degs = 3; # degrees
-my $stand_patt_alt = 1000; # feet
+my $stand_patt_alt = 1000; # feet - default student altitude - -XH500 - to change
 my $stand_cross_nm = 2.1; # nm, but this will depend on the aircraft
 my $ac_speed_kts = 80;  # Knots
 #####################################################################
@@ -709,15 +712,49 @@ sub get_mid_point($$$$$$) {
     ${$rclon} = $clon;
 }
 
+my $x_min_lat = 400;
+my $x_min_lon = 400;
+my $x_max_lat = -400;
+my $x_max_lon = -400;
+
+sub add_to_bbox($$) {
+    my ($lon,$lat) = @_;
+    $x_min_lat = $lat if ($lat < $x_min_lat);
+    $x_min_lon = $lon if ($lon < $x_min_lon);
+    $x_max_lat = $lat if ($lat > $x_max_lat);
+    $x_max_lon = $lon if ($lon > $x_max_lon);
+}
+
+sub get_x_bbox() {
+    my $xg = "# bbox $x_min_lon $x_min_lat $x_max_lon $x_max_lat\n";
+    if (($x_min_lat == 400) ||
+        ($x_min_lon == 400) ||
+        ($x_max_lat == -400) ||
+        ($x_max_lon == -400))
+    {
+        $xg = "# no bbox\n";
+    } else {
+        $xg .= "color blue\n";
+        $xg .= "$x_min_lon $x_min_lat\n";
+        $xg .= "$x_min_lon $x_max_lat\n";
+        $xg .= "$x_max_lon $x_max_lat\n";
+        $xg .= "$x_max_lon $x_min_lat\n";
+        $xg .= "$x_min_lon $x_min_lat\n";
+        $xg .= "NEXT\n";
+    }
+    return $xg;
+}
+
+
 ##############################################################
 ### get RUNWAY xg string
 ##############################################################
-sub rwy_xg_stg($$$$$$$) {
-    my ($elat1,$elon1,$elat2,$elon2,$widm,$rwy1,$rwy2) = @_;
+sub rwy_xg_stg($$$$$$$$) {
+    my ($icao,$elat1,$elon1,$elat2,$elon2,$widm,$rwy1,$rwy2) = @_;
     my $hwidm = $widm / 2;
     my ($az1,$az2,$s,$az3,$az4,$az5);
     my ($lon1,$lon2,$lon3,$lon4,$lat1,$lat2,$lat3,$lat4);
-    my ($clat,$clon);
+    my ($clat,$clon,$msg);
     my $xg = '';
     #################################################
     my $res = fg_geo_inverse_wgs_84($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$s);
@@ -732,7 +769,8 @@ sub rwy_xg_stg($$$$$$$) {
 
     # center line of runway
     $xg .= "color blue\n";
-    $xg .= "anno $clon $clat rwy:\"$rwy1/$rwy2\", len:\"$distft\", u=\"ft\"\n";
+    # $xg .= "anno $clon $clat rwy:\"$rwy1/$rwy2\", len:\"$distft\", u=\"ft\"\n";
+    $xg .= "anno $clon $clat rwy:$rwy1/$rwy2, len:$distft ft\n";
     $xg .= "$elon1 $elat1\n";
     $xg .= "$elon2 $elat2\n";
     $xg .= "NEXT\n";
@@ -774,30 +812,37 @@ sub rwy_xg_stg($$$$$$$) {
     $hdg1R = $az1 + 90;
     $hdg1R -= 360 if ($hdg1R > 360);
     $crossd = $stand_cross_nm * $SG_NM_TO_METER;
+    $crossd = $dist if ($dist < $crossd);
+
+    $msg = "# ";
+    $msg .= "Gen $icao CIRCUIT AI $stand_glide_degs gs";
+    $tmp = int($stand_patt_alt + 0.5);
+    $msg .= ", alt $tmp ft.";
+    $tmp = int(($stand_patt_alt * $SG_FEET_TO_METER) + 0.5);
+    $msg .= "($tmp".'m)';
+    $tmp = int($dist + 0.5) / 1000;
+    $msg .= ", Km dist $tmp";
+    my $mps = ($ac_speed_kts * $SG_NM_TO_METER) / 3600; # get meter per second
+    my $sec = $dist / $mps;
+    $tmp = int($sec + 0.5);
+    $msg .= ", $tmp secs";
+    $tmp = int($mps + 0.5);
+    $msg .= " at $tmp mps";
+    $msg .= ", ".int($ac_speed_kts)." kts ias";
+    $tmp = int(($stand_patt_alt / $sec) * 60);
+    $msg .= ", -$tmp fpm";
+    #$tmp = int($rwlen2 + 0.5) / 1000;
+    #$msg .= ", rlen $tmp";
+    #$tmp = int(($rwlen2+$dist) * 2) / 1000;
+    #$msg .= ", circuit $tmp x ";
+    #$tmp = int($crossd + 0.5) / 1000;
+    #$msg .= "$tmp";
+    #############################################
+    ### set xg message - comment added to xg output - show options used
+    $xgmsg = $msg if (length($xgmsg) == 0);
+    #############################################
+
     if (VERB2()) {
-        my $msg = "Gen CIRCUIT using $stand_glide_degs degs glide";
-        $tmp = int($stand_patt_alt + 0.5);
-        $msg .= ", alt $tmp ft.";
-        $tmp = int(($stand_patt_alt * $SG_FEET_TO_METER) + 0.5);
-        $msg .= "($tmp".'m)';
-        $tmp = int($dist + 0.5) / 1000;
-        $msg .= ", Km dist $tmp";
-        my $mps = ($ac_speed_kts * $SG_NM_TO_METER) / 3600; # get meter per second
-        my $sec = $dist / $mps;
-        $tmp = int($sec + 0.5);
-        $msg .= ", $tmp secs";
-        $tmp = int($mps + 0.5);
-        $msg .= " at $tmp mps";
-        $tmp = int(($stand_patt_alt / $sec) * 60);
-        $msg .= ", -$tmp fpm";
-
-        #$tmp = int($rwlen2 + 0.5) / 1000;
-        #$msg .= ", rlen $tmp";
-        #$tmp = int(($rwlen2+$dist) * 2) / 1000;
-        #$msg .= ", circuit $tmp x ";
-        #$tmp = int($crossd + 0.5) / 1000;
-        #$msg .= "$tmp";
-
         prt("$msg\n");
     }
     # ON $rhdg to $elat1, $elon1 to ... turn point, go LEFT and to get NEXT points, this end
@@ -834,6 +879,8 @@ sub rwy_xg_stg($$$$$$$) {
         }
         $xg .= "$r_tr_lon $r_tr_lat\n";
 
+        add_to_bbox($r_tr_lon,$r_tr_lat);
+
         get_mid_point($r_tr_lat,$r_tr_lon,$r_tl_lat,$r_tl_lon,\$m_lat,\$m_lon); # TR->TL - cross
 
         if ($add_anno) {
@@ -847,6 +894,8 @@ sub rwy_xg_stg($$$$$$$) {
         }
 
         $xg .= "$r_tl_lon $r_tl_lat\n";
+
+        add_to_bbox($r_tl_lon,$r_tl_lat);
 
         get_mid_point($r_tl_lat,$r_tl_lon,$r_bl_lat,$r_bl_lon,\$m_lat,\$m_lon); # TL->BL - downwind
 
@@ -862,6 +911,8 @@ sub rwy_xg_stg($$$$$$$) {
 
         $xg .= "$r_bl_lon $r_bl_lat\n";
 
+        add_to_bbox($r_bl_lon,$r_bl_lat);
+
         get_mid_point($r_bl_lat,$r_bl_lon,$r_br_lat,$r_br_lon,\$m_lat,\$m_lon); # BL->BR - base
 
         if ($add_anno) {
@@ -875,6 +926,8 @@ sub rwy_xg_stg($$$$$$$) {
         }
 
         $xg .= "$r_br_lon $r_br_lat\n";
+
+        add_to_bbox($r_br_lon,$r_br_lat);
 
         # on final
         # get_mid_point($r_br_lat,$r_br_lon,$r_tr_lat,$r_tr_lon,\$m_lat,\$m_lon); # BR->TR - runway
@@ -923,6 +976,8 @@ sub rwy_xg_stg($$$$$$$) {
 
         $xg .= "$l_tr_lon $l_tr_lat\n";
         $xg .= "$l_tl_lon $l_tl_lat\n";
+        add_to_bbox($l_tr_lon,$l_tr_lat);   # L-TR
+        add_to_bbox($l_tl_lon,$l_tl_lat);   # L-TL
 
         get_mid_point($l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,\$m_lat,\$m_lon); # TL->BL - downwind
 
@@ -937,6 +992,7 @@ sub rwy_xg_stg($$$$$$$) {
         }
 
         $xg .= "$l_bl_lon $l_bl_lat\n";
+        add_to_bbox($l_bl_lon,$l_bl_lat);   # L-BL
 
         get_mid_point($l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,\$m_lat,\$m_lon); # BL->BR - base
 
@@ -951,6 +1007,7 @@ sub rwy_xg_stg($$$$$$$) {
         }
 
         $xg .= "$l_br_lon $l_br_lat\n";
+        add_to_bbox($l_br_lon,$l_br_lat);   # L-BR
 
         # on final
         # get_mid_point($l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon,\$m_lat,\$m_lon); # BR->TR - runway
@@ -988,6 +1045,16 @@ sub show_ground_net($) {
 
 }
 
+sub get_bbox_xg($$$$) {
+    my ($min_lat,$min_lon,$max_lat,$max_lon) = @_;
+    my $xg = '';
+    $xg .= "$min_lon $min_lat\n";
+    $xg .= "$min_lon $max_lat\n";
+    $xg .= "$max_lon $max_lat\n";
+    $xg .= "$max_lon $min_lat\n";
+    $xg .= "$min_lon $min_lat\n";
+    return $xg;
+}
 
 #                  0=typ, 1=lat, 2=lon, 3=alt, 4=frq, 5-rng, 6-frq2, 7=nid, 8=name, 9=off, 10=dist, 11=az);
 #push(@g_navlist3, [$typ, $nlat, $nlon, $nalt, $nfrq, $nrng, $nfrq2, $nid,  $name,  $off,  $dist,   $az]);
@@ -1075,6 +1142,8 @@ sub show_airports_found {
             }
         }
 
+        ################################
+        ### Set min, max...
         $min_lon = 400;
         $min_lat = 400;
         $max_lon = -400;
@@ -1164,18 +1233,30 @@ sub show_airports_found {
                     }
                 }
                 # =======================================================
-                $apt_xg .= rwy_xg_stg($elat1,$elon1,$elat2,$elon2,feet_2_meter($rwid),$rtyp,$rhdg);
+                $apt_xg .= rwy_xg_stg($icao,$elat1,$elon1,$elat2,$elon2,feet_2_meter($rwid),$rtyp,$rhdg);
                 # =======================================================
+                # add runway ends to BOUNDS (bbox)
+                $min_lon = $elon1 if ($elon1 < $min_lon);
                 $min_lat = $elat1 if ($elat1 < $min_lat);
                 $max_lat = $elat1 if ($elat1 > $max_lat);
-                $min_lon = $elon1 if ($elon1 < $min_lon);
                 $max_lon = $elon1 if ($elon1 > $max_lon);
+
+                $min_lon = $elon2 if ($elon2 < $min_lon);
+                $min_lat = $elat2 if ($elat2 < $min_lat);
+                $max_lat = $elat2 if ($elat2 > $max_lat);
+                $max_lon = $elon2 if ($elon2 > $max_lon);
+
+                # sum of multiple passes
                 $min_lats = $elat1 if ($elat1 < $min_lats);
                 $max_lats = $elat1 if ($elat1 > $max_lats);
                 $min_lons = $elon1 if ($elon1 < $min_lons);
                 $max_lons = $elon1 if ($elon1 > $max_lons);
+                $min_lats = $elat2 if ($elat2 < $min_lats);
+                $max_lats = $elat2 if ($elat2 > $max_lats);
+                $min_lons = $elon2 if ($elon2 < $min_lons);
+                $max_lons = $elon2 if ($elon2 > $max_lons);
 
-                if ($gen_threshold_xml) {
+                ### do the work, even if not used - if ($gen_threshold_xml) {
                     $lato1 = $elat1;
                     $lono1 = $elon2;
                     $lato2 = $elat2;
@@ -1214,7 +1295,7 @@ sub show_airports_found {
                     $xml .= "</stopw-m>\n";
                     $xml .= "    </threshold>\n";
                     $xml .= "  </runway>\n";
-                }
+                ### always gen the xml }
             } elsif ($type == 100) {
     
                 $rwid  = ${$ra}[1];  # WIDTH in meters? NOT SHOWN
@@ -1228,16 +1309,29 @@ sub show_airports_found {
                 $elon2 = ${$ra}[19];
                 my $res = fg_geo_inverse_wgs_84 ($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$s);
                 # =======================================================
-                $apt_xg .= rwy_xg_stg($elat1,$elon1,$elat2,$elon2,$rwid,$rwy1,$rwy2);
+                $apt_xg .= rwy_xg_stg($icao,$elat1,$elon1,$elat2,$elon2,$rwid,$rwy1,$rwy2);
                 # =======================================================
+                # add runway ends to BOUNDS (bbox)
+                $min_lon = $elon1 if ($elon1 < $min_lon);
                 $min_lat = $elat1 if ($elat1 < $min_lat);
                 $max_lat = $elat1 if ($elat1 > $max_lat);
-                $min_lon = $elon1 if ($elon1 < $min_lon);
                 $max_lon = $elon1 if ($elon1 > $max_lon);
+
+                $min_lon = $elon2 if ($elon2 < $min_lon);
+                $min_lat = $elat2 if ($elat2 < $min_lat);
+                $max_lat = $elat2 if ($elat2 > $max_lat);
+                $max_lon = $elon2 if ($elon2 > $max_lon);
+
+                # sum of multiple passes
                 $min_lats = $elat1 if ($elat1 < $min_lats);
                 $max_lats = $elat1 if ($elat1 > $max_lats);
                 $min_lons = $elon1 if ($elon1 < $min_lons);
                 $max_lons = $elon1 if ($elon1 > $max_lons);
+                $min_lats = $elat2 if ($elat2 < $min_lats);
+                $max_lats = $elat2 if ($elat2 > $max_lats);
+                $min_lons = $elon2 if ($elon2 < $min_lons);
+                $max_lons = $elon2 if ($elon2 > $max_lons);
+
 
                 # display it
                 # ==========================================================================
@@ -1340,7 +1434,16 @@ sub show_airports_found {
 	}
     prt("bounds: $min_lats $min_lons $max_lats $max_lons\n") if ($add_bbox && ($scnt > 1));
     if ($add_xg) {
-        if (length($annoxg)) {
+        my $len = length($annoxg);
+        $annoxg .= "$xgmsg\n" if (length($xgmsg));
+        if ($add_bbox) {
+            $annoxg .= get_x_bbox();
+            $annoxg .= "# bounds: $min_lat, $min_lon, $max_lat $max_lon\n";
+            $annoxg .= "color gray\n";
+            $annoxg .= get_bbox_xg($min_lat,$min_lon,$max_lat,$max_lon);    # get a SQUARE
+            $annoxg .= "NEXT\n";
+        }
+        if ($len) {
             $name = trim_all($name);
             $annoxg = "# Airport:[ icao=\"$icao\", name:\"$name\", lon:$dlon, lat:$dlat, alt:$aalt, rwys:$rwycnt";
             my @a = keys %g_rwy_ends;
@@ -3458,7 +3561,13 @@ sub give_help {
     # prt( " --xg <file>     (-x) = Write airport xg file. Implies -A\n");
     prt( " --xg <file>     (-x) = Write airport xg file.\n");
     if ($new_x_opts) {
-        prt( " --XA??          (-X) = set xg output options. A=Anno=$add_anno, ...\n");
+        prt(" --X???          (-X) = set xg output options...\n");
+        prt("    A    = add_anno to circuit.\n");
+        prt("    B    = Add bbox outline.\n");
+        prt("    H500 = Use circuit height.\n");
+        prt("    R/L  = add only R or L circuit.\n");
+        prt("    B    = Add bbox outline.\n");
+        prt("    X    = Output ICAO.threshold.xml output.\n");
     }
     prt( "When searching by lat,lon, use -H to not skip helipads.\n");
 	mydie( "                                                         Happy Searching.\n" );
@@ -3551,7 +3660,7 @@ sub deal_with_verbosity($) {
 sub parse_args {
 	my (@av) = @_;
 	my (@arr,$arg,$sarg,$lcarg,$ch);
-    my ($len,$i);
+    my ($len,$i,$i2,$tmp);
     $arg = scalar @av;
     #prt("Deal with $arg command arguments...\n");
     deal_with_verbosity(\@av);
@@ -3861,11 +3970,12 @@ sub parse_args {
                 prt( "[v1] Set NAVAID search 'tryharder'...\n" ) if (VERB1());
             } elsif ($sarg =~ /^X/) {
                 if ($new_x_opts) {
-                    # parse X opts
+                    # parse X opts, get past the '-X'
                     $sarg = substr($sarg,1);
                     $len = length($sarg);
                     if ($len) {
                         for ($i = 0; $i < $len; $i++) {
+                            $i2 = $i + 1;
                             $ch = substr($sarg,$i,1);
                             if (uc($ch) eq 'A') {
                                 $add_anno = 1;
@@ -3874,6 +3984,32 @@ sub parse_args {
                                 $add_circuit = 1;
                             } elsif (uc($ch) eq 'L') {
                                 $add_circuit = 2;
+                            } elsif (uc($ch) eq 'B') {
+                                # } elsif ($sarg =~ /^b/) {
+                                $add_bbox = 1;
+                                prt("[v1] Add bbox output for airports.\n") if (VERB1());
+                            } elsif ((uc($ch) eq 'H')&&($i2 < $len)) {
+                                $ch = substr($sarg,$i2,1);
+                                if ($ch =~ /\d/) {
+                                    # got a height to use - default 1000
+                                    $tmp = substr($sarg,$i2);
+                                    my $alt = int($tmp);
+                                    if ($alt > 0) {
+                                        # new circuit ***ALTITUDE***
+                                        $stand_patt_alt = $alt;
+                                        prt("[v1] Set stand alt for circuit to ' $stand_patt_alt`.\n") if (VERB1());
+                                        $sarg = $tmp;
+                                        $sarg =~ s/\d+//;
+                                        $len = length($sarg);
+                                    } else {
+                                        pgm_exit(1,"Error: Unknown -XHxxxx option, '$ch', '$alt','$sarg',...\n");
+                                    }
+                                } else {
+                                    pgm_exit(1,"Error: Unknown -XHnnn height option, '$ch'\n");
+                                }
+                            } elsif (uc($ch) eq 'X') {
+                                $gen_threshold_xml = 1;
+                                prt("[v1] Gen ICAO.thrshold.xml for airports.\n") if (VERB1());
                             } else {
                                 pgm_exit(1,"Error: Unknown -Xxxxx option, '$ch'\n");
                             }
