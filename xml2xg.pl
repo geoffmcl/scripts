@@ -390,7 +390,7 @@ sub process_in_file($) {
     my $xref = XMLin($inf);
     #prt(Dumper($xref));
     if (! defined ${$xref}{'Airport'}) {
-        pgm_ext(1,"File $inf does not have 'Airport'\n");
+        pgm_exit(1,"File $inf does not have 'Airport'\n");
     }
     my $aref = ${$xref}{'Airport'};
     #prt(Dumper($aref));
