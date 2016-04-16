@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 # NAME: findap03.pl
 # AIM: Read FlightGear apt.dat, and find an airport given the name,
-# 12/04/2016 - Add to -Xopts, L/R only, H500, ...
+# 12/04/2016 - Add to -Xopts, L/R only, H500, XB, ...
 # 10/04/2016 - Add xg output options - see $add_anno
 # 16/07/2015 - Move into scripts repo
 # 18/12/2014 - Switch to using the terrasync update directory, if AVAILABLE
@@ -113,7 +113,8 @@ my $aptname = "strasbourg";
 my $apticao = 'KSFO';
 my $g_center_lat = 0; # 37.6;
 my $g_center_lon = 0; # -122.4;
-my $g_circuit = '';
+my $g_circuit1 = '';
+my $g_circuit2 = '';
 my %g_rwy_ends = ();
 
 my $maxlatd = 0.5;
@@ -140,7 +141,8 @@ my $add_apt_off = 0;   # show offset to airport
 my $ex_helipads = 1;    # exclude helipads if a lat/lon search
 my $g_version = 0;
 my $gen_sidstar = 0;    # TODO: This is HARD - maybe should be another app...
-my $add_bbox = 0;
+my $add_bbox = 0;       # BBOX AROUDN CIRCUIT(S)
+my $add_rwy_bbox = 0;   # not very important, just around runway
 my $xgbbox = '';
 my $new_x_opts = 1; # xg airport gen options, with anno, etc...
 
@@ -292,8 +294,8 @@ my $g_nav_hdr = "Type  Latitude     Logitude        Alt.  Freq.  Range  Frequenc
 # global program variables
 my $actnav = '';
 my @g_naptlist = (); # ALL airports found, for research, if needed
-#                 0      1      2      3      4      5   6  7  8  9      10     11    12     13   14        15
-#push(@aptlist2, [$diff, $icao, $name, $alat, $alon, -1, 0, 0, 0, $icao, $name, $off, $dist, $az, \@runways,$aalt]);
+#                 0      1      2      3      4      5   6  7  8  9      10     11    12     13   14        15    16
+#push(@aptlist2, [$diff, $icao, $name, $alat, $alon, -1, 0, 0, 0, $icao, $name, $off, $dist, $az, \@runways,$aalt,$got_twr]);
 my @aptlist2 = ();
 my @navlist = ();
 my @navlist2 = ();
@@ -725,7 +727,8 @@ sub add_to_bbox($$) {
     $x_max_lon = $lon if ($lon > $x_max_lon);
 }
 
-sub get_x_bbox() {
+sub get_x_bbox($) {
+    my $color = shift;
     my $xg = "# bbox $x_min_lon $x_min_lat $x_max_lon $x_max_lat\n";
     if (($x_min_lat == 400) ||
         ($x_min_lon == 400) ||
@@ -734,7 +737,7 @@ sub get_x_bbox() {
     {
         $xg = "# no bbox\n";
     } else {
-        $xg .= "color blue\n";
+        $xg .= "color $color\n";
         $xg .= "$x_min_lon $x_min_lat\n";
         $xg .= "$x_min_lon $x_max_lat\n";
         $xg .= "$x_max_lon $x_max_lat\n";
@@ -766,6 +769,7 @@ sub rwy_xg_stg($$$$$$$$) {
     $xg .= "# begin runway description\n";
     $xg .= "anno $elon1 $elat1 rwyid: $rwy1\n";
     $xg .= "anno $elon2 $elat2 rwyid: $rwy2\n";
+    # $circuits = "$rwy1/$rwy2";
 
     # center line of runway
     $xg .= "color blue\n";
@@ -1023,7 +1027,8 @@ sub rwy_xg_stg($$$$$$$$) {
 
     $xg .= "# end runway description\n";
     ###############################################################################
-    $g_circuit = $rwy2;
+    $g_circuit1 = $rwy1;
+    $g_circuit2 = $rwy2;
     $g_rwy_ends{$rwy2} = 1;
     $g_rwy_ends{$rwy1} = 1;
     ###############################################################################
@@ -1094,7 +1099,7 @@ sub show_airports_found {
     my ($rwlen2,$elat1,$elon1,$eaz1,$elat2,$elon2,$eaz2,$hdgr,$hdg1,$hdg2,$az1,$az2);
     my ($lato1,$lono1,$lato2,$lono2,$s);
     my ($min_lon,$min_lat,$max_lon,$max_lat);
-    my ($min_lons,$min_lats,$max_lons,$max_lats);
+    my ($min_lons,$min_lats,$max_lons,$max_lats,$got_twr);
     # OUTPUT OF AN AIRPORT ENTRY
     $out = '';
     my $skip_helis = 0;
@@ -1117,10 +1122,20 @@ sub show_airports_found {
         $aalt = $aptlist2[$i][15];  # ALT (AMSL)
         $rrwys = $aptlist2[$i][14]; # extract RUNWAY reference
         $rwycnt = scalar @{$rrwys};
+        $got_twr = $aptlist2[$i][16]; # got towere locat in apt.data
+
         # anno 148.636305809373 -31.6965632128734 YGIL Airport circuit 33
-        if ($add_anno) {
-            $annoxg .= "anno $dlon $dlat $icao $name circuit $g_circuit\n";
-        }
+        #if ($add_anno) {
+        #    $annoxg .= "anno $dlon $dlat $icao $name ";
+        #    if ($add_circuit & 1) {
+        #        $annoxg .= "$g_circuit1 ";
+        #    }
+        #    if ($add_circuit & 2) {
+        #        $annoxg .= "$g_circuit2 ";
+        #    }
+        #    $annoxg .= "circuit(s)\n";
+        #}
+
         $alat = $dlat;
         $alon = $dlon;
         $oicao = $icao;
@@ -1437,23 +1452,48 @@ sub show_airports_found {
         my $len = length($annoxg);
         $annoxg .= "$xgmsg\n" if (length($xgmsg));
         if ($add_bbox) {
-            $annoxg .= get_x_bbox();
-            $annoxg .= "# bounds: $min_lat, $min_lon, $max_lat $max_lon\n";
-            $annoxg .= "color gray\n";
-            $annoxg .= get_bbox_xg($min_lat,$min_lon,$max_lat,$max_lon);    # get a SQUARE
-            $annoxg .= "NEXT\n";
+            $annoxg .= get_x_bbox('gray');
+            if ($add_rwy_bbox) {
+                $annoxg .= "# bounds: $min_lat, $min_lon, $max_lat $max_lon\n";
+                $annoxg .= "color yellow\n";
+                $annoxg .= get_bbox_xg($min_lat,$min_lon,$max_lat,$max_lon);    # get a SQUARE
+                $annoxg .= "NEXT\n";
+            }
+        } else {
+            $annoxg .= "# NO bbox!\n";
         }
-        if ($len) {
+        if (($scnt == 1) || $len) {
             $name = trim_all($name);
-            $annoxg = "# Airport:[ icao=\"$icao\", name:\"$name\", lon:$dlon, lat:$dlat, alt:$aalt, rwys:$rwycnt";
+            $tmp = "# ";
+            $tmp .= "icao=\"$icao\", name:\"$name\", lon:$dlon, lat:$dlat, alt:$aalt, rwys:$rwycnt";
             my @a = keys %g_rwy_ends;
             if (@a) {
-                $annoxg .= ", ids:\"";
-                $annoxg .= join("/",@a);
-                $annoxg .= "\"";
+                $tmp .= ", ids:\"";
+                $tmp .= join("/",@a);
+                $tmp .= "\"";
             }
-            $annoxg .= "]\n";
-            $annoxg .= "anno $dlon $dlat $apticao Airport circuit $g_circuit\n";
+            $tmp .= "\n";
+            $tmp .= "anno $dlon $dlat $apticao ";
+            if ($got_twr) {
+                $tmp .= "Twr: ";
+            } else {
+                $tmp .= "Rwy: ";
+            }
+            # $annoxg .= "anno $dlon $dlat $icao $name ";
+            # $tmp .= "anno $dlon $dlat $apticao Runway: ";
+            my $ccnt = 0;
+            if ($add_circuit & 1) {
+                $tmp .= "$g_circuit1";
+                $ccnt++;
+            }
+            if ($add_circuit & 2) {
+                $tmp .= "/" if ($ccnt);
+                $tmp .= "$g_circuit2";
+                $ccnt++;
+            }
+            $tmp .= ", $ccnt circuit(s)\n";
+            ### $tmp .= "anno $dlon $dlat $apticao Airport circuit $g_circuit1/$g_circuit2\n";
+            $annoxg = $tmp . $annoxg;
         }
         $annoxg .= $apt_xg;
         #prt("$annoxg");
@@ -2214,7 +2254,7 @@ sub load_apt_data {
                 my @wa = @waterways;
                 my @ha = @heliways;
                 my @fa = @freqs;
-                #               0      1      2      3      4      5     6     7     8
+                #                  0      1      2      3      4      5     6     7     8
                 push(@g_naptlist, [$diff, $icao, $name, $alat, $alon, \@ra, \@wa, \@ha, \@fa ]);
                 ##                 0      1      2      3      4      5      6
                 ##push(@g_aptlist, [$diff, $icao, $name, $alat, $alon, $aalt, \@fa]);
@@ -2239,15 +2279,15 @@ sub load_apt_data {
     				#                  0=typ, 1=lat, 2=lon, 3=alt, 4=frq, 5-rng, 6-frq2, 7=nid, 8=name, 9=off, 10=dist, 11=az);
 	    			#push(@g_navlist3, [$typ, $nlat, $nlon, $nalt, $nfrq, $nrng, $nfrq2, $nid, $name, $off, $dist, $az]);
                     my @a = @runways;
-                    #                 0     1      2      3      4      5   6  7  8  9      10     11    12     13   14   15
-                    push(@aptlist2, [$diff, $icao, $name, $alat, $alon, -1, 0, 0, 0, $icao, $name, $off, $dist, $az, \@a, $aalt]); # = @runways
+                    #                 0     1      2      3      4      5   6  7  8  9      10     11    12     13   14   15     16
+                    push(@aptlist2, [$diff, $icao, $name, $alat, $alon, -1, 0, 0, 0, $icao, $name, $off, $dist, $az, \@a, $aalt, $got_twr]); # = @runways
                     $total_lat += $alat;
                     $total_lon += $alon;
                     $icao_lat = $alat;
                     $icao_lon = $alon;
                     $total_apts++;
                     if (VERB9()) {
-                        prt("push(\@aptlist2, [$diff, $icao, $name, $alat, $alon, -1, 0, 0, 0, $icao, $name, $off, $dist, $az, \@a, $aalt]);");
+                        prt("push(\@aptlist2, [$diff, $icao, $name, $alat, $alon, -1, 0, 0, 0, $icao, $name, $off, $dist, $az, \@a, $aalt, $got_twr]);");
                         pop @line_array; # remove last added line
                         foreach $apt (@line_array) {
                             prt("$apt\n");
@@ -2496,8 +2536,8 @@ sub load_apt_data {
         if ($add) {
              $off = near_given_point( $alat, $alon, \$dist, \$az ); # if ($SRCHONLL), near GLOBAL center
              prt("$icao, $name, $alat, $alon, rwycnt $rwycnt - LAST\n") if ($dbg1);
-             #                  0      1      2      3      4      5   6  7  8  9      10     11    12     13   14        15
-             # push(@aptlist2, [$diff, $icao, $name, $alat, $alon, -1, 0, 0, 0, $icao, $name, $off, $dist, $az, \@runways,$aalt]);
+             #                  0      1      2      3      4      5   6  7  8  9      10     11    12     13   14        15    16
+             # push(@aptlist2, [$diff, $icao, $name, $alat, $alon, -1, 0, 0, 0, $icao, $name, $off, $dist, $az, \@runways,$aalt,$got_twr]);
     		 #                  0=typ, 1=lat, 2=lon, 3=alt, 4=frq, 5-rng, 6-frq2, 7=nid, 8=name, 9=off, 10=dist, 11=az);
 	    	 #push(@g_navlist3, [$typ, $nlat, $nlon, $nalt, $nfrq, $nrng, $nfrq2, $nid, $name, $off, $dist, $az]);
              my @a2 = @runways;
@@ -2625,8 +2665,8 @@ sub search_nav {
 	my $ac = scalar @aptlist2;  # airport FOUND list
     $msg = '';
     $msg .= "Search FOR [".ctr_latlon_stg()."]... ";
-    #                 0      1      2      3      4      5   6  7  8  9      10     11    12     13   14        15
-    #push(@aptlist2, [$diff, $icao, $name, $alat, $alon, -1, 0, 0, 0, $icao, $name, $off, $dist, $az, \@runways,$aalt]);
+    #                 0      1      2      3      4      5   6  7  8  9      10     11    12     13   14        15    16
+    #push(@aptlist2, [$diff, $icao, $name, $alat, $alon, -1, 0, 0, 0, $icao, $name, $off, $dist, $az, \@runways,$aalt,$got_twr]);
     if ($ac == 1) {
    		$alat = $aptlist2[0][3];
 		$alon = $aptlist2[0][4];
@@ -2943,7 +2983,7 @@ sub mycmp_decend_az {
 
 # $dist = $aptlist2[$i][12];
 #                 0      1      2      3      4      5   6  7  8  9      10     11    12     13   14        15
-#push(@aptlist2, [$diff, $icao, $name, $alat, $alon, -1, 0, 0, 0, $icao, $name, $off, $dist, $az, \@runways,$aalt]);
+#push(@aptlist2, [$diff, $icao, $name, $alat, $alon, -1, 0, 0, 0, $icao, $name, $off, $dist, $az, \@runways,$aalt,$got_twr]);
 sub mycmp_decend_ap_dist {
    return -1 if (${$a}[12] < ${$b}[12]);
    return 1 if (${$a}[12] > ${$b}[12]);
