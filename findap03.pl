@@ -142,6 +142,7 @@ my $ex_helipads = 1;    # exclude helipads if a lat/lon search
 my $g_version = 0;
 my $gen_sidstar = 0;    # TODO: This is HARD - maybe should be another app...
 my $add_bbox = 0;       # BBOX AROUDN CIRCUIT(S)
+my $add_rwy = '';       # specific runways chosen at ICAO -XC22 for just runway 22
 my $add_rwy_bbox = 0;   # not very important, just around runway
 my $xgbbox = '';
 my $new_x_opts = 1; # xg airport gen options, with anno, etc...
@@ -1033,6 +1034,23 @@ sub rwy_xg_stg($$$$$$$$) {
     $g_rwy_ends{$rwy1} = 1;
     ###############################################################################
     #### prt($xg);
+    if (length($add_rwy)) {
+        my $add = 0;
+        my @arr = split(";",$add_rwy);
+        foreach $tmp (@arr) {
+            if ($tmp eq $rwy1) {
+                $add = 1;
+                last;
+            } elsif ($tmp eq $rwy2) {
+                $add = 1;
+                last;
+            }
+        }
+        if (!$add) {
+            $xg = "# Runways $rwy1/$rwy2 not in -XC$add_rwy!\n";
+        }
+    }
+
     return $xg;
 }
 
@@ -1247,9 +1265,12 @@ sub show_airports_found {
                         $info .= " th=$displ1/$displ2 sp=$stopw1/$stopw2";
                     }
                 }
+                # #######################################################
                 # =======================================================
+                # Is this a selected runway
                 $apt_xg .= rwy_xg_stg($icao,$elat1,$elon1,$elat2,$elon2,feet_2_meter($rwid),$rtyp,$rhdg);
                 # =======================================================
+                # #######################################################
                 # add runway ends to BOUNDS (bbox)
                 $min_lon = $elon1 if ($elon1 < $min_lon);
                 $min_lat = $elat1 if ($elat1 < $min_lat);
@@ -3602,12 +3623,16 @@ sub give_help {
     prt( " --xg <file>     (-x) = Write airport xg file.\n");
     if ($new_x_opts) {
         prt(" --X???          (-X) = set xg output options...\n");
-        prt("    A    = add_anno to circuit.\n");
-        prt("    B    = Add bbox outline.\n");
-        prt("    H500 = Use circuit height.\n");
-        prt("    R/L  = add only R or L circuit.\n");
-        prt("    B    = Add bbox outline.\n");
-        prt("    X    = Output ICAO.threshold.xml output.\n");
+        prt("    A    = add_anno to circuit. (def=$add_anno)\n");
+        prt("    B    = Add bbox outline. (def=$add_bbox)\n");
+        prt("    C22  = Circuit only for runway 22. (def=".
+            (length($add_rwy) ? $add_rwy : 'all').
+            ")\n");
+        prt("    H500 = Use circuit height. (def=$stand_patt_alt)\n");
+        prt("    R/L  = add only R or L circuit. (def=".
+            (($add_circuit == 3) ? 'both' : ($add_circuit == 1) ? 'left' : ($add_circuit == 2) ? 'right' : 'none').
+            ")\n");
+        prt("    X    = Output ICAO.threshold.xml output. (def=$gen_threshold_xml)\n");
     }
     prt( "When searching by lat,lon, use -H to not skip helipads.\n");
 	mydie( "                                                         Happy Searching.\n" );
@@ -4022,12 +4047,20 @@ sub parse_args {
                                 prt("[v1] Add xgraph anno output for airports.\n") if (VERB1());
                             } elsif (uc($ch) eq 'R') {
                                 $add_circuit = 1;
+                                prt("[v1] Only right circuits....\n") if (VERB1());
                             } elsif (uc($ch) eq 'L') {
                                 $add_circuit = 2;
+                                prt("[v1] Only left circuits....\n") if (VERB1());
                             } elsif (uc($ch) eq 'B') {
                                 # } elsif ($sarg =~ /^b/) {
                                 $add_bbox = 1;
                                 prt("[v1] Add bbox output for airports.\n") if (VERB1());
+                            } elsif ((uc($ch) eq 'C')&&($i2 < $len)) {
+                                $tmp = substr($sarg,$i2);   # get balance
+                                $add_rwy .= ';' if (length($add_rwy));
+                                $add_rwy .= $tmp;
+                                prt("[v1] Add circuits for $tmp.\n") if (VERB1());
+                                $i = $len - 1;
                             } elsif ((uc($ch) eq 'H')&&($i2 < $len)) {
                                 $ch = substr($sarg,$i2,1);
                                 if ($ch =~ /\d/) {
