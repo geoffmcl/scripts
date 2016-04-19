@@ -3,6 +3,7 @@
 # AIM: Use perl trig function for distance London to Tokyo...
 # from : http://perldoc.perl.org/Math/Trig.html
 # previous disptance.pl, with no use of SIMGEAR
+# 19/04/2016 - If distance between point is less than 1 Km, show meters and feet
 # 08/07/2015 - Move into scripts repo
 # 29/11/2014 - Added -a ICAO1:ICAO2[;ICAO3...] to get airport distances
 # 11/10/2014 - allow bgn-lat,bgn-lon,end-lat,end-lon - 4 comma separated values
@@ -31,7 +32,8 @@ require 'lib_utils.pl' or die "Unable to load 'lib_utils.pl' Check paths in \@IN
 require 'fg_wsg84.pl' or die "Unable to load fg_wsg84.pl ...\n";
 require 'lib_fgio.pl' or die "Unable to load 'lib_fgio.pl'! Check location and \@INC content.\n";
 
-my $VERS = "0.0.7 2015-07-15"; # some functions moved to library
+my $VERS = "0.0.8 2016-04-19"; # enhance display when distance small
+# my $VERS = "0.0.7 2015-07-15"; # some functions moved to library
 # my $VERS = "0.0.6 2015-07-08"; # add to scripts repo
 # my $VERS = "0.0.5 2014-11-29"; # allow ICAO inputs
 # my $VERS = "0.0.4 2014-10-11"; # allow single 4 value input
@@ -553,7 +555,30 @@ sub show_distance($$$$) {
     my $ceta = '';
     my $chrs = 0;
     my $hrs = $d_km / $g_speed; # distance (km) / speed (kph)
-    my $eta = get_hhmmss($hrs);
+    my $dsecs = $hrs * 60 * 60; # can be quite small, if distance short, and/or speed high
+    my $mps = ($g_speed * 1000) / 3600;
+    my $fps = $mps * $SG_METER_TO_FEET;
+    my $etastg = get_hhmmss($hrs);
+
+    if ($hrs < (1/60)) {
+        # less than a minute
+        # avoid   "00:00:35", use either
+        #         "59  secs", or
+        #         "0.58 sec", if really small
+        my $tail = "  secs";
+        my $msecs = int($dsecs);
+        if ($msecs < 10) {
+            if ($dsecs < 1) {
+                $msecs = sprintf("%0.2f",$dsecs);
+                $tail = " sec";
+            } else {
+                $msecs = "0$msecs";
+            }
+        } 
+        $etastg = "$msecs$tail";
+        ## $etastg = "$hrs  hrs";
+    }
+
     $tmp = int($g_ias + 0.05);
     my $xg = "anno $lon1 $lat1 Start $tmp kts\n";
 
@@ -566,7 +591,8 @@ sub show_distance($$$$) {
     #$alon = ($lon1 + $lon2) / 2;
     fg_geo_direct_wgs_84( $lat1, $lon1, $rhdg, ($d_km * 1000) / 3, \$alat, \$alon, \$naz );
     $tmp = int($hdg + 0.05); # only WHOLE degrees
-    $xg .= "anno $alon $alat Targ: $tmp eta: $eta\n";
+
+    $xg .= "anno $alon $alat Targ: $tmp eta: $etastg\n";
     if ($got_wind) {
         $wspd_kph = $usr_wind_spd * $K2KPH;
         ##my $wtm = $d_km / $wspd_kph;    # estimate time
@@ -628,6 +654,7 @@ sub show_distance($$$$) {
     ########################################################################
     # derived (for display)
     ########################################################################
+    # convert great circle distance, $d_km, to distance meters, $d_m, and feet $d_ft
     my $d_m = int(($d_km * 1000) + 0.5);
     my $d_ft = int(($d_km * 1000 * $SG_METER_TO_FEET) + 0.5);
     my $chdg = int($hdg + 0.05); # only WHOLE degrees
@@ -646,6 +673,15 @@ sub show_distance($$$$) {
     #$degs = int($degs + 0.5);
     $t_degs = sprintf("%0.6f",$t_degs);
     get_sg_distance_vs_est( $lat1,$lon1,$lat2,$lon2,$d_km,$hdg, \$cmpdist, \$cmphdg );
+
+    my $dias = "$g_ias Kts";
+    my $ddisp = "$ikm Km, $inm Nm";
+    if ($ikm < 1) {
+        $ddisp = "$d_m m, $d_ft feet";
+        # change $dias to mps, fps...
+        $dias = sprintf("%0.1f mps, %0.1f fps", $mps, $fps );
+    }
+
     if (VERB1()) {
         set_decimal1_stg(\$thdg);
         prt("Center: lat,lon $sg_clat,$sg_clon, heading $thdg, dist $d_m m, $d_ft ft..\n");
@@ -654,7 +690,7 @@ sub show_distance($$$$) {
         prt("From (lon,lat): $lon1,$lat1 to $lon2,$lat2 is about -\n");
         prt("Distance: $ikm kilometers ($d_km) $inm Nm $cmpdist\n");
         prt("Heading : $chdg/$crhdg, for $t_degs degs $cmphdg\n");
-        prt("ETA     : $eta, at $g_ias Knots\n");
+        prt("ETA     : $etastg, at $dias\n");
         if ($got_wind) {
             $whdg = int($whdg + 0.5);
             $gspd = int($gspd + 0.5);
@@ -664,7 +700,7 @@ sub show_distance($$$$) {
             prt("Correct : Wind=".$usr_wind_dir.'@'.$usr_wind_spd." hdg $whdg at $gspd $ceta.\n");
         }
     } else {
-        prt("Dist: $ikm Km, $inm Nm, hdg $chdg, $eta, at $g_ias.");
+        prt("Dist: $ddisp, hdg $chdg, $etastg, at $dias.");
         if ($got_wind) {
             $whdg = int($whdg + 0.5);
             $gspd = int($gspd + 0.5);
@@ -988,7 +1024,7 @@ sub parse_args {
                 if ($sarg =~ /^\d+$/) {
                     $g_ias = $sarg; # Knots
                     $g_speed = $g_ias * $K2KPH; # Knots to Kilometers/Hour
-                    prt("Set speed to $g_ias Knots.\n") if (VERB5());
+                    prt("Set speed to $g_ias Knots, and KPH.\n") if (VERB5());
                 } else {
                     pgm_exit(1,"ERROR: Argument [$arg], must be followed by Number of Knots! Got [$sarg]\n");
                 }
