@@ -559,6 +559,8 @@ sub show_distance($$$$) {
     my $mps = ($g_speed * 1000) / 3600;
     my $fps = $mps * $SG_METER_TO_FEET;
     my $etastg = get_hhmmss($hrs);
+    my ($sg_az2,$sg_az1,$sg_dist);
+    my $res = fg_geo_inverse_wgs_84( $lat1,$lon1,$lat2,$lon2,\$sg_az2,\$sg_az1,\$sg_dist);
 
     if ($hrs < (1/60)) {
         # less than a minute
@@ -684,7 +686,7 @@ sub show_distance($$$$) {
 
     if (VERB1()) {
         set_decimal1_stg(\$thdg);
-        prt("Center: lat,lon $sg_clat,$sg_clon, heading $thdg, dist $d_m m, $d_ft ft..\n");
+        prt("Center: lat,lon $sg_clat,$sg_clon, heading $thdg, SG dist $sg_dist m.\n");
     }
     if (VERB2()) {
         prt("From (lon,lat): $lon1,$lat1 to $lon2,$lat2 is about -\n");
