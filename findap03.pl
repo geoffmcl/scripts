@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 # NAME: findap03.pl
 # AIM: Read FlightGear apt.dat, and find an airport given the name,
+# 05/06/2016 - Add -X0, for no circuits, just the runways... and reduce verbosity TODO: option
 # 12/04/2016 - Add to -Xopts, L/R only, H500, XB, ...
 # 10/04/2016 - Add xg output options - see $add_anno
 # 16/07/2015 - Move into scripts repo
@@ -79,7 +80,8 @@ my $NAVFILE 	  = "$FGROOT/Navaids/nav.dat.gz";	# the NAV, NDB, etc. data file
 my $FIXFILE 	  = "$FGROOT/Navaids/fix.dat.gz";	# the FIX data file
 my $AWYFILE       = "$FGROOT/Navaids/awy.dat.gz";   # Airways data
 # =============================================================================
-my $VERS="Apr 10, 2016. version 1.0.8";
+my $VERS="Jun 05, 2016. version 1.0.9";
+###my $VERS="Apr 10, 2016. version 1.0.8";
 ###my $VERS="Jul 16, 2015. version 1.0.7";
 ###my $VERS="Nov 17, 2014. version 1.0.6";
 ###my $VERS="Sep 3, 2014. version 1.0.5";
@@ -162,6 +164,8 @@ my $xg_output = '';
 my $xgmsg = ''; # header for XG file otuput...
 my $add_xg = 0;
 my $add_circuit = 3;    # -XR == 1, -XL == 2
+my $xg_verb_anno = 0;   # TODO switch option
+
 my $HOST = "localhost";
 my $PORT = 5556;
 my $TIMEOUT = 1;
@@ -768,14 +772,24 @@ sub rwy_xg_stg($$$$$$$$) {
 
     ###############################################################################
     $xg .= "# begin runway description\n";
-    $xg .= "anno $elon1 $elat1 rwyid: $rwy1\n";
-    $xg .= "anno $elon2 $elat2 rwyid: $rwy2\n";
+    if ($xg_verb_anno) {
+        $xg .= "anno $elon1 $elat1 rwyid: $rwy1\n";
+        $xg .= "anno $elon2 $elat2 rwyid: $rwy2\n";
+    } else {
+        # just runway numbers
+        $xg .= "anno $elon1 $elat1 $rwy1\n";
+        $xg .= "anno $elon2 $elat2 $rwy2\n";
+    }
     # $circuits = "$rwy1/$rwy2";
 
     # center line of runway
     $xg .= "color blue\n";
     # $xg .= "anno $clon $clat rwy:\"$rwy1/$rwy2\", len:\"$distft\", u=\"ft\"\n";
-    $xg .= "anno $clon $clat rwy:$rwy1/$rwy2, len:$distft ft\n";
+    if ($xg_verb_anno) {
+        $xg .= "anno $clon $clat rwy:$rwy1/$rwy2, len:$distft ft.\n";
+    } else {
+        $xg .= "anno $clon $clat len:$distft ft\n";
+    }
     $xg .= "$elon1 $elat1\n";
     $xg .= "$elon2 $elat2\n";
     $xg .= "NEXT\n";
@@ -1512,7 +1526,13 @@ sub show_airports_found {
                 $tmp .= "$g_circuit2";
                 $ccnt++;
             }
-            $tmp .= ", $ccnt circuit(s)\n";
+            if ($ccnt) {
+                $tmp .= ", $ccnt circuit";
+                if ($ccnt > 1) {
+                    $tmp .= "s";
+                }
+            }
+            $tmp .= "\n";
             ### $tmp .= "anno $dlon $dlat $apticao Airport circuit $g_circuit1/$g_circuit2\n";
             $annoxg = $tmp . $annoxg;
         }
@@ -3629,7 +3649,7 @@ sub give_help {
             (length($add_rwy) ? $add_rwy : 'all').
             ")\n");
         prt("    H500 = Use circuit height. (def=$stand_patt_alt)\n");
-        prt("    R/L  = add only R or L circuit. (def=".
+        prt("    R/L  = add only R or L circuit. 0 for none. (def=".
             (($add_circuit == 3) ? 'both' : ($add_circuit == 1) ? 'left' : ($add_circuit == 2) ? 'right' : 'none').
             ")\n");
         prt("    X    = Output ICAO.threshold.xml output. (def=$gen_threshold_xml)\n");
@@ -4045,6 +4065,9 @@ sub parse_args {
                             if (uc($ch) eq 'A') {
                                 $add_anno = 1;
                                 prt("[v1] Add xgraph anno output for airports.\n") if (VERB1());
+                            } elsif (uc($ch) eq '0') {
+                                $add_circuit = 0;
+                                prt("[v1] Add no circuits....\n") if (VERB1());
                             } elsif (uc($ch) eq 'R') {
                                 $add_circuit = 1;
                                 prt("[v1] Only right circuits....\n") if (VERB1());
