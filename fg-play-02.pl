@@ -5,7 +5,8 @@ use strict;
 use warnings;
 use File::Basename;  # split path ($name,$dir,$ext) = fileparse($file [, qr/\.[^.]*/] )
 use Cwd;
-use XML::Simple;
+###use XML::Simple;
+use XML::LibXML;
 use Data::Dumper;
 use Math::Trig;
 my $os = $^O;
@@ -18,7 +19,7 @@ require 'fg_wsg84.pl' or die "Unable to load fg_wsg84.pl ...\n";
 # log file stuff
 our ($LF);
 my $outfile = $temp_dir."/temp.$pgmname.txt";
-$outfile = ($os =~ /win/i) ? path_u2d($outfile) : path_d2u($outfile);
+$outfile = path_u2d($outfile) if ($os =~ /win/i);
 open_log($outfile);
 
 # user variables
@@ -30,11 +31,10 @@ my $verbosity = 0;
 my $out_file = $temp_dir."/tempnew.csv";
 my $def_proto_file = 'D:\FG\fg-64\install\FlightGear\fgdata\Protocol\playback.xml';
 my $min_ias = 0;    # skip records below this
-
+my $min_records = 77;
 # ### DEBUG ###
 my $debug_on = 0;
 my $def_file = 'D:\FG\fg-64\tempp3.csv';
-my $def_ias = 53;
 
 ### program variables
 my @warnings = ();
@@ -57,7 +57,6 @@ sub show_warnings($) {
         prt( "\nNo warnings issued.\n\n" ) if (VERB9());
     }
 }
-
 
 sub pgm_exit($$) {
     my ($val,$msg) = @_;
@@ -85,33 +84,77 @@ my %inputs = (
     'chunk' => 1
     );
 
-
 #my %chunk1 = (
 # 'magnetos' => { 'type' => 'float', 'node' => '/controls/engines/engine[1]/magnetos' },
 #);
 # 'altitude-ft' => { 'type' => 'float', 'node' => '/position/altitude-ft' },
 # 'latitude-deg' => { 'type' => 'double', 'node' => '/position/latitude-deg' },
 # 'longitude-deg' => { 'type' => 'double', 'node' => '/position/longitude-deg' },
+my $xpath = "/PropertyList/generic";
+my $xpath1 = "$xpath/output/chunk";
+my $xpath2 = "$xpath/input/chunk";
 
 sub process_in_file($) {
     my ($inf) = @_;
-    my $xref = XMLin($inf);
-    # prt(Dumper($xref));
-    # can MAYBE keep 'order' if an ARRAY used
-    ##my $xref = XMLin($inf, ForceArray => 1);
+    #my ($fh);
+    #if (! open $fh, '<', $inf ) {
+    #    pgm_exit(1,"Can not open file $inf!\n");
+    #}
+    #my @lines = <$fh>;
+    #close $fh;
+    #my $text = join("",@lines);
+    ##my $xref = XMLin($inf);
+    #binmode $fh; # drop all PerlIO layers possibly created by a use open pragma
+    #my $xref = XML::LibXML->load_xml(IO => $fh);
+    #my $xref = XML::LibXML->load_xml(string => $text);
+    my $parser = XML::LibXML->new();
+    my $xref   = $parser->parse_file($inf);
     ##prt(Dumper($xref));
-    $load_log = 1;
-    my $root = 'PropertyList';
+    # $load_log = 1;
+    my ($chunk,$name,$node,$len,$ra,$cnt,$ccnt);
+    # foreach my $book ($doc->findnodes('/library/book')) {
+    # my($title) = $book->findnodes('./title');
+    # print $title->to_literal, "\n" 
+    # }
+    #my $root = 'PropertyList';
+    my $minlen = 0;
+    my @onodes = ();
+    foreach $chunk ($xref->findnodes($xpath1)) {
+        $name = $chunk->findnodes("./name");
+        $node = $chunk->findnodes("./node");
+        #prt("name ".$name->to_litral.", node ".$node->to_literal."\n");
+        #prt("name ".$name->toString.", node ".$node->toString."\n");
+        prt("name $name, node $node\n") if (VERB5());
+        $len = length($name);
+        $minlen = $len if ($len > $minlen);
+        push(@onodes,[$name,$node]);
+    }
+    $cnt = scalar @onodes;
+    prt("List of $cnt OUTPUT chunks, and the property they are taken from...\n");
+    $cnt = 0;
+    foreach $ra (@onodes) {
+        $cnt++;
+        $name = ${$ra}[0];
+        $node = ${$ra}[1];
+        # display
+        $ccnt = sprintf("%2d",$cnt);
+        $name .= ' ' while (length($name) < $minlen);
+        prt("$ccnt: $name $node\n"); # if (VERB5());
+    }
+
+}
+
+sub scrapts() {
     my $b1 = 'generic';
     my $bin = 'input';
     my $bout = 'output';
-
+    my ($xref,$inf,$node);
     if (! defined ${$xref}{$b1}) {
         pgm_exit(1,"File $inf does not have '$b1'\n");
     }
     my $rn1 = ${$xref}{$b1};
     my (@iarr,@oarr,$icnt,$ocnt);
-    my ($rin,$rout,$rinch,$rotch,$ch,$rh,$node,$len,$ccnt,$type);
+    my ($rin,$rout,$rinch,$rotch,$ch,$rh,$len,$ccnt,$type);
     my $invsep = ',';
     my $inlsep = 'newline';
     my $otvsep = ',';
@@ -145,7 +188,7 @@ sub process_in_file($) {
     if (defined ${$rn1}{$bout}) {
         $rout = ${$rn1}{$bout};
         prt("/$bout");
-if (defined ${$rout}{var_separator}) {
+        if (defined ${$rout}{var_separator}) {
             $otvsep = ${$rout}{var_separator};
             prt(",ovs=$otvsep");
         }
@@ -202,30 +245,42 @@ if (defined ${$rout}{var_separator}) {
     }
 }
 
-sub process_in_file_TOO_DIFFICULT($) {
-    my ($inf) = @_;
-    #my $xref = XMLin($inf);
-    # prt(Dumper($xref));
-    # can MAYBE keep 'order' if an ARRAY used
-    my $xref = XMLin($inf, ForceArray => 1);
-    prt(Dumper($xref));
-    $load_log = 1;
-    my $root = 'PropertyList';
-    my $b1 = 'generic';
-    my $bin = 'input';
-    my $bout = 'output';
+my $min_lon = 200;
+my $min_lat = 200;
+my $max_lon = -200;
+my $max_lat = -200;
+my $got_min_max = 0;
 
-    if (! defined ${$xref}{$b1}) {
-        pgm_exit(1,"File $inf does not have '$b1'\n");
-    }
-    my $ra1 = ${$xref}{$b1};
-    my $rn1 = ${$ra1}[0];
+sub sdd_to_bbox($$) {
+    my ($lat,$lon) = @_;
+    $min_lon = $lon if ($lon < $min_lon);
+    $max_lon = $lon if ($lon > $max_lon);
+    $min_lat = $lat if ($lat < $min_lat);
+    $max_lat = $lat if ($lat > $max_lat);
 }
 
-# this should be fixed offset
-my $max_lat = 42;
-my $min_lat = 40;
+sub in_world_range($$) {
+    my ($lat,$lon) = @_;
+    return 0 if ($lat < -90);
+    return 0 if ($lat >  90);
+    return 0 if ($lon < -180);
+    return 0 if ($lon >  180);
+    sdd_to_bbox($lat,$lon);
+    $got_min_max = 1;
+    return 1;
+}
 
+### my $max_lat = 42;
+### my $min_lat = 40;
+
+# 49: latitude-deg            /position/latitude-deg
+# 50: longitude-deg           /position/longitude-deg
+# 51: altitude-ft             /position/altitude-ft
+# 52: roll-deg                /orientation/roll-deg
+# 53: pitch-deg               /orientation/pitch-deg
+# 54: heading-deg             /orientation/heading-deg
+# 55: side-slip-deg           /orientation/side-slip-deg
+# 56: airspeed-kt             /velocities/airspeed-kt
 sub process_in_file_csv($) {
     my ($inf) = @_;
     if (! open INF, "<$inf") {
@@ -234,14 +289,15 @@ sub process_in_file_csv($) {
     my @lines = <INF>;
     close INF;
     my $lncnt = scalar @lines;
-    prt("Process $lncnt lines form $inf...\n");
-    my ($line,$lnn,@arr,$len,$val,$i,$i2,$lat,$lon,$alt);
+    prt("Processing $lncnt lines, from [$inf]...\n");
+    my ($line,$inc,$lnn,@arr,$len,$val,$i,$i2,$lat,$lon,$alt);
     my ($rol,$pit,$hdg,$slip,$ias);
     $lnn = 0;
     my $icnt = 0;
     my @acvs = ();
     my $ioff = -1;
     my $skipped = 0;
+    # process each CVS line
     foreach $line (@lines) {
         chomp $line;
         $lnn++;
@@ -254,45 +310,37 @@ sub process_in_file_csv($) {
             $icnt = $len;
             prt("$lnn: $icnt elements...\n");
         }
-        #if ($line =~ /\s*#\s*include\s+(.+)$/) {
-        #    $inc = $1;
-        #    prt("$lnn: $inc\n");
-        #
-        for ($i = 0; $i < $len; $i++) {
-            $val = $arr[$i];
-            $i2 = $i + 1;
-            if (($val < $max_lat) && ($val > $min_lat) && (($i2 + 8) < $len)) {
-                $lat = $val;
-                $lon = $arr[$i2];
-                $alt = $arr[$i2+1];
-                $rol = $arr[$i2+2];
-                $pit = $arr[$i2+3];
-                $hdg = $arr[$i2+4];
-                $slip = $arr[$i2+5];
-                $ias = $arr[$i2+6];
-
-                if ($ioff != $i) {
-                    $ioff = $i;
-                    prt("Lat,Lon,Alt offset is $ioff\n");
-                }
-                if ($alt > -9900) {
-                    prt("$lnn: $lat,$lon,$alt\n") if (VERB5());
-                    #           0    1    2    3    4    5    6     7
-                    push(@acvs,[$lat,$lon,$alt,$rol,$pit,$hdg,$slip,$ias]);
-                } else {
-                    $skipped++; # skip these -9999 alt records
-                    # fired **before** scenery loaded!!!
-                }
-                last;
-            }
+        if ($icnt < $min_records) {
+            pgm_exit(1,"Error: File $inf does not have $min_records! Bad file!\n");
         }
+        $i2 = 48;
+        $lat = $arr[$i2];
+        $lon = $arr[$i2+1];
+        if (!in_world_range($lat,$lon)) {
+            pgm_exit(1,"Error: File $inf has BAD lat,lon $lat,$lon! Bad file!\n");
+        }
+        $alt = $arr[$i2+2];
+        $rol = $arr[$i2+3];
+        $pit = $arr[$i2+4];
+        $hdg = $arr[$i2+5];
+        $slip = $arr[$i2+6];
+        $ias = $arr[$i2+7];
+
+        if ($alt > -9900) {
+            prt("$lnn: $lat,$lon,$alt\n") if (VERB5());
+            #           0    1    2    3    4    5    6     7
+            push(@acvs,[$lat,$lon,$alt,$rol,$pit,$hdg,$slip,$ias]);
+         } else {
+            $skipped++; # skip these -9999 alt records
+            # fired **before** scenery loaded!!!
+         }
     }
     $len = scalar @acvs;
-    prt("Got $len CVS lines... skipped $skipped with altitude LT -9900\n");
+    prt("Got $len CVS lines... skipped alt -9999 $skipped\n");
     my $csv = "lon,lat,alt,hdg,ias,roll,pitch,slip\n";
     my ($ra);
-    $len = 0;
     my $skipias = 0;
+    my $csvcount = 0;
     foreach $ra (@acvs) {
         $lat = ${$ra}[0];
         $lon = ${$ra}[1];
@@ -312,23 +360,22 @@ sub process_in_file_csv($) {
         $alt = int($alt);
         $hdg = int($hdg);
         $ias = int($ias);
-
-        $len++;
         $csv .= "$lon,$lat,$alt,$hdg,$ias,$rol,$pit,$slip\n";
+        $csvcount++;
     }
+    rename_2_old_bak($out_file);
     write2file($csv,$out_file);
-    prt("CVS lines $len, written to $out_file... ");
-    if ($min_ias > 0) {
-        prt("skipped $skipias below $min_ias...");
-    }
-    prt("\n");
+    my ($n,$d) = fileparse($out_file);
+    prt("Written $csvcount CVS records to $n, from $lncnt lines, skipped $skipped (no alt), $skipias (no spd $min_ias)\n");
+    prt("Out file is $out_file\n");
 }
 
 #########################################
 ### MAIN ###
+### process_in_file($def_proto_file); # xml load, if needed
 parse_args(@ARGV);
-##### process_in_file($def_proto_file); # xml load, if needed
-process_in_file_csv($in_file);
+#process_in_file($def_proto_file); # xml load, if needed
+process_in_file_csv($in_file) if (length($in_file));
 pgm_exit(0,"");
 ########################################
 
@@ -395,20 +442,24 @@ sub parse_args {
             $in_file = $def_file;
             prt("Set DEFAULT input to [$in_file]\n");
         }
-        if ($min_ias == 0) {
-            $min_ias = $def_ias;
-            prt("Set DEFAULT min. IAS $min_ias.\n");
-        }
     }
-
     if (length($in_file) ==  0) {
         pgm_exit(1,"ERROR: No input files found in command!\n");
     }
     if (! -f $in_file) {
         pgm_exit(1,"ERROR: Unable to find in file [$in_file]! Check name, location...\n");
     }
-
 }
 
-# eof
+sub give_help {
+    prt("$pgmname: version $VERS\n");
+    prt("Usage: $pgmname [options] in-file\n");
+    prt("Options:\n");
+    prt(" --help  (-h or -?) = This help, and exit 0.\n");
+    prt(" --verb[n]     (-v) = Bump [or set] verbosity. def=$verbosity\n");
+    prt(" --load        (-l) = Load LOG at end. ($outfile)\n");
+    prt(" --out <file>  (-o) = Write output to this file.\n");
+    prt(" --speed <ias> (-s) = Only record records that have this IAS. (def=$min_ias)\n");
+}
 
+# eof - fg-play-02.pl
