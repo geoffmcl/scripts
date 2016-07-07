@@ -1,8 +1,11 @@
 #!/usr/bin/perl -w
 # NAME: cfjsonlog.pl (was: jsonfeeds.pl)
-# AIM: Fetch, show, and store a json crossfeed log in a target directoryls
+# AIM: Fetch, show, and store a json crossfeed log in a target directory.
 # Log file name will change each day, in the form - $out_dir/'flights-YYYY-MM-DD.csv'
 # 07/07/2016 - Moved into useful 'scripts' repo, and renamed to cfjsonlog.pl
+# The default is to fetch and write a flight record each 5 seconds *** FOREVER *** Ctrl+c to abort...
+# Add option -1, to just get one, and write a compact CSV to an -o out-file
+# All fetches are from a single server "http://crossfeed.freeflightsim.org/flights.json" = Thanks Pete
 # 06/07/2016 - Review
 # 2015-01-09 - Initial cut
 ######################################
@@ -424,6 +427,7 @@ sub get_one_feed() {
     my $json = JSON->new->allow_nonref;
     my $rh1 = $json->decode( $txt1 );
     ###prt(Dumper($rh1));
+    my $csv = '';
 
     my $upd1 = "Unknown";
     my ($fid,$callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm);
@@ -443,6 +447,8 @@ sub get_one_feed() {
         $spd_kts = 'spd kts';
         $hdg = 'hdg';
         $dist_nm = 'dist nm';
+        $csv .= "$callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm,update\n";
+
         # display header
         $callsign .= ' ' while (length($callsign) < 8);
         $lat = ' '.$lat while (length($lat) < 12);
@@ -467,8 +473,10 @@ sub get_one_feed() {
             $hdg = ${$rh2}{hdg};
             $dist_nm = ${$rh2}{dist_nm};
             ###prt("$fid,$callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm\n");
+            $csv .= "$callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm,$upd1\n";
 
-            # display 
+            ###################################
+            # display - for spaced display only
             $callsign .= ' ' while (length($callsign) < 8);
             $lat = get_ll_double($lat);
             $lon = get_ll_double($lon);
@@ -481,10 +489,17 @@ sub get_one_feed() {
             $line = "$callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm\n";
             prt($line);
             $msg .= $line;
+            ###################################
         }
         if (length($out_file)) {
-            write2file($msg,$out_file);
-            prt("JSON crossfeed flight list written to $out_file\n");
+            ### No, do not output the spaced display lines
+            ### write2file($msg,$out_file);
+            ### Write instead the compact CSV collected as well
+            rename_2_old_bak($out_file);
+            write2file($csv,$out_file);
+            prt("JSON crossfeed CSV flight list written to $out_file\n");
+        } else {
+            prt("Compact CSV discarded. No -o out-file.csv given...\n");
         }
     } else {
         prt("'flights' is NOT defined in hash 1!\n");
