@@ -1,6 +1,8 @@
 #!/usr/bin/perl -w
 # NAME: fg-play.pl
 # AIM: Read a FG playback generic protocol file
+# 29/06/2016 - Add a time, in seconds, based on Hz
+# 2016-04-18 - Initial cut, based on showplayback.pl, without XML reading, just FIXED offsets
 use strict;
 use warnings;
 use File::Basename;  # split path ($name,$dir,$ext) = fileparse($file [, qr/\.[^.]*/] )
@@ -32,6 +34,9 @@ my $out_file = $temp_dir."/tempnew.csv";
 my $def_proto_file = 'D:\FG\fg-64\install\FlightGear\fgdata\Protocol\playback.xml';
 my $min_ias = 0;    # skip records below this
 my $min_records = 77;
+my $def_hetz = 20;
+my $add_time = 0;
+
 # ### DEBUG ###
 my $debug_on = 0;
 my $def_file = 'D:\FG\fg-64\tempp3.csv';
@@ -337,10 +342,14 @@ sub process_in_file_csv($) {
     }
     $len = scalar @acvs;
     prt("Got $len CVS lines... skipped alt -9999 $skipped\n");
-    my $csv = "lon,lat,alt,hdg,ias,roll,pitch,slip\n";
+    my $csv = "lon,lat,alt,hdg,ias,roll,pitch,slip";
+    $csv .= ",secs" if ($add_time);
+    $csv .= "\n";
     my ($ra);
     my $skipias = 0;
     my $csvcount = 0;
+    my $recs = 0;
+    my $secs = 0;
     foreach $ra (@acvs) {
         $lat = ${$ra}[0];
         $lon = ${$ra}[1];
@@ -360,8 +369,15 @@ sub process_in_file_csv($) {
         $alt = int($alt);
         $hdg = int($hdg);
         $ias = int($ias);
-        $csv .= "$lon,$lat,$alt,$hdg,$ias,$rol,$pit,$slip\n";
+        $csv .= "$lon,$lat,$alt,$hdg,$ias,$rol,$pit,$slip";
+        $csv .= ",$secs" if ($add_time);
+        $csv .= "\n";
         $csvcount++;
+        $recs++;
+        if ($recs > $def_hetz) {
+            $secs++;
+            $recs = 0;
+        }
     }
     rename_2_old_bak($out_file);
     write2file($csv,$out_file);
@@ -426,6 +442,15 @@ sub parse_args {
                 $sarg = $av[0];
                 $min_ias = $sarg;
                 prt("Set min, IAS Kts to [$min_ias].\n") if ($verb);
+            } elsif ($sarg =~ /^r/) {
+                need_arg(@av);
+                shift @av;
+                $sarg = $av[0];
+                $def_hetz = $sarg;
+                prt("Set record rate to [$def_hetz] per second.\n") if ($verb);
+            } elsif ($sarg =~ /^t/) {
+                $add_time = 1;
+                prt("Set to add a time record in seconds.\n") if ($verb);
             } else {
                 pgm_exit(1,"ERROR: Invalid argument [$arg]! Try -?\n");
             }
@@ -460,6 +485,9 @@ sub give_help {
     prt(" --load        (-l) = Load LOG at end. ($outfile)\n");
     prt(" --out <file>  (-o) = Write output to this file.\n");
     prt(" --speed <ias> (-s) = Only record records that have this IAS. (def=$min_ias)\n");
+    prt(" --rate <hz>   (-r) = Rate of records. (def=$def_hetz)\n");
+    prt(" --time        (-t) = Append a seconds elapsed time, based on above rate. (def=$add_time)\n");
+
 }
 
 # eof - fg-play-02.pl
