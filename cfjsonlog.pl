@@ -43,6 +43,7 @@ my $verbosity = 0;
 my $out_file = '';
 my $out_dir = $temp_dir.$PATH_SEP."temp-flights";
 my $only_one_feed = 0;
+my $add_csv_header = 1;
 
 ############################################################# 
 # crossfeed json feed - never fetch faster than 1 Hz!
@@ -233,6 +234,7 @@ sub display_flight($$$$$$$$$) {
 }
 
 my $iocnt = 0;
+my $csv_headers = "fid,callsign,lat,lon,alt_ft,model,spd_kts,hdg,dist_nm,update,tot_secs\n";
 
 sub record_flight($$$$$$$$$$$) {
     my ($fid,$callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm,$tot_secs,$upd1) = @_;
@@ -245,20 +247,22 @@ sub record_flight($$$$$$$$$$$) {
         if (-f $file) {
             $last_ymd = $ymd if (length($last_ymd) == 0);
             if ($ymd eq $last_ymd) {
-                append2file($line,$file);
                 prt("Appended to file $file...\n") if ($iocnt == 0);
+                append2file($line,$file);
                 $iocnt++;
             } else {
                 $last_ymd = $ymd;
+                $line = $csv_headers.$line if ($add_csv_header);
                 write2file($line,$file);
                 prt("Created new file $file...\n");
-                $iocnt = 0;
+                $iocnt = 1;
             }
         } else {
             $last_ymd = $ymd;
+            $line = $csv_headers.$line if ($add_csv_header);
             write2file($line,$file);
             prt("Created new file $file...\n");
-            $iocnt = 0;
+            $iocnt = 1;
         }
     } elsif ($iocnt == 0) {
         if (length($out_dir)) {
@@ -571,6 +575,9 @@ sub parse_args {
             } elsif ($sarg =~ /^1/) {
                 $only_one_feed = 1;
                 prt("Only show one feed and exit\n") if ($verb);
+            } elsif ($sarg =~ /^n/) {
+                $add_csv_header = 0;
+                prt("Disabled adding csv header to new files.\n") if ($verb);
             } else {
                 pgm_exit(1,"ERROR: Invalid argument [$arg]! Try -?\n");
             }
@@ -604,6 +611,7 @@ sub give_help {
     prt(" --help  (-h or -?) = This help, and exit 0.\n");
     prt(" --verb[n]     (-v) = Bump [or set] verbosity. def=$verbosity\n");
     prt(" --dir <dir>   (-d) = Set output DIR. (def=$out_dir)\n");
+    prt(" --no-header   (-n) = Disable adding csv header to each new file. (def=$add_csv_header)\n");
     prt("Single shot mode\n");
     prt(" --1           (-1) = Only fetch one feed, and exit. (def=$only_one_feed)\n");
     prt(" --out <file>  (-o) = Write output to this file. (def=$out_file)\n");
