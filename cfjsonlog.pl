@@ -337,20 +337,22 @@ sub repeat_feeds() {
         if (defined ${$rh1}{flights}) {
             $ra1 = ${$rh1}{flights};
             $cnt1 = scalar @{$ra1};
-            prt("Updated: $upd1, flights $cnt1...\n");
+            # get all current FIDS in current hash
             my @fids = keys %hash;
+            my $cnt2 = scalar @fids;    # get COUNT in current db
             my %hfids = ();
             foreach $fid (@fids) {
                 $hfids{$fid} = 1;
             }
-            # pre-process for mising FID
+            # pre-process current cnt1, for missing FIDs
             for ($i = 0; $i < $cnt1; $i++) {
                 $rh2 = ${$ra1}[$i]; # extract the hash
-                $fid = ${$rh2}{fid};
+                $fid = ${$rh2}{fid};    # get FID
                 if (defined $hfids{$fid}) {
-                    delete $hfids{$fid};
+                    delete $hfids{$fid}; # REMOVVE from list
                 }
             }
+            # any remaining in FIDS need to DIE, have LEFT, no more
             @fids = keys %hfids;
             if (@fids) {
                 foreach $fid (@fids) {
@@ -371,6 +373,10 @@ sub repeat_feeds() {
                     delete $hash{$fid}; # remove it
                 }
             }
+            @fids = keys %hash;
+            my $cnt3 = scalar @fids;
+            prt("Updated: $upd1, flights $cnt1... db $cnt2/$cnt3\n");
+            # now process THIS set of json flights
             for ($i = 0; $i < $cnt1; $i++) {
                 $rh2 = ${$ra1}[$i]; # extract the hash
                 $fid = ${$rh2}{fid};
@@ -401,7 +407,7 @@ sub repeat_feeds() {
                             ${$rh3}[8] += $dist;
                         }
                     }
-                    ${$rh3}[9] += $secs;
+                    ${$rh3}[9] += $secs;    # accumulate rough seconds - better based on update string
                 } else {
                     #              0         1    2    3       4      5        6    7        8 9 10
                     $hash{$fid} = [$callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm,0,0,$upd1];
