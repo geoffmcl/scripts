@@ -55,10 +55,10 @@ my $feed1 = "http://crossfeed.freeflightsim.org/flights.json";
 
 # ### DEBUG ###
 my $debug_on = 1;
-##my $def_file = 'C:\GTools\perl\scripts\temp\temp-flights\flights-2016-07-10.csv';
+my $def_file = 'C:\GTools\perl\scripts\temp\temp-flights\flights-2016-07-10.csv';
 ##my $def_file = 'C:\GTools\perl\scripts\temp\temp-flights\flights-2016-07-09.csv';
 ##my $def_file = 'C:\GTools\perl\scripts\temp\temp-flights';
-my $def_file = 'C:\GTools\perl\scripts\temp\temp-flights\flights-2016-07-07.csv';
+##my $def_file = 'C:\GTools\perl\scripts\temp\temp-flights\flights-2016-07-07.csv';
 
 ### program variables
 my @warnings = ();
@@ -552,6 +552,7 @@ body {
 }
 .vat { 
     vertical-align: top;
+    white-space: nowrap;
 }
 .ran {
     text-align: right;
@@ -591,10 +592,8 @@ text-align : center;
 </head>
 <body>
 <a id="top" name="top"></a>
-
-<p class="top"><a href="#bot">bot</a></p>
-
 <h1>Crossfeed Flights</h1>
+<p class="top"><a href="#bot">bot</a></p>
 
 EOF
     return $txt;
@@ -603,7 +602,12 @@ EOF
 sub get_html_tail() {
     my $tm = "<!-- Generated ".lu_get_YYYYMMDD_hhmmss_UTC(time())." by $pgmname -->";
     my $txt = <<EOF;
+
+<p>Information extracted from a crossfeed, sampled every 5 seconds, over the perod of time
+shown at the top, collected into to a CSV file.</p>
+
 <p class="top"><a href="#top">top</a></p>
+
 <a name="bot" id="bot"></a>
 <p align="right">eof <a href="#top">top</a></p>
     $tm
@@ -701,10 +705,15 @@ sub get_time_stg($) {
     return $res;
 }
 
-sub mycmp_decend_n9 {
-   return -1 if (${$a}[9] < ${$b}[9]);
-   return 1 if (${$a}[9] > ${$b}[9]);
-   return 0;
+sub mycmp_decend_n0 {
+   return  1 if (${$a}[0] < ${$b}[0]);
+   return -1 if (${$a}[0] > ${$b}[0]);
+   return  0;
+}
+sub mycmp_decend_n2 {
+   return  1 if (${$a}[2] < ${$b}[2]);
+   return -1 if (${$a}[2] > ${$b}[2]);
+   return  0;
 }
 
 sub mycmp_ascend {
@@ -746,6 +755,8 @@ sub show_flt_fids() {
     my $last_upd = '';
     my $tot_secs = 0;
     my $tot_dist = 0;
+    my ($nmph,$wrap);
+    my $cols = 3;
 
     $stt = [ gettimeofday ];
     # collection of information, by FID (unique)
@@ -849,6 +860,7 @@ sub show_flt_fids() {
     # to avoid repeated models...
     # ok, go through the list, 1 by 1
     my %cs = ();
+    my %mods = ();
     my ($rcsh2,$ra3);
     $cnt = scalar @arr;
     prth("\nDisplay of $cnt MODELS, alpha sorted...\n",0);
@@ -896,6 +908,13 @@ sub show_flt_fids() {
             $dist_nm = ' '.$dist_nm while (length($dist_nm) < 7);
             prt("     Total $dist_nm $tm\n") if ($show_each_flt);
         }
+        if (defined $mods{$model}) {
+            $ra = $mods{$model};
+            ${$ra}[0] += $spd_kts;
+            ${$ra}[1] += $tsecs;
+        } else {
+            $mods{$model} = [$spd_kts,$tsecs];
+        }
     }
 
     if (!$show_each_flt) {
@@ -905,7 +924,8 @@ sub show_flt_fids() {
             my @a3 = sort keys %{$rcsh2};
             $lon = scalar @a3;
             prt("Model: $model, flown by $lon -\n");
-            $htm .= "<tr><td class=\"vat\"><b>$model</b></td>\n";
+            $htm .= "<tr>\n";
+            $htm .= "<td class=\"vat\"><b>$model</b></td>\n";
             $htm .= "<td class=\"ran\">$lon</td>\n";
             $htm .= "<td>";
             $tsecs = 0;
@@ -941,13 +961,126 @@ sub show_flt_fids() {
             #$htm .= "<tr><td>$msg</tr></td>\n";
             $htm .= "</td></tr>\n";
         }
-    }
+    }   # for each MODEL
     $htm .= "</table>\n";
 
     $htm .= "<p class=\"top\"><a href=\"#top\">top</a> <a href=\"#bot\">bot</a></p>\n";
 
+    @arr = sort keys(%mods);
+    $cnt = scalar @arr;
+    my @modarr = ();
+    foreach $model (@arr) {
+        $ra = $mods{$model};
+        $dist_nm = ${$ra}[0];
+        $tsecs = ${$ra}[1];
+        push(@modarr,[$dist_nm,$model,$tsecs]);
+    }
+    prth("\nDisplay of $cnt MODEL, sorted by distancce flown...\n",0);
+    @arr = sort mycmp_decend_n0 @modarr;
+    $htm .= "<table width=\"100%\">\n";
+    $wrap = 0;
+    $cnt = 0;
+    $htm .= "<tr>\n";
+    for ($i = 0; $i < $cols; $i++) {
+        $htm .= "<th>#</th>\n";
+        $htm .= "<th>model</th>\n";
+        $htm .= "<th>dist.nm</th>\n";
+        $htm .= "<th>time</th>\n";
+        $htm .= "<th>|</th>\n" if (($i + 1) < $cols);
+    }
+    $htm .= "</tr>\n";
+    $wrap = 0;
+    foreach $ra (@arr) {
+        $dist_nm = ${$ra}[0];
+        $model = ${$ra}[1];
+        $tsecs = ${$ra}[2];
+        $tm = get_time_stg($tsecs);
+        $cnt++;
+
+        $htm .= "<tr>\n" if ($wrap == 0);
+        $htm .= "<td class=\"ran\">$cnt</td>\n";
+        $htm .= "<td class=\"vat\"><b>$model</b></td>\n";
+        $htm .= "<td class=\"ran\">".get_nn($dist_nm)."</td>\n";
+        $htm .= "<td>$tm</td>\n";
+        $wrap++;
+        if ($wrap == $cols) {
+            $wrap = 0;
+            $htm .= "</tr>\n";
+        } else {
+            $htm .= "<td>|</td>\n";
+        }
+    }
+    if ($wrap) {
+        while ($wrap < $cols) {
+            $htm .= "<td>&nbsp;</td>\n";
+            $htm .= "<td>&nbsp;</td>\n";
+            $htm .= "<td>&nbsp;</td>\n";
+            $htm .= "<td>&nbsp;</td>\n";
+            $wrap++;
+            if ($wrap < $cols) {
+                $htm .= "<td>|</td>\n";
+            }
+        }
+        $htm .= "</tr>\n";
+    }
+    $htm .= "</table>\n";
+
+    prth("\nDisplay of $cnt MODEL, sorted est. time flown...\n",0);
+    @arr = sort mycmp_decend_n2 @modarr;
+    $htm .= "<table width=\"100%\">\n";
+    $wrap = 0;
+    $cnt = 0;
+    $htm .= "<tr>\n";
+    for ($i = 0; $i < $cols; $i++) {
+        $htm .= "<th>#</th>\n";
+        $htm .= "<th>model</th>\n";
+        $htm .= "<th>time</th>\n";
+        $htm .= "<th>dist.nm</th>\n";
+        $htm .= "<th>|</th>\n" if (($i + 1) < $cols);
+    }
+    $htm .= "</tr>\n";
+    $wrap = 0;
+    foreach $ra (@arr) {
+        $dist_nm = ${$ra}[0];
+        $model = ${$ra}[1];
+        $tsecs = ${$ra}[2];
+        $tm = get_time_stg($tsecs);
+        $cnt++;
+
+        $htm .= "<tr>\n" if ($wrap == 0);
+        $htm .= "<td class=\"ran\">$cnt</td>\n";
+        $htm .= "<td class=\"vat\"><b>$model</b></td>\n";
+        $htm .= "<td>$tm</td>\n";
+        $htm .= "<td class=\"ran\">".get_nn($dist_nm)."</td>\n";
+        $wrap++;
+        if ($wrap == $cols) {
+            $wrap = 0;
+            $htm .= "</tr>\n";
+        } else {
+            $htm .= "<td>|</td>\n";
+        }
+    }
+    if ($wrap) {
+        while ($wrap < $cols) {
+            $htm .= "<td>&nbsp;</td>\n";
+            $htm .= "<td>&nbsp;</td>\n";
+            $htm .= "<td>&nbsp;</td>\n";
+            $htm .= "<td>&nbsp;</td>\n";
+            $wrap++;
+            if ($wrap < $cols) {
+                $htm .= "<td>|</td>\n";
+            }
+        }
+        $htm .= "</tr>\n";
+    }
+    $htm .= "</table>\n";
+
+
+
     ## $load_log = 1;
     #pgm_exit(1,"TEMPEXIT\n");
+    $htm .= "<p class=\"top\"><a href=\"#top\">top</a> <a href=\"#bot\">bot</a></p>\n";
+
 
     ########################################################
     #Show extracted CALLSIGN usage information
@@ -1088,7 +1221,6 @@ sub show_flt_fids() {
     ####################################################################
     ### SUMMARY OUTPUT...
     if (length($cs_most_secs)) {
-        my ($nmph);
         #prth("\nSome 'stats' gathered...\n",0);
         prt("\nSome 'stats' gathered...\n");
         $htm .= "<h2>Some 'stats' gathered...</h2>\n";
@@ -1099,20 +1231,27 @@ sub show_flt_fids() {
         $tm = get_time_stg($max_sec_cnt);
         @arr = sort mycmp_ascend keys(%timeh);
         $max = scalar @arr;
+        $i = $max;
         if ($max_show_cs > 0) {
             $max = $max_show_cs if ($max > $max_show_cs);
         }
-        prth("CS: $cs_most_secs flew the most time - $tm - list of top $max\n",0);
-        $htm .= "<table>\n";
+        prth("CS: $cs_most_secs flew the most time - $tm - list of top $max of $i\n",0);
+        $htm .= "<table width=\"100%\">\n";
         # header line
         $htm .= "<tr>\n";
-        $htm .= "<th>#</th>\n";
-        $htm .= "<th>callsign</th>\n";
-        $htm .= "<th>time</th>\n";
-        $htm .= "<th>dist nm.</th>\n";
-        $htm .= "<th>av.kt.</th>\n";
-        $htm .= "<th>flts</th>\n";
+        for ($i = 0; $i < $cols; $i++) {
+            $htm .= "<th>#</th>\n";
+            $htm .= "<th>callsign</th>\n";
+            $htm .= "<th>time</th>\n";
+            $htm .= "<th>dist nm.</th>\n";
+            $htm .= "<th>av.kt.</th>\n";
+            $htm .= "<th>flts</th>\n";
+            if (($i + 1) < $cols) {
+                $htm .= "<th>|</th>\n"
+            }
+        }
         $htm .= "</tr>\n";
+        $wrap = 0;
         for ($i = 0; $i < $max; $i++) {
             $tsecs = $arr[$i];
             $ra = $timeh{$tsecs};
@@ -1125,7 +1264,8 @@ sub show_flt_fids() {
             $nmph = ($dist_nm / $tsecs) * 60 * 60;
             $nmph = int($nmph + 0.5);
 
-            $htm .= "<tr>\n";
+            $htm .= "<tr>\n" if ($wrap == 0);
+
             $htm .= "<td class=\"ran\">".($i+1)."</td>\n";
             $htm .= "<td class=\"vat\"><b>$callsign</b></td>\n";
             #$htm .= "<td>for $tm, $dist_nm nm. av. $nmph kt.</td>\n";
@@ -1133,13 +1273,33 @@ sub show_flt_fids() {
             $htm .= "<td class=\"ran\">".get_nn($dist_nm)."</td>\n";
             $htm .= "<td class=\"ran\">".get_nn($nmph)."</td>\n";
             $htm .= "<td class=\"ran\">$cnt</td>\n";
-            $htm .= "</tr>\n";
+            $wrap++;
+            if ($wrap == $cols) {
+                $htm .= "</tr>\n";
+                $wrap = 0;
+            } else {
+                $htm .= "<td>|</td>\n";
+            }
 
             # display
             $callsign .= ' ' while (length($callsign) < 8);
             my $clnn = sprintf("%3d",($i+1));
             prt(" $clnn: $callsign flew for $tm, $dist_nm nm. av. $nmph kt. mods $cnt\n");
         }
+        if ($wrap) {
+            while ($wrap < $cols) {
+                $wrap++;
+                $htm .= "<td class=\"ran\">&nbsp;</td>\n";
+                $htm .= "<td class=\"vat\">&nbsp;</td>\n";
+                $htm .= "<td>&nbsp;</td>\n";
+                $htm .= "<td class=\"ran\">&nbsp;</td>\n";
+                $htm .= "<td class=\"ran\">&nbsp;</td>\n";
+                $htm .= "<td class=\"ran\">&nbsp;</td>\n";
+                $htm .= "<td>|</td>\n" if ($wrap < $cols);
+            }
+            $htm .= "</tr>\n";
+        }
+
         $htm .= "</table>\n";
 
         $htm .= "<p class=\"top\"><a href=\"#top\">top</a> <a href=\"#bot\">bot</a></p>\n";
@@ -1147,20 +1307,27 @@ sub show_flt_fids() {
         # Arrange by DISTANCE flown
         @arr = sort mycmp_ascend keys(%disth);
         $max = scalar @arr;
+        $i = $max;
         if ($max_show_cs > 0) {
             $max = $max_show_cs if ($max > $max_show_cs);
         }
-        prth("CS: $cs_most_dist flew the most dist - $max_dist_nm nm. - list of to $max\n",0);
-        $htm .= "<table>\n";
+        prth("CS: $cs_most_dist flew the most dist - $max_dist_nm nm. - list of top $max on $i\n",0);
+        $htm .= "<table width=\"100%\">\n";
         # header line
         $htm .= "<tr>\n";
-        $htm .= "<th>#</th>\n";
-        $htm .= "<th>callsign</th>\n";
-        $htm .= "<th>time</th>\n";
-        $htm .= "<th>dist nm.</th>\n";
-        $htm .= "<th>av.kt.</th>\n";
-        $htm .= "<th>flts</th>\n";
+        for ($i = 0; $i < $cols; $i++) {
+            $htm .= "<th>#</th>\n";
+            $htm .= "<th>callsign</th>\n";
+            $htm .= "<th>time</th>\n";
+            $htm .= "<th>dist nm.</th>\n";
+            $htm .= "<th>av.kt.</th>\n";
+            $htm .= "<th>flts</th>\n";
+            if (($i + 1) < $cols) {
+                $htm .= "<th>|</th>\n"
+            }
+        }
         $htm .= "</tr>\n";
+        $wrap = 0;
         for ($i = 0; $i < $max; $i++) {
             $dist_nm = $arr[$i];
             $ra = $disth{$dist_nm};
@@ -1173,7 +1340,8 @@ sub show_flt_fids() {
             $nmph = ($dist_nm / $tsecs) * 60 * 60;
             $nmph = int($nmph + 0.5);
 
-            $htm .= "<tr>\n";
+            $htm .= "<tr>\n" if ($wrap == 0);
+            ;
             $htm .= "<td class=\"ran\">".($i+1)."</td>\n";
             $htm .= "<td class=\"vat\"><b>$callsign</b></td>\n";
             $htm .= "<td>$tm</td>\n";
@@ -1181,12 +1349,32 @@ sub show_flt_fids() {
             $htm .= "<td class=\"ran\">".get_nn($dist_nm)."</td>\n";
             $htm .= "<td class=\"ran\">".get_nn($nmph)."</td>\n";
             $htm .= "<td class=\"ran\">$cnt</td>\n";
-            $htm .= "</tr>\n";
+            $wrap++;
+            if ($wrap == $cols) {
+                $htm .= "</tr>\n";
+                $wrap = 0;
+            } else {
+                $htm .= "<td>|</td>\n";
+            }
 
             # display
             $callsign .= ' ' while (length($callsign) < 8);
             my $clnn = sprintf("%3d",($i+1));
             prt(" $clnn: $callsign flew for $dist_nm nm. in $tm. av. $nmph kt. mods $cnt\n");
+        }
+
+        if ($wrap) {
+            while ($wrap < $cols) {
+                $wrap++;
+                $htm .= "<td class=\"ran\">&nbsp;</td>\n";
+                $htm .= "<td class=\"vat\">&nbsp;</td>\n";
+                $htm .= "<td>&nbsp;</td>\n";
+                $htm .= "<td class=\"ran\">&nbsp;</td>\n";
+                $htm .= "<td class=\"ran\">&nbsp;</td>\n";
+                $htm .= "<td class=\"ran\">&nbsp;</td>\n";
+                $htm .= "<td>|</td>\n" if ($wrap < $cols);
+            }
+            $htm .= "</tr>\n";
         }
         $htm .= "</table>\n";
 
