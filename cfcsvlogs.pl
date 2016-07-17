@@ -2,6 +2,7 @@
 # NAME: cfcsvlogs.pl, cfjsonlogs.pl (was: jsonfeeds.pl)
 # AIM: Annalyse logs written by cfjsonlog.pl, in a target directory.
 # Log file name will change each day, in the form - $out_dir/'flights-YYYY-MM-DD.csv'
+# 16/07/2016 - Beginning to mature the HTML output - more jumps...
 # 12/07/2016 - Begin to add HTML output
 # 2016-07-09 - Initial cut
 ######################################
@@ -34,7 +35,8 @@ $outfile = path_u2d($outfile) if ($os =~ /win/i);
 open_log($outfile);
 
 # user variables
-my $VERS = "0.0.7 2016-07-07";
+my $VERS = "0.0.8 2016-07-16";
+##my $VERS = "0.0.7 2016-07-07";
 ##my $VERS = "0.0.6 2016-07-06";
 ##my $VERS = "0.0.5 2015-01-09";
 my $load_log = 0;
@@ -44,9 +46,12 @@ my $out_file = '';
 my $out_dir = $temp_dir.$PATH_SEP."temp-flights";
 my $only_one_feed = 0;
 my $show_each_flt = 0;
-my $max_show_cs = 100;
+my $max_show_cs = 150;
+my $max_table_lines = 25;
+my $min_table_lines =  8;
+
 my $add_csv_header = 0; # add CSV header, to each **new** file
-my $out_html = $temp_dir."/temphtml2.html";
+my $out_html = $temp_dir."/temphtml2.htm";  # DEFAULT out HTML
 
 ############################################################# 
 # crossfeed json feed - never fetch faster than 1 Hz!
@@ -54,10 +59,10 @@ my $feed1 = "http://crossfeed.freeflightsim.org/flights.json";
 #############################################################
 
 # ### DEBUG ###
-my $debug_on = 1;
+my $debug_on = 0;
+##my $def_file = 'C:\GTools\perl\scripts\temp\temp-flights\cflogs';
 my $def_file = 'C:\GTools\perl\scripts\temp\temp-flights\flights-2016-07-10.csv';
 ##my $def_file = 'C:\GTools\perl\scripts\temp\temp-flights\flights-2016-07-09.csv';
-##my $def_file = 'C:\GTools\perl\scripts\temp\temp-flights';
 ##my $def_file = 'C:\GTools\perl\scripts\temp\temp-flights\flights-2016-07-07.csv';
 
 ### program variables
@@ -66,6 +71,11 @@ my $cwd = cwd();
 my $MPS2KT = 1.94384;   # meters per second to knots
 my $SG_EPSILON = 0.000001;
 my $last_ymd = '';
+my $g_log_period = "N/A";
+my $g_min_flts = 999999;
+my $g_max_flts = 0;
+my $g_tot_files = 0;
+my $g_tot_records = 0;
 
 sub VERB1() { return $verbosity >= 1; }
 sub VERB2() { return $verbosity >= 2; }
@@ -88,7 +98,8 @@ sub show_warnings($) {
 sub prt_ran_for() {
     my $end_app = [ gettimeofday ];
     my $elap = tv_interval( $begin_app, $end_app );
-    prt("Ran for $elap seconds ...\n");
+    my $tm = get_time_stg($elap);
+    prt("Ran for $tm ...\n");
 }
 
 sub pgm_exit($$) {
@@ -538,6 +549,17 @@ my $def_min_dist = 2;   # ignore a flight that does not move...
 my %flt_fids = ();
 my $htm = '';
 
+my $href_txt = "<a href=\"#end\">end</a>";
+
+sub get_body_html() {
+    my $txt = "<body>\n";
+    $txt .= "<a id=\"top\" name=\"top\"></a>\n";
+    $txt .= "<h1>Multiplayer Crossfeed Flights</h1>\n";
+    $txt .= "<p class=\"top\">$href_txt</p>\n";
+    $txt .= "<h2>$g_log_period</h2>\n";
+    return $txt;
+}
+
 sub get_html_head() {
     my $txt = <<EOF;
 <!DOCTYPE html>
@@ -590,25 +612,29 @@ text-align : center;
 
 </style>
 </head>
-<body>
-<a id="top" name="top"></a>
-<h1>Crossfeed Flights</h1>
-<p class="top"><a href="#bot">bot</a></p>
-
 EOF
+    $txt .= get_body_html();
     return $txt;
 }
 
 sub get_html_tail() {
-    my $tm = "<!-- Generated ".lu_get_YYYYMMDD_hhmmss_UTC(time())." by $pgmname -->";
+    my $utc = lu_get_YYYYMMDD_hhmmss_UTC(time());
+    my $tm = "<!-- Generated $utc, by $pgmname -->";
+    my $rc = get_nn($g_tot_records);
+    my $end_app = [ gettimeofday ];
+    my $elap = tv_interval( $begin_app, $end_app );
+    my $pt = get_time_stg($elap);
+
     my $txt = <<EOF;
 
-<p>Information extracted from a crossfeed, sampled every 5 seconds, over the perod of time
-shown at the top, collected into to a CSV file.</p>
+<p><b>$utc UTC</b>: Information extracted from <b>crossfeed</b> json, connected to <b>mpserver14</b>, sampled every 5 seconds, over the perod of time
+$g_log_period, collected into to a CSV file, by this <a target="_blank" href="https://github.com/geoffmcl/scripts/blob/master/cfjsonlog.pl">cfjsonlog.pl</a> script,
+then analysed by the <a target="_blank" href="https://github.com/geoffmcl/scripts/blob/master/cfcsvlogs.pl">cfcsvlogs.pl</a> script.
+This was from $g_tot_files file(s), $rc records, processed in $pt. json groups $g_min_flts to $g_max_flts.</p>
 
 <p class="top"><a href="#top">top</a></p>
 
-<a name="bot" id="bot"></a>
+<a name="end" id="end"></a>
 <p align="right">eof <a href="#top">top</a></p>
     $tm
 </body>
@@ -623,7 +649,9 @@ sub prth($$) {
     prt($txt);
     #$txt =~ s/\n$//;
     $txt = trim_all($txt);
-    if ($flag & 1) {
+    if ($flag & 8) {
+        $htm .= "<h3>$txt</h3>\n";
+    } elsif ($flag & 1) {
         if ($flag & 2) {
             $htm .= "<tr><td>$txt</td></tr>\n";
         } else {
@@ -744,7 +772,7 @@ sub show_flt_fids() {
     prt("Have $max flight to analyse...\n");
     my ($fid,$ra,$rma);
     my ($callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm,$tsecs,$upd,$upd2,$be,$ee,$elap,$tm,$cnt,$rcsa);
-    my ($i,$stt,$end,$msg);
+    my ($i,$stt,$end,$msg,$lncnt);
     my $skipped = 0;
     my %models = ();
     my %callsigns = ();
@@ -755,8 +783,9 @@ sub show_flt_fids() {
     my $last_upd = '';
     my $tot_secs = 0;
     my $tot_dist = 0;
-    my ($nmph,$wrap);
+    my ($nmph,$wrap,$tcols);
     my $cols = 3;
+    my $tab_cnt = 0;    # start TABLE counter
 
     $stt = [ gettimeofday ];
     # collection of information, by FID (unique)
@@ -845,13 +874,16 @@ sub show_flt_fids() {
     }
 
     $tm = get_time_stg($last_ep - $first_ep);
-    prth("From: $first_upd, To: $last_upd - $tm\n",0);
+    $g_log_period = "From: $first_upd, To: $last_upd - $tm";
+    prt("$g_log_period\n");
+
     @arr = sort keys %models;
     my $modcnt = scalar @arr;
     @arr = sort keys %callsigns;
     my $cscnt = scalar @arr;
     my $tm_ts = get_time_stg($tot_secs);
-    prth("Flown ".get_nn($tot_dist)." nm., using $modcnt models, by $cscnt callsigns, est. tot.time $tm_ts...\n",0);
+    prth("Sampled ".get_nn($flt_cnt)." flights, ".get_nn($tot_dist)." nm., ".
+        get_nn($modcnt)." models, ".get_nn($cscnt)." callsigns, est.time $tm_ts...\n",8);
 
     ########################################################
     # Show extracted MODEL usage information
@@ -861,11 +893,17 @@ sub show_flt_fids() {
     # ok, go through the list, 1 by 1
     my %cs = ();
     my %mods = ();
-    my ($rcsh2,$ra3);
+    my ($rcsh2,$ra3,$tlines,$dnlines);
     $cnt = scalar @arr;
-    prth("\nDisplay of $cnt MODELS, alpha sorted...\n",0);
-
+    # set, and add a JUMP
+    $htm .= "<a id=\"models\" id=\"models\"></a>\n";
+    $htm .= "<a id=\"mod.alpha\" id=\"mod.alpha\"></a>\n";
+    $href_txt .= " <a href=\"#models\">models</a>";
+    prth("\nDisplay of $cnt MODELS, sorted alpha, <a href=\"#mod.dist\">dist</a>, <a href=\"#mod.time\">time</a>\n",0);
+    $tab_cnt++; # table 1
+    $htm .= "<a name=\"tab$tab_cnt.top\" id=\"tab$tab_cnt.top\"></a>\n";
     $htm .= "<table>\n";
+    $lncnt = scalar @arr;
     foreach $model (@arr) {
         $ra = $models{$model};
         $cnt = scalar @{$ra};
@@ -919,6 +957,9 @@ sub show_flt_fids() {
 
     if (!$show_each_flt) {
         @arr = sort mycmp_nc_sort keys(%cs);
+        $cnt = scalar @arr;
+        $tlines = 0;
+        $dnlines = 0;
         foreach $model (@arr) {
             $rcsh2 = $cs{$model};
             my @a3 = sort keys %{$rcsh2};
@@ -960,11 +1001,20 @@ sub show_flt_fids() {
             #$htm .= "</table></td></tr>\n";
             #$htm .= "<tr><td>$msg</tr></td>\n";
             $htm .= "</td></tr>\n";
+            $tlines++;
+            $dnlines++;
+            if ($max_table_lines && ($tlines >= $max_table_lines) && (($lncnt - $dnlines) > $min_table_lines )) {
+                $tlines = 0;
+                $htm .= "<tr><td align=\"center\" colspan=\"3\">\n";
+                $htm .= "Table $tab_cnt: <a href=\"#tab$tab_cnt.top\">top</a> <a href=\"#tab$tab_cnt.end\">end</a>\n";
+                $htm .= "File: <a href=\"#top\">top</a> <a href=\"#end\">end</a>\n";
+                $htm .= "</td></tr>\n"; 
+            }
         }
     }   # for each MODEL
     $htm .= "</table>\n";
-
-    $htm .= "<p class=\"top\"><a href=\"#top\">top</a> <a href=\"#bot\">bot</a></p>\n";
+    $htm .= "<a name=\"tab$tab_cnt.end\" id=\"tab$tab_cnt.end\"></a>\n";
+    $htm .= "<p class=\"top\"><a href=\"#top\">top</a> <a href=\"#end\">end</a></p>\n";
 
     @arr = sort keys(%mods);
     $cnt = scalar @arr;
@@ -975,21 +1025,35 @@ sub show_flt_fids() {
         $tsecs = ${$ra}[1];
         push(@modarr,[$dist_nm,$model,$tsecs]);
     }
-    prth("\nDisplay of $cnt MODEL, sorted by distancce flown...\n",0);
+    $htm .= "<a name=\"mod.dist\" id=\"mod.dist\"></a>\n";
+    prth("\nDisplay of $cnt MODEL, sorted by distance flown... <a href=\"#mod.alpha\">alpha</a>, <a href=\"#mod.time\">time</a>\n",0);
     @arr = sort mycmp_decend_n0 @modarr;
+    $lncnt = scalar @arr;
+    $lncnt = int($lncnt / $cols);
+    $lncnt++ if ($lncnt % $cols);
+    $tab_cnt++; # table 2
+    $htm .= "<a name=\"tab$tab_cnt.top\" id=\"tab$tab_cnt.top\"></a>\n";
     $htm .= "<table width=\"100%\">\n";
     $wrap = 0;
     $cnt = 0;
     $htm .= "<tr>\n";
+    $tcols = 0;
     for ($i = 0; $i < $cols; $i++) {
         $htm .= "<th>#</th>\n";
         $htm .= "<th>model</th>\n";
         $htm .= "<th>dist.nm</th>\n";
         $htm .= "<th>time</th>\n";
-        $htm .= "<th>|</th>\n" if (($i + 1) < $cols);
+        if (($i + 1) < $cols) {
+            $htm .= "<th>|</th>\n";
+            $tcols += 5;
+        } else {
+            $tcols += 4;
+        }
     }
     $htm .= "</tr>\n";
     $wrap = 0;
+    $tlines = 0;
+    $dnlines = 0;
     foreach $ra (@arr) {
         $dist_nm = ${$ra}[0];
         $model = ${$ra}[1];
@@ -1006,6 +1070,15 @@ sub show_flt_fids() {
         if ($wrap == $cols) {
             $wrap = 0;
             $htm .= "</tr>\n";
+            $dnlines++;
+            $tlines++;
+            if ($max_table_lines && ($tlines >= $max_table_lines) && (($lncnt - $dnlines) > $min_table_lines )) {
+                $tlines = 0;
+                $htm .= "<tr><td align=\"center\" colspan=\"$tcols\">\n";
+                $htm .= "Table $tab_cnt: <a href=\"#tab$tab_cnt.top\">top</a> <a href=\"#tab$tab_cnt.end\">end</a>\n";
+                $htm .= "File: <a href=\"#top\">top</a> <a href=\"#end\">end</a>\n";
+                $htm .= "</td></tr>\n"; 
+            }
         } else {
             $htm .= "<td>|</td>\n";
         }
@@ -1024,22 +1097,37 @@ sub show_flt_fids() {
         $htm .= "</tr>\n";
     }
     $htm .= "</table>\n";
+    $htm .= "<a name=\"tab$tab_cnt.end\" id=\"tab$tab_cnt.end\"></a>\n";
 
-    prth("\nDisplay of $cnt MODEL, sorted est. time flown...\n",0);
+    $htm .= "<a name=\"mod.time\" id=\"mod.time\"></a>\n";
+    prth("\nDisplay of $cnt MODEL, sorted est. time flown... <a href=\"#mod.alpha\">alpha</a>, <a href=\"#mod.dist\">dist</a>\n",0);
     @arr = sort mycmp_decend_n2 @modarr;
+    $lncnt = scalar @arr;
+    $lncnt = int($lncnt / $cols);
+    $lncnt++ if ($lncnt % $cols);
+    $tab_cnt++; # table 3
+    $htm .= "<a name=\"tab$tab_cnt.top\" id=\"tab$tab_cnt.top\"></a>\n";
     $htm .= "<table width=\"100%\">\n";
     $wrap = 0;
     $cnt = 0;
     $htm .= "<tr>\n";
+    $tcols = 0;
     for ($i = 0; $i < $cols; $i++) {
         $htm .= "<th>#</th>\n";
         $htm .= "<th>model</th>\n";
         $htm .= "<th>time</th>\n";
         $htm .= "<th>dist.nm</th>\n";
-        $htm .= "<th>|</th>\n" if (($i + 1) < $cols);
+        if (($i + 1) < $cols) {
+            $htm .= "<th>|</th>\n";
+            $tcols += 5;
+        } else {
+            $tcols += 4;
+        }
     }
     $htm .= "</tr>\n";
     $wrap = 0;
+    $tlines = 0;
+    $dnlines = 0;
     foreach $ra (@arr) {
         $dist_nm = ${$ra}[0];
         $model = ${$ra}[1];
@@ -1056,6 +1144,15 @@ sub show_flt_fids() {
         if ($wrap == $cols) {
             $wrap = 0;
             $htm .= "</tr>\n";
+            $dnlines++;
+            $tlines++;
+            if ($max_table_lines && ($tlines >= $max_table_lines) && (($lncnt - $dnlines) > $min_table_lines )) {
+                $tlines = 0;
+                $htm .= "<tr><td align=\"center\" colspan=\"$tcols\">\n";
+                $htm .= "Table $tab_cnt: <a href=\"#tab$tab_cnt.top\">top</a> <a href=\"#tab$tab_cnt.end\">end</a>\n";
+                $htm .= "File: <a href=\"#top\">top</a> <a href=\"#end\">end</a>\n";
+                $htm .= "</td></tr>\n"; 
+            }
         } else {
             $htm .= "<td>|</td>\n";
         }
@@ -1074,19 +1171,24 @@ sub show_flt_fids() {
         $htm .= "</tr>\n";
     }
     $htm .= "</table>\n";
-
-
+    $htm .= "<a name=\"tab$tab_cnt.end\" id=\"tab$tab_cnt.end\"></a>\n";
 
     ## $load_log = 1;
     #pgm_exit(1,"TEMPEXIT\n");
-    $htm .= "<p class=\"top\"><a href=\"#top\">top</a> <a href=\"#bot\">bot</a></p>\n";
+    $htm .= "<p class=\"top\">File: <a href=\"#top\">top</a> <a href=\"#end\">end</a> \n";
+    $htm .= "Models by: <a href=\"#mod.alpha\">alpha</a>, <a href=\"#mod.dist\">dist</a>, <a href=\"#mod.time\">time</a>\n";
+    $htm .= "</p>\n";
 
 
     ########################################################
     #Show extracted CALLSIGN usage information
     @arr = sort mycmp_nc_sort keys(%callsigns);
     $cnt = scalar @arr;
+    # set, and add a JUMP
+    $htm .= "<a id=\"callsign\" id=\"callsign\"></a>\n";
+    $href_txt .= " <a href=\"#callsign\">callsigns</a>";
     prth("\nDisplay of $cnt CALLSIGNS, alpha sorted...\n",0);
+
     my $max_mod_cnt = 0;
     my $cs_most_mods = '';
     my $max_sec_cnt = 0;
@@ -1096,7 +1198,12 @@ sub show_flt_fids() {
     my %disth = ();
     my %modsh = ();
     my %timeh = ();
+    $tab_cnt++; # table 4
+    $htm .= "<a name=\"tab$tab_cnt.top\" id=\"tab$tab_cnt.top\"></a>\n";
     $htm .= "<table>\n";
+    $lncnt = scalar @arr;
+    $tlines = 0;
+    $dnlines = 0;
     foreach $callsign (@arr) {
         $ra = $callsigns{$callsign};
         $cnt = scalar @{$ra};
@@ -1210,35 +1317,59 @@ sub show_flt_fids() {
             }
             #$htm .= "</table></tr></td>\n";
             $htm .= "</td></tr>\n";
-
+            $tlines++;
+            $dnlines++;
+            if ($max_table_lines && ($tlines >= $max_table_lines) && (($lncnt - $dnlines) > $min_table_lines )) {
+                $tlines = 0;
+                $htm .= "<tr><td align=\"center\" colspan=\"3\">\n";
+                $htm .= "Table $tab_cnt: <a href=\"#tab$tab_cnt.top\">top</a> <a href=\"#tab$tab_cnt.end\">end</a>\n";
+                $htm .= "File: <a href=\"#top\">top</a> <a href=\"#end\">end</a>\n";
+                $htm .= "</td></tr>\n"; 
+            }
         }   # display 1-by-1, or GROUPED per model
     }   # for each CALLSIGN
 
     $htm .= "</table>\n";
+    $htm .= "<a name=\"tab$tab_cnt.end\" id=\"tab$tab_cnt.end\"></a>\n";
 
-    $htm .= "<p class=\"top\"><a href=\"#top\">top</a> <a href=\"#bot\">bot</a></p>\n";
+    $htm .= "<p class=\"top\"><a href=\"#top\">top</a> <a href=\"#end\">end</a></p>\n";
 
     ####################################################################
     ### SUMMARY OUTPUT...
     if (length($cs_most_secs)) {
         #prth("\nSome 'stats' gathered...\n",0);
         prt("\nSome 'stats' gathered...\n");
+        $htm .= "<a id=\"stats\" id=\"stats\"></a>\n";
+        $href_txt .= " <a href=\"#stats\">stats</a>";
         $htm .= "<h2>Some 'stats' gathered...</h2>\n";
+
+        $htm .= "<p>CALLSIGN by <a href=\"#stat.time\">time</a> <a href=\"#stat.dist\">dist</a></p>\n";
+
         # models used... is this useful?
         prth("CS: $cs_most_mods flew the most models - $max_mod_cnt\n",0);
 
+        ######################################################################
         # Arranged by TIME
         $tm = get_time_stg($max_sec_cnt);
         @arr = sort mycmp_ascend keys(%timeh);
         $max = scalar @arr;
         $i = $max;
-        if ($max_show_cs > 0) {
+        if ($max_show_cs > 0) { # note 0=all
             $max = $max_show_cs if ($max > $max_show_cs);
         }
-        prth("CS: $cs_most_secs flew the most time - $tm - list of top $max of $i\n",0);
+        $htm .= "<a id=\"stat.time\" id=\"stat.time\"></a>\n";
+        prt("CS: $cs_most_secs flew the most time - $tm - list of top $max of $i\n");
+        $htm .= "<p>CS: <b>$cs_most_secs</b> flew the most time - $tm - list of top $max of $i</p>\n";
+        $tab_cnt++; # table 5
+        $htm .= "<a name=\"tab$tab_cnt.top\" id=\"tab$tab_cnt.top\"></a>\n";
+        $lncnt = int($max / $cols);
+        $lncnt++ if ($max % $cols);
+        $tlines = 0;
+        $dnlines = 0;
         $htm .= "<table width=\"100%\">\n";
         # header line
         $htm .= "<tr>\n";
+        $tcols = 0;
         for ($i = 0; $i < $cols; $i++) {
             $htm .= "<th>#</th>\n";
             $htm .= "<th>callsign</th>\n";
@@ -1247,7 +1378,10 @@ sub show_flt_fids() {
             $htm .= "<th>av.kt.</th>\n";
             $htm .= "<th>flts</th>\n";
             if (($i + 1) < $cols) {
-                $htm .= "<th>|</th>\n"
+                $htm .= "<th>|</th>\n";
+                $tcols += 5;
+            } else {
+                $tcols += 4;
             }
         }
         $htm .= "</tr>\n";
@@ -1277,6 +1411,15 @@ sub show_flt_fids() {
             if ($wrap == $cols) {
                 $htm .= "</tr>\n";
                 $wrap = 0;
+                $dnlines++;
+                $tlines++;
+                if ($max_table_lines && ($tlines >= $max_table_lines) && (($lncnt - $dnlines) > $min_table_lines )) {
+                    $tlines = 0;
+                    $htm .= "<tr><td align=\"center\" colspan=\"$tcols\">\n";
+                    $htm .= "Table $tab_cnt: <a href=\"#tab$tab_cnt.top\">top</a> <a href=\"#tab$tab_cnt.end\">end</a>\n";
+                    $htm .= "File: <a href=\"#top\">top</a> <a href=\"#end\">end</a>\n";
+                    $htm .= "</td></tr>\n"; 
+                }
             } else {
                 $htm .= "<td>|</td>\n";
             }
@@ -1301,9 +1444,11 @@ sub show_flt_fids() {
         }
 
         $htm .= "</table>\n";
+        $htm .= "<a name=\"tab$tab_cnt.end\" id=\"tab$tab_cnt.end\"></a>\n";
 
-        $htm .= "<p class=\"top\"><a href=\"#top\">top</a> <a href=\"#bot\">bot</a></p>\n";
+        $htm .= "<p class=\"top\"><a href=\"#top\">top</a> <a href=\"#end\">end</a></p>\n";
 
+        ######################################################################
         # Arrange by DISTANCE flown
         @arr = sort mycmp_ascend keys(%disth);
         $max = scalar @arr;
@@ -1311,10 +1456,15 @@ sub show_flt_fids() {
         if ($max_show_cs > 0) {
             $max = $max_show_cs if ($max > $max_show_cs);
         }
-        prth("CS: $cs_most_dist flew the most dist - $max_dist_nm nm. - list of top $max on $i\n",0);
+        $htm .= "<a id=\"stat.dist\" id=\"stat.dist\"></a>\n";
+        prt("CS: $cs_most_dist flew the most dist - $max_dist_nm nm. - list of top $max on $i\n");
+        $htm .= "CS: <b>$cs_most_dist</b> flew the most dist - $max_dist_nm nm. - list of top $max on $i</p>\n";
+        $tab_cnt++;
+        $htm .= "<a name=\"tab$tab_cnt.top\" id=\"tab$tab_cnt.top\"></a>\n";
         $htm .= "<table width=\"100%\">\n";
         # header line
         $htm .= "<tr>\n";
+        $tcols = 0;
         for ($i = 0; $i < $cols; $i++) {
             $htm .= "<th>#</th>\n";
             $htm .= "<th>callsign</th>\n";
@@ -1323,11 +1473,18 @@ sub show_flt_fids() {
             $htm .= "<th>av.kt.</th>\n";
             $htm .= "<th>flts</th>\n";
             if (($i + 1) < $cols) {
-                $htm .= "<th>|</th>\n"
+                $htm .= "<th>|</th>\n";
+                $tcols += 5;
+            } else {
+                $tcols += 4;
             }
         }
         $htm .= "</tr>\n";
         $wrap = 0;
+        $dnlines = 0;
+        $tlines = 0;
+        $lncnt = int($max / $cols);
+        $lncnt++ if ($max % $cols);
         for ($i = 0; $i < $max; $i++) {
             $dist_nm = $arr[$i];
             $ra = $disth{$dist_nm};
@@ -1353,6 +1510,15 @@ sub show_flt_fids() {
             if ($wrap == $cols) {
                 $htm .= "</tr>\n";
                 $wrap = 0;
+                $dnlines++;
+                $tlines++;
+                if ($max_table_lines && ($tlines >= $max_table_lines) && (($lncnt - $dnlines) > $min_table_lines )) {
+                    $tlines = 0;
+                    $htm .= "<tr><td align=\"center\" colspan=\"$tcols\">\n";
+                    $htm .= "Table $tab_cnt: <a href=\"#tab$tab_cnt.top\">top</a> <a href=\"#tab$tab_cnt.end\">end</a>\n";
+                    $htm .= "File: <a href=\"#top\">top</a> <a href=\"#end\">end</a>\n";
+                    $htm .= "</td></tr>\n"; 
+                }
             } else {
                 $htm .= "<td>|</td>\n";
             }
@@ -1377,13 +1543,23 @@ sub show_flt_fids() {
             $htm .= "</tr>\n";
         }
         $htm .= "</table>\n";
+        $htm .= "<a name=\"tab$tab_cnt.end\" id=\"tab$tab_cnt.end\"></a>\n";
 
-        $htm .= "<p class=\"top\"><a href=\"#top\">top</a> <a href=\"#bot\">bot</a></p>\n";
+        $htm .= "<p class=\"top\"><a href=\"#top\">top</a> <a href=\"#end\">end</a></p>\n";
     }
     if (length($out_html) && length($htm)) {
+        if ($os =~ /win/i) {
+            $out_html = path_u2d($out_html);
+        } else {
+            $out_html = path_d2u($out_html);
+        }
         $htm = get_html_head().$htm.get_html_tail();
+        rename_2_old_bak($out_html);
         write2file($htm,$out_html);
         prt("Written HTML to '$out_html'\n");
+        if ($only_one_feed) {
+            system("$out_html\n");
+        }
     }
 }
 
@@ -1562,6 +1738,11 @@ sub process_in_file($) {
         }
         #last;
     }
+
+    # update totals
+    $g_tot_files++;
+    $g_tot_records += $lncnt;
+
     $end = [ gettimeofday ];
     $elap = tv_interval( $stt, $end );
     $tm = get_time_stg($elap);
@@ -1573,6 +1754,8 @@ sub process_in_file($) {
     # prt("Process $cnt2 flights...\n");
     $min_flts = $cnt2 if ($cnt2 && ($cnt2 < $min_flts));
     $max_flts = $cnt2 if ($cnt2 > $max_flts);
+    $g_min_flts = $min_flts if ($min_flts && ($min_flts < $g_min_flts));
+    $g_max_flts = $max_flts if ($max_flts > $g_max_flts);
     foreach $fid2 (@fids) {
         $ra = $hash{$fid2};
         add_csv_flight($fid2,$ra);
@@ -1664,14 +1847,24 @@ sub parse_args {
                 need_arg(@av);
                 shift @av;
                 $sarg = $av[0];
-                $out_file = $sarg;
-                prt("Set out file to [$out_file].\n") if ($verb);
-            } elsif ($sarg =~ /^1/) {
+                $out_html = $sarg;
+                prt("Set out html file to [$out_html].\n") if ($verb);
+            } elsif ($sarg =~ /^L/) {
                 $only_one_feed = 1;
-                prt("Only show one feed and exit\n") if ($verb);
+                prt("Pass html to system at end.\n") if ($verb);
             } elsif ($sarg =~ /^a/) {
                 $add_csv_header = 1;
                 prt("Add CSV header to 'new' files.t\n") if ($verb);
+            } elsif ($sarg =~ /^m/) {
+                need_arg(@av);
+                shift @av;
+                $sarg = $av[0];
+                if ($sarg =~ /^\d+$/) {
+                    $max_show_cs = $sarg;
+                    prt("Set max. callsign stats to show [$sarg]. 0=all\n") if ($verb);
+                } else {
+                    pgm_exit(1,"ERROR: Argument [$arg] must be followed by an integer 0-999999...! But $sarg?\n");
+                }
             } else {
                 pgm_exit(1,"ERROR: Invalid argument [$arg]! Try -?\n");
             }
@@ -1703,16 +1896,18 @@ sub parse_args {
 sub give_help {
     prt("\n");
     prt("$pgmname: version $VERS\n");
-    prt("Usage: $pgmname [options] in-file\n");
+    prt("Usage: $pgmname [options] in-file/in_dir\n");
     prt("Options:\n");
     prt(" --help  (-h or -?) = This help, and exit 0.\n");
     prt(" --verb[n]     (-v) = Bump [or set] verbosity. def=$verbosity\n");
-    prt(" --dir <dir>   (-d) = Set output DIR. (def=$out_dir)\n");
-    prt("Single shot mode\n");
-    prt(" --1           (-1) = Only fetch one feed, and exit. (def=$only_one_feed)\n");
-    prt(" --out <file>  (-o) = Write output to this file. (def=$out_file)\n");
+    prt(" --out <file>  (-o) = Write html output to this file. (def=$out_html)\n");
+    prt(" --LOADHTML    (-L) = Pass html to system at end.\n");
     prt(" --load        (-l) = Load LOG at end. ($outfile)\n");
-    prt(" --add-header  (-a) = Add CSV header, to new files. (def=$add_csv_header)\n");
+    prt(" --max <num>   (-m) = Set maximum callsigns to output in stats. 0=all. (def=$max_show_cs)\n");
+
+    prt("\n");
+    prt(" Read json csv logs, created by cfjsonlog.pl, and generate some html\n");
+    prt(" table information of models and callsigns used.\n");
     prt("\n");
 }
 
