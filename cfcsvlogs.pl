@@ -646,6 +646,11 @@ $g_log_period, collected into to a CSV file, by this <a target="_blank" href="ht
 then analysed by the <a target="_blank" href="https://github.com/geoffmcl/scripts/blob/master/cfcsvlogs.pl">cfcsvlogs.pl</a> script.
 This was from $g_tot_files file(s), $rc records, processed in $pt. json groups $g_min_flts to $g_max_flts.</p>
 
+<p><b>WARNING</b>: The times and distance flown can be greatly influenced by sim time warping, 
+and sim time speed up and slow down, so are always <b>only estimates</b>! And this is only the 
+results of one particular, specific crossfeed. That is, no prizes will be awarded on
+these results. ;=))</p>
+
 <p class="top">$href_txt</p>
 
 <a name="end" id="end"></a>
