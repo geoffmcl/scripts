@@ -60,7 +60,7 @@ my $feed1 = "http://crossfeed.freeflightsim.org/flights.json";
 #############################################################
 
 # ### DEBUG ###
-my $debug_on = 1;
+my $debug_on = 0;
 ##my $def_file = 'C:\GTools\perl\scripts\temp\temp-flights\cflogs';
 ##my $def_file = 'C:\GTools\perl\scripts\temp\temp-flights\flights-2016-07-10.csv';
 ##my $def_file = 'C:\GTools\perl\scripts\temp\temp-flights\flights-2016-07-09.csv';
