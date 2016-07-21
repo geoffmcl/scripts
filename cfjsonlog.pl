@@ -6,6 +6,7 @@
 # The default is to fetch and write a flight record each 5 seconds *** FOREVER *** Ctrl+c to abort...
 # Add option -1, to just get one, and write a compact CSV to an -o out-file
 # All fetches are from a single server "http://crossfeed.freeflightsim.org/flights.json" = Thanks Pete
+# 22/07/2016 - Merge one feed, -1, with repeated feeds...
 # 06/07/2016 - Review
 # 2015-01-09 - Initial cut
 ######################################
@@ -34,7 +35,8 @@ $outfile = path_u2d($outfile) if ($os =~ /win/i);
 open_log($outfile);
 
 # user variables
-my $VERS = "0.0.7 2016-07-07";
+my $VERS = "0.0.8 2016-07-22";
+##my $VERS = "0.0.7 2016-07-07";
 ##my $VERS = "0.0.6 2016-07-06";
 ##my $VERS = "0.0.5 2015-01-09";
 my $load_log = 0;
@@ -429,105 +431,14 @@ sub repeat_feeds() {
         prt("Sleep for $secs second...\n");
         sleep $secs;
         $tot_secs += $secs;
-    }
-}
-
-sub get_one_feed() {
-    my $txt1 = fetch_url($feed1); # "http://crossfeed.freeflightsim.org/flights.json";
-    my $json = JSON->new->allow_nonref;
-    my $rh1 = $json->decode( $txt1 );
-    ###prt(Dumper($rh1));
-    my $csv = '';
-
-    my $upd1 = "Unknown";
-    my ($fid,$callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm);
-    my ($ra1,$cnt1,$i,$rh2,$line,$msg);
-    if (defined ${$rh1}{last_updated}) {
-        $upd1 = ${$rh1}{last_updated};
-    }
-    if (defined ${$rh1}{flights}) {
-        $ra1 = ${$rh1}{flights};
-        $cnt1 = scalar @{$ra1};
-        prt("Updated: $upd1, flights $cnt1...\n");
-        $callsign = 'callsign';
-        $lat = 'latitude';
-        $lon = 'longitude';
-        $alt_ft = 'altitude';
-        $model = 'model';
-        $spd_kts = 'spd kts';
-        $hdg = 'hdg';
-        $dist_nm = 'dist nm';
-        $csv .= "$callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm,update\n";
-
-        # display header
-        $callsign .= ' ' while (length($callsign) < 8);
-        $lat = ' '.$lat while (length($lat) < 12);
-        $lon = ' '.$lon while (length($lon) < 12);
-        $alt_ft = ' '.$alt_ft while (length($alt_ft) < 8);
-        $model = ' '.$model while (length($model) < $max_model);
-        $spd_kts = ' '.$spd_kts while (length($spd_kts) < 7);
-        $hdg = ' '.$hdg while (length($hdg) < 4);
-        $dist_nm = ' '.$dist_nm while (length($dist_nm) < 7);
-        $msg = "$callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm\n";
-        prt($msg);
-
-        for ($i = 0; $i < $cnt1; $i++) {
-            $rh2 = ${$ra1}[$i]; # extract the hash
-            $fid = ${$rh2}{fid};
-            $callsign = ${$rh2}{callsign};
-            $lat = ${$rh2}{lat};
-            $lon = ${$rh2}{lon};
-            $alt_ft = ${$rh2}{alt_ft};
-            $model = get_model(${$rh2}{model});
-            $spd_kts = ${$rh2}{spd_kts};
-            $hdg = ${$rh2}{hdg};
-            $dist_nm = ${$rh2}{dist_nm};
-            ###prt("$fid,$callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm\n");
-            $csv .= "$callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm,$upd1\n";
-
-            ###################################
-            # display - for spaced display only
-            $callsign .= ' ' while (length($callsign) < 8);
-            $lat = get_ll_double($lat);
-            $lon = get_ll_double($lon);
-            $alt_ft = get_alt_stg($alt_ft);
-            $alt_ft = ' '.$alt_ft while (length($alt_ft) < 8);
-            $model = ' '.$model while (length($model) < $max_model);
-            $spd_kts = ' '.$spd_kts while (length($spd_kts) < 7);
-            $hdg = ' '.$hdg while (length($hdg) < 4);
-            $dist_nm = ' '.$dist_nm while (length($dist_nm) < 7);
-            $line = "$callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm\n";
-            prt($line);
-            $msg .= $line;
-            ###################################
-        }
-        if (length($out_file)) {
-            ### No, do not output the spaced display lines
-            ### write2file($msg,$out_file);
-            ### Write instead the compact CSV collected as well
-            rename_2_old_bak($out_file);
-            write2file($csv,$out_file);
-            prt("JSON crossfeed CSV flight list written to $out_file\n");
-        } else {
-            prt("Compact CSV discarded. No -o out-file.csv given...\n");
-        }
-    } else {
-        prt("'flights' is NOT defined in hash 1!\n");
-    }
-
-    ## $load_log = 1;
-
+        $repeat = 0 if ($only_one_feed);
+    }   # while ($repeat)
 }
 
 #########################################
 ### MAIN ###
 parse_args(@ARGV);
-##process_in_file($in_file);
-if ($only_one_feed) {
-    get_one_feed();
-} else {
-    repeat_feeds();
-}
+repeat_feeds();
 pgm_exit(0,"");
 ########################################
 
