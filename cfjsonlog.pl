@@ -242,10 +242,26 @@ sub record_flight($$$$$$$$$$$) {
     my ($fid,$callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm,$tot_secs,$upd1) = @_;
     my $epoch = time();
     my $line = "$fid,$callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm,$upd1,$tot_secs\n";
-    if (length($out_dir) && (-d $out_dir)) {
-        my $ymd = get_YYYYMMDD($epoch);
-        $ymd =~ s/\//-/g;   # conver to a path compatible name
-        my $file = $out_dir.$PATH_SEP."flights-$ymd.csv";
+    my $ymd = get_YYYYMMDD($epoch);
+    $ymd =~ s/\//-/g;   # conver to a path compatible name
+    my $file = $out_dir.$PATH_SEP."flights-$ymd.csv";
+    if ($only_one_feed) {
+        if (length($out_file) == 0) {
+            pgm_exit(1,"Error: Requested one (-1), but no outfile given...\n");
+        }
+        $file = $out_file;
+        if (-f $file) {
+            prt("Appended to file $file...\n") if ($iocnt == 0);
+            append2file($line,$file);
+            $iocnt++;
+        } else {
+            $last_ymd = $ymd;
+            $line = $csv_headers.$line if ($add_csv_header);
+            write2file($line,$file);
+            prt("Created new file $file...\n");
+            $iocnt = 1;
+        }
+    } elsif (length($out_dir) && (-d $out_dir)) {
         if (-f $file) {
             $last_ymd = $ymd if (length($last_ymd) == 0);
             if ($ymd eq $last_ymd) {
@@ -390,6 +406,7 @@ sub repeat_feeds() {
                 $spd_kts = ${$rh2}{spd_kts};
                 $hdg = ${$rh2}{hdg};
                 $dist_nm = ${$rh2}{dist_nm};
+                # write record to file...
                 record_flight($fid,$callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm,$tot_secs,$upd1);
                 ###prt("$fid,$callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm\n");
                 if (defined $hash{$fid}) {
@@ -428,10 +445,14 @@ sub repeat_feeds() {
         } else {
             prt("'flights' is NOT defined in hash 1!\n");
         }
-        prt("Sleep for $secs second...\n");
-        sleep $secs;
-        $tot_secs += $secs;
-        $repeat = 0 if ($only_one_feed);
+        if ($only_one_feed) {
+            prt("Only one feed requested... exit...\n");
+            $repeat = 0;
+        } else {
+            prt("Sleep for $secs second...\n");
+            sleep $secs;
+            $tot_secs += $secs;
+        }
     }   # while ($repeat)
 }
 
