@@ -2,6 +2,7 @@
 # NAME: cfcsvlogs.pl, cfjsonlogs.pl (was: jsonfeeds.pl)
 # AIM: Annalyse logs written by cfjsonlog.pl, in a target directory.
 # Log file name will change each day, in the form - $out_dir/'flights-YYYY-MM-DD.csv'
+# 2016-07-27 - Add the tide of usage - times at min/max usage... ie fliers(cs) on line
 # 16/07/2016 - Beginning to mature the HTML output - more jumps...
 # 12/07/2016 - Begin to add HTML output
 # 2016-07-09 - Initial cut
@@ -35,7 +36,8 @@ $outfile = path_u2d($outfile) if ($os =~ /win/i);
 open_log($outfile);
 
 # user variables
-my $VERS = "0.0.8 2016-07-16";
+my $VERS = "0.0.9 2016-07-27";
+##my $VERS = "0.0.8 2016-07-16";
 ##my $VERS = "0.0.7 2016-07-07";
 ##my $VERS = "0.0.6 2016-07-06";
 ##my $VERS = "0.0.5 2015-01-09";
@@ -75,6 +77,8 @@ my $last_ymd = '';
 my $g_log_period = "N/A";
 my $g_min_flts = 999999;
 my $g_max_flts = 0;
+my $g_min_upd = 'N/A';
+my $g_max_upd = 'N/A';
 my $g_tot_files = 0;
 my $g_tot_records = 0;
 
@@ -646,6 +650,12 @@ $g_log_period, collected into to a CSV file, by this <a target="_blank" href="ht
 then analysed by the <a target="_blank" href="https://github.com/geoffmcl/scripts/blob/master/cfcsvlogs.pl">cfcsvlogs.pl</a> script.
 This was from $g_tot_files file(s), $rc records, processed in $pt. json groups $g_min_flts to $g_max_flts.</p>
 
+<p>The min <b>multiplayer/crossfeed</b> count $g_min_flts, first encountered on $g_min_upd, 
+and max $g_max_flts on $g_max_upd, <b>BUT</b> this is only one crossfeed sample... be assured, 
+the FGFS free sim has been flown <b>many</b> more times than shown here, without an mp connection... 
+rendering these stats totally invalid as <b>any</b> indication of true FGFS usage...
+</p>
+
 <p><b>WARNING</b>: The times and distance flown can be greatly influenced by sim time warping, 
 and sim time speed up and slow down, so are always <b>only estimates</b>! And this is only the 
 results of one particular, specific crossfeed. That is, no prizes will be awarded on
@@ -917,7 +927,8 @@ sub show_flt_fids() {
     # set, and add a JUMP
     $htm .= "<a id=\"models\" id=\"models\"></a>\n";
     $htm .= "<a id=\"mod.alpha\" id=\"mod.alpha\"></a>\n";
-    prt("\nDisplay of $cnt MODELS, sorted alpha, with CALLSIGNS\n");
+    prt("\n") if (VERB1());
+    prt("Display of $cnt MODELS, sorted alpha, with CALLSIGNS\n");
     $htm .= "<p>Display of $cnt MODELS, sorted alpha, <a href=\"#mod.dist\">dist</a>, <a href=\"#mod.time\">time</a></p>\n";
     ########################################################################################
     $tab_cnt++; # table 1
@@ -984,14 +995,14 @@ sub show_flt_fids() {
         $htm .= "<tr>\n";
         $htm .= "<th>model</th>\n";
         $htm .= "<th>#</th>\n";
-        $htm .= "<th>callsign dist time list</th>\n";
+        $htm .= "<th>'callsign dist time (flts)' list...</th>\n";
         $htm .= "</tr>\n";
         $tcols = 3;
         foreach $model (@arr) {
             $rcsh2 = $cs{$model};
             my @a3 = sort mycmp_nc_sort keys( %{$rcsh2} );
             $lon = scalar @a3;
-            prt("Model: $model, flown by $lon -\n");
+            prt("Model: $model, flown by $lon -\n") if (VERB1());
             $htm .= "<tr>\n";
             $htm .= "<td class=\"vat\"><b>$model</b></td>\n";
             $htm .= "<td class=\"ran\">$lon</td>\n";
@@ -1014,7 +1025,7 @@ sub show_flt_fids() {
                 $callsign .= ' ' while (length($callsign) < 8);
                 $dist_nm = ' '.$dist_nm while (length($dist_nm) < 7);
                 $tm = get_time_stg($elap);
-                prt("  $callsign $dist_nm $tm ($lat)\n");
+                prt("  $callsign $dist_nm $tm ($lat)\n") if (VERB2());
                 ##$htm .= "  $callsign $dist_nm $tm ($lat)\n";
                 $htm .= "<em>$callsign</em> $dist_nm $tm ($lat)\n";
             }
@@ -1022,7 +1033,7 @@ sub show_flt_fids() {
                 $tm = get_time_stg($tsecs);
                 $dist_nm = $spd_kts;
                 $dist_nm = ' '.$dist_nm while (length($dist_nm) < 7);
-                prt("     Total $dist_nm $tm\n");
+                prt("     Total $dist_nm $tm\n") if (VERB2());
                 $htm .= "<i>Total $dist_nm $tm ($alt_ft)</i>\n";
             }
             $htm .= "</td></tr>\n";
@@ -1052,8 +1063,9 @@ sub show_flt_fids() {
         push(@modarr,[$dist_nm,$model,$tsecs]);
     }
     $htm .= "<a name=\"mod.dist\" id=\"mod.dist\"></a>\n";
-    prt("\nDisplay of $cnt MODEL, sorted by distance flown...\n");
-    $htm .= "<p>Display of $cnt MODEL, sorted by distance flown... <a href=\"#mod.alpha\">alpha</a>, <a href=\"#mod.time\">time</a></p>\n";
+    prt("\n") if (VERB1());
+    prt("Display of $cnt MODELS, sorted by distance flown...\n");
+    $htm .= "<p>Display of $cnt MODELS, sorted by distance flown... <a href=\"#mod.alpha\">alpha</a>, <a href=\"#mod.time\">time</a></p>\n";
     @arr = sort mycmp_decend_n0 @modarr;
     $lncnt = scalar @arr;
     $lncnt = int($lncnt / $cols);
@@ -1130,8 +1142,9 @@ sub show_flt_fids() {
     $htm .= "<p class=\"top\">$href_txt</p>\n";
     ########################################################################################
     $htm .= "<a name=\"mod.time\" id=\"mod.time\"></a>\n";
-    prt("\nDisplay of $cnt MODEL, sorted est. time flown...\n");
-    $htm .= "<p>Display of $cnt MODEL, sorted est. time flown... <a href=\"#mod.alpha\">alpha</a>, <a href=\"#mod.dist\">dist</a></p>\n";
+    prt("\n") if (VERB1());
+    prt("Display of $cnt MODELS, sorted est. time flown...\n");
+    $htm .= "<p>Display of $cnt MODELS, sorted est. time flown... <a href=\"#mod.alpha\">alpha</a>, <a href=\"#mod.dist\">dist</a></p>\n";
     @arr = sort mycmp_decend_n2 @modarr;
     $lncnt = scalar @arr;
     $lncnt = int($lncnt / $cols);
@@ -1222,7 +1235,8 @@ sub show_flt_fids() {
     # set, and add a JUMP
     $htm .= "<a id=\"callsign\" id=\"callsign\"></a>\n";
     $htm .= "<a id=\"stat.alpha\" id=\"stat.alpha\"></a>\n";
-    prth("\nDisplay of $cnt CALLSIGNS, alpha sorted...\n",0);
+    prt("\n") if (VERB5());
+    prth("Display of $cnt CALLSIGNS, alpha sorted...\n",0);
 
     my $max_mod_cnt = 0;
     my $cs_most_mods = '';
@@ -1300,7 +1314,7 @@ sub show_flt_fids() {
             $cnt = scalar @rma2;
             $tm = get_time_stg($tsecs);
             $msg .= ", used $cnt models, flew $spd_kts nm., in $tm";
-            prt("$msg\n");
+            prt("$msg\n") if (VERB5());
             $htm .= "<tr><td class=\"vat\"><b>$callsign</b></td>\n";
             $htm .= "<td class=\"ran\">$cnt</td>\n";
             $htm .= "<td>";
@@ -1342,7 +1356,7 @@ sub show_flt_fids() {
                 $model = ' '.$model while (length($model) < $max_model);
                 $dist_nm = ' '.$dist_nm while (length($dist_nm) < 7);
                 $tm = get_time_stg($elap);
-                prt("  $model $dist_nm $tm ($lat)\n");
+                prt("  $model $dist_nm $tm ($lat)\n") if (VERB5());
                 $htm .= "<em>$model</em> $dist_nm $tm ($lat)\n";
             }
             if ($cnt > 1) {
@@ -1351,7 +1365,7 @@ sub show_flt_fids() {
                 $dist_nm = ' '.$dist_nm while (length($dist_nm) < 7);
                 $model = "Total";
                 $model = ' '.$model while (length($model) < $max_model);
-                prt("  $model $dist_nm $tm $fcnt\n");
+                prt("  $model $dist_nm $tm $fcnt\n") if (VERB5());
                 $htm .= "<i>Total $dist_nm $tm $fcnt</i>\n";
             }
             #$htm .= "</table></tr></td>\n";
@@ -1378,7 +1392,8 @@ sub show_flt_fids() {
     ####################################################################
     ### SUMMARY OUTPUT...
     ### if (length($cs_most_secs)) {
-        prt("\nSome 'stats' gathered...\n");
+        prt("\n") if (VERB1());
+        prt("Some 'stats' gathered...\n");
         $htm .= "<a id=\"stats\" id=\"stats\"></a>\n";
         # $href_txt .= " <a href=\"#stats\">stats</a>";
         $htm .= "<h2>Some 'stats' gathered...</h2>\n";
@@ -1468,7 +1483,7 @@ sub show_flt_fids() {
             # display
             $callsign .= ' ' while (length($callsign) < 8);
             my $clnn = sprintf("%3d",($i+1));
-            prt(" $clnn: $callsign flew for $tm, $dist_nm nm. av. $nmph kt. mods $cnt\n");
+            prt(" $clnn: $callsign flew for $tm, $dist_nm nm. av. $nmph kt. mods $cnt\n") if (VERB9());
         }
         if ($wrap) {
             while ($wrap < $cols) {
@@ -1570,7 +1585,7 @@ sub show_flt_fids() {
             # display
             $callsign .= ' ' while (length($callsign) < 8);
             my $clnn = sprintf("%3d",($i+1));
-            prt(" $clnn: $callsign flew for $dist_nm nm. in $tm. av. $nmph kt. mods $cnt\n");
+            prt(" $clnn: $callsign flew for $dist_nm nm. in $tm. av. $nmph kt. mods $cnt\n") if (VERB9());
         }
 
         if ($wrap) {
@@ -1664,6 +1679,8 @@ sub process_in_file($) {
     my ($ra,$fid2,$cnt2);
     my $min_flts = 999999;
     my $max_flts = 0;
+    my $max_upd = '';
+    my $min_upd = '';
     $stt = [ gettimeofday ];
     for ($i = 0; $i < $lncnt; $i++) {
         $line = $lines[$i];
@@ -1746,8 +1763,16 @@ sub process_in_file($) {
             @fids = keys %hash;
             $cnt2 = scalar @fids;
             # prt("Process $cnt2 flights...\n");
-            $min_flts = $cnt2 if ($cnt2 && ($cnt2 < $min_flts));
-            $max_flts = $cnt2 if ($cnt2 > $max_flts);
+            if ($cnt2) {
+                if ($cnt2 < $min_flts) {
+                    $min_flts = $cnt2;
+                    $min_upd  = $upd;
+                }
+                if ($cnt2 > $max_flts) {
+                    $max_flts = $cnt2;
+                    $max_upd = $upd;
+                }
+            }
             foreach $fid2 (@fids) {
                 $ra = $hash{$fid2};
                 add_csv_flight($fid2,$ra);
@@ -1798,16 +1823,24 @@ sub process_in_file($) {
     @fids = keys %hash;
     $cnt2 = scalar @fids;
     # prt("Process $cnt2 flights...\n");
-    $min_flts = $cnt2 if ($cnt2 && ($cnt2 < $min_flts));
-    $max_flts = $cnt2 if ($cnt2 > $max_flts);
-    $g_min_flts = $min_flts if ($min_flts && ($min_flts < $g_min_flts));
-    $g_max_flts = $max_flts if ($max_flts > $g_max_flts);
+    if ($cnt2) {
+        $min_flts = $cnt2 if ($cnt2 < $min_flts);
+        $max_flts = $cnt2 if ($cnt2 > $max_flts);
+        if ($min_flts && ($min_flts < $g_min_flts)) {
+            $g_min_flts = $min_flts;
+            $g_min_upd  = $min_upd;
+        }
+        if ($max_flts > $g_max_flts) {
+            $g_max_flts = $max_flts;
+            $g_max_upd  = $max_upd;
+        }
+    }
     foreach $fid2 (@fids) {
         $ra = $hash{$fid2};
         add_csv_flight($fid2,$ra);
     }
     ####################################################################
-    prt("Processed $tot_recs - json groups $min_flts to $max_flts\n");
+    prt("Processed $tot_recs - json groups $min_flts to $max_flts ($g_min_flts/$g_max_flts)\n");
 }
 
 sub process_in_dir($) {
