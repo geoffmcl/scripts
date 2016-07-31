@@ -12,6 +12,7 @@ use strict;
 use warnings;
 use File::Basename;  # split path ($name,$dir,$ext) = fileparse($file [, qr/\.[^.]*/] )
 use File::Spec; # File::Spec->rel2abs($rel); # get ABSOLUTE from REALTIVE get_full_path
+use File::stat;
 use Date::Parse;
 use LWP::Simple;
 use JSON;
@@ -48,7 +49,7 @@ my $out_file = '';
 my $out_dir = $temp_dir.$PATH_SEP."temp-flights";
 my $only_one_feed = 0;
 my $show_each_flt = 0;
-my $max_show_cs = 150;
+my $max_show_cs = 800;
 my $max_table_lines = 25;
 my $min_table_lines =  8;
 my $add_table_captions = 1;
@@ -1850,17 +1851,57 @@ sub process_in_dir($) {
     }
     my @files = readdir(DIR);
     closedir(DIR);
-    my ($file,$ff);
+    my ($file,$ff,$sb,$tm,$sz,$max,$i,$ra,$i2,$msg,$ci,$pct,$elap,$tend,$est);
     ut_fix_directory(\$dir);
+    my @csv = ();
+    my $tot_size = 0;
+    my $tot_done = 0;
+    my $tbgn = [ gettimeofday ];
     foreach $file (@files) {
         next if ($file eq '.');
         next if ($file eq '..');
         $ff = $dir.$file;
         my ($n,$d,$e) = fileparse($ff, qr/\.[^.]*/ );
         if ($e =~ /^\.csv$/i) {
-            process_in_file($ff);
+            if ($sb = stat($ff)) {
+                $tm = $sb->mtime;
+                $sz = $sb->size;
+                push(@csv,[$ff,$file,$tm,$sz]);
+                $tot_size += $sz;
+            }
+            #process_in_file($ff);
         }
     }
+    $max = scalar @csv;
+    prt("Found $max csv files to process... ".get_nn($tot_size)." bytes...\n");
+    for ($i = 0; $i < $max; $i++) {
+        $i2 = $i + 1;
+        $ra = $csv[$i];
+        $ff = ${$ra}[0];
+        $file = ${$ra}[1];
+        $tm = ${$ra}[2];
+        $sz = ${$ra}[3];
+        my @lt = localtime($tm);
+        $msg = sprintf( "%02d/%02d/%04d %02d:%02d %12s %s", $lt[3], $lt[4]+1, $lt[5]+1900,
+                $lt[2], $lt[1], get_nn($sz), $ff );
+        $ci = sprintf("%2d",$i2);
+        prt("$ci of $max: $msg\n");
+        process_in_file($ff);
+        $tot_done += $sz;
+        $pct = ($tot_done * 100) / $tot_size;
+        $tend = [ gettimeofday ];
+        $elap = tv_interval( $tbgn, $tend );
+        $msg = 'N/A';
+        if ($pct > 0) {
+            $est = (100 / $pct) * $elap;
+            $msg = "est.rem ".get_time_stg($est - $elap)." est.tot ".get_time_stg($est);
+        }
+        $pct = int($pct * 10) / 10;
+        $tm = get_time_stg($elap);
+        prt("Done $pct%... in $tm... $msg\n");
+
+    }
+    ### pgm_exit(1,"TEMP EXIT!\n");
 }
 
 #########################################
