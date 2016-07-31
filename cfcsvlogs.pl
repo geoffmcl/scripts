@@ -49,7 +49,7 @@ my $out_file = '';
 my $out_dir = $temp_dir.$PATH_SEP."temp-flights";
 my $only_one_feed = 0;
 my $show_each_flt = 0;
-my $max_show_cs = 800;
+my $max_show_cs = 1000;
 my $max_table_lines = 25;
 my $min_table_lines =  8;
 my $add_table_captions = 1;
@@ -82,6 +82,8 @@ my $g_min_upd = 'N/A';
 my $g_max_upd = 'N/A';
 my $g_tot_files = 0;
 my $g_tot_records = 0;
+
+my @g_files = ();
 
 sub VERB1() { return $verbosity >= 1; }
 sub VERB2() { return $verbosity >= 2; }
@@ -562,12 +564,28 @@ my $href_txt = "<a href=\"#models\"><b>models</b></a>:\n".
     "<a href=\"#stats\">stats</a>\n".
     "page: <a href=\"#top\">top</a> <a href=\"#end\">end</a>\n";
 
+sub get_warn_txt() {
+    my $txt = <<EOF;
+
+<p><b>WARNING</b>: The times and distance flown can be greatly influenced by sim time warping, 
+and sim time speed up and slow down, so are always <b>only estimates</b>! And this is only the 
+results of one particular, specific crossfeed. That is, no prizes will be awarded on
+these results. ;=)) And as such should not be taken as an general indication of 
+<a target="_blank" href="http://www.flightgear.org/">FlightGear</a> usage, and just a 
+sub-set of MultiPlayer usage.
+</p>
+
+EOF
+    return $txt;
+}
+
 sub get_body_html() {
     my $txt = "<body>\n";
     $txt .= "<a id=\"top\" name=\"top\"></a>\n";
     $txt .= "<h1>Multiplayer Crossfeed Flights</h1>\n";
     $txt .= "<p class=\"top\">$href_txt</p>\n";
     $txt .= "<h2>$g_log_period</h2>\n";
+    $txt .= get_warn_txt();
     return $txt;
 }
 
@@ -636,9 +654,80 @@ EOF
     return $txt;
 }
 
+sub get_html_end($) {
+    my $utc = shift;
+    my $tm = "<!-- Generated $utc, by $pgmname -->";
+    my $txt = <<EOF;
+
+<p class="top">$href_txt</p>
+
+<a name="end" id="end"></a>
+<p align="right">eof <a href="#top">top</a></p>
+    $tm
+</body>
+</html>
+EOF
+    return $txt;
+}
+
+sub get_file_table() {
+    my $h = "<p class=\"top\">$href_txt</p>\n";
+    my $cnt = scalar @g_files;
+
+    $h .= "<table border='1' width='100%'>\n";
+    $h .= "<caption>Display of $cnt files scanned.</caption>\n"; # if ($add_table_captions);
+    #              0    1   2      3            4           5         6         7
+    #ush(@g_files,[$inf,$sz,$lncnt,$first_upd,$last_upd,$min_flts,$max_flts,$tm]);
+    my ($ff,$inf,$dir,$sz,$lncnt,$first_upd,$last_upd,$min_flts,$max_flts,$tm,$ra);
+    $h .= "<tr>\n";
+    $h .= "<th>file name</th>\n";
+    $h .= "<th>size</th>\n";
+    $h .= "<th>lines</th>\n";
+    $h .= "<th>begin</th>\n";
+    $h .= "<th>end</th>\n";
+    $h .= "<th>min</th>\n";
+    $h .= "<th>max</th>\n";
+    $h .= "<th>date</th>\n";
+    $h .= "</tr>\n";
+    foreach $ra (@g_files) {
+        $ff = ${$ra}[0];
+        $sz = ${$ra}[1];
+        $lncnt = ${$ra}[2];
+        $first_upd = ${$ra}[3];
+        $last_upd = ${$ra}[4];
+        $min_flts = ${$ra}[5];
+        $max_flts = ${$ra}[6];
+        $tm = ${$ra}[7];
+        my @lt = localtime($tm);
+        my $ctm = sprintf( "%02d/%02d/%04d %02d:%02d", $lt[3], $lt[4]+1, $lt[5]+1900, $lt[2], $lt[1]);
+        ($inf,$dir) = fileparse($ff);
+        $h .= "<tr>\n";
+        $h .= "<td>$inf</td>\n";
+        $h .= "<td align='right'>".get_nn($sz)."</td>\n";
+        $h .= "<td align='right'>".get_nn($lncnt)."</td>\n";
+        $h .= "<td>$first_upd</td>\n";
+        $h .= "<td>$last_upd</td>\n";
+        # json groups $g_min_flts to $g_max_flts
+        if ($g_min_flts == $min_flts) {
+            $h .= "<td align='right'><b>$min_flts</b></td>\n";
+        } else {
+            $h .= "<td align='right'>$min_flts</td>\n";
+        }
+        if ($g_max_flts == $max_flts) {
+            $h .= "<td align='right'><b>$max_flts</b></td>\n";
+        } else {
+            $h .= "<td align='right'>$max_flts</td>\n";
+        }
+        $h .= "<td>$ctm</td>\n";
+        $h .= "</tr>\n";
+    }
+
+    $h .= "</table>\n";
+    return $h;
+}
+
 sub get_html_tail() {
     my $utc = lu_get_YYYYMMDD_hhmmss_UTC(time());
-    my $tm = "<!-- Generated $utc, by $pgmname -->";
     my $rc = get_nn($g_tot_records);
     my $end_app = [ gettimeofday ];
     my $elap = tv_interval( $begin_app, $end_app );
@@ -657,19 +746,11 @@ the FGFS free sim has been flown <b>many</b> more times than shown here, without
 rendering these stats totally invalid as <b>any</b> indication of true FGFS usage...
 </p>
 
-<p><b>WARNING</b>: The times and distance flown can be greatly influenced by sim time warping, 
-and sim time speed up and slow down, so are always <b>only estimates</b>! And this is only the 
-results of one particular, specific crossfeed. That is, no prizes will be awarded on
-these results. ;=))</p>
-
-<p class="top">$href_txt</p>
-
-<a name="end" id="end"></a>
-<p align="right">eof <a href="#top">top</a></p>
-    $tm
-</body>
-</html>
 EOF
+    $txt .= get_warn_txt();
+    $txt .= get_file_table();
+    $txt .= get_html_end($utc);
+
     return $txt;
 }
 
@@ -1657,7 +1738,8 @@ sub add_csv_flight($$) {
 # "$fid,        $callsign,$lat,$lon,$alt_ft,  $model,   $spd_kts,$hdg,$dist_nm, $upd1,$tot_secs\n";
 
 sub process_in_file($) {
-    my ($inf) = @_;
+    my ($rfile) = @_;
+    my $inf = ${$rfile}[0];
     if (! open INF, "<$inf") {
         pgm_exit(1,"ERROR: Unable to open file [$inf]\n"); 
     }
@@ -1669,6 +1751,9 @@ sub process_in_file($) {
     my ($fid,$callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$upd,$dist_nm,$epock,$diff,$diff2,$tsecs);
     my ($stt,$end,$elap,$tm);
     $lnn = 0;
+    my $first_upd = 'N/A';
+    my $last_upd = 'N/A';
+
     my $bgn_epock = 0;
     my $last_epock = 0;
     my $last_diff = 0;
@@ -1727,6 +1812,7 @@ sub process_in_file($) {
         #$type = 'NEW';
         last;
     }
+    $first_upd = $upd;
     my $curr_upd = $upd;
     for (; $i < $lncnt; $i++) {
         $line = $lines[$i];
@@ -1808,7 +1894,7 @@ sub process_in_file($) {
             # prt("ELAP: Inserted $cnt records in $elap secs ...\n");
             prt("Done $lnn of $lncnt lines... $pct% in $tm...\n");
         }
-        #last;
+        $last_upd = $upd;
     }
 
     # update totals
@@ -1841,6 +1927,14 @@ sub process_in_file($) {
         add_csv_flight($fid2,$ra);
     }
     ####################################################################
+    $ra = $rfile;
+    # $inf == $ff = ${$ra}[0];
+    # just file name - $file = ${$ra}[1];
+    $tm = ${$ra}[2];    # file time
+    my $sz = ${$ra}[3];
+    # my @lt = localtime($tm);
+    #              0    1   2      3            4       5         6         7
+    push(@g_files,[$inf,$sz,$lncnt,$first_upd,$last_upd,$min_flts,$max_flts,$tm]);
     prt("Processed $tot_recs - json groups $min_flts to $max_flts ($g_min_flts/$g_max_flts)\n");
 }
 
@@ -1868,6 +1962,8 @@ sub process_in_dir($) {
                 $sz = $sb->size;
                 push(@csv,[$ff,$file,$tm,$sz]);
                 $tot_size += $sz;
+            } else {
+                prtw("WARNING: Failed to 'stat' $ff - SKIPPED\n");
             }
             #process_in_file($ff);
         }
@@ -1886,7 +1982,7 @@ sub process_in_dir($) {
                 $lt[2], $lt[1], get_nn($sz), $ff );
         $ci = sprintf("%2d",$i2);
         prt("$ci of $max: $msg\n");
-        process_in_file($ff);
+        process_in_file($ra);
         $tot_done += $sz;
         $pct = ($tot_done * 100) / $tot_size;
         $tend = [ gettimeofday ];
@@ -1904,13 +2000,27 @@ sub process_in_dir($) {
     ### pgm_exit(1,"TEMP EXIT!\n");
 }
 
+sub process_a_file($) {
+    my $file = shift;
+    my ($sb,$tm,$sz,$ff,$ra);
+    $ff = $file;
+    if ($sb = stat($ff)) {
+        $tm = $sb->mtime;
+        $sz = $sb->size;
+        $ra = [$ff,$file,$tm,$sz];
+        process_in_file($ra);
+    } else {
+        prtw("WARNING: Failed to 'stat' $ff - SKIPPED\n");
+    }
+}
+
 #########################################
 ### MAIN ###
 parse_args(@ARGV);
 if (-d $in_file) {
     process_in_dir($in_file);
 } else {
-    process_in_file($in_file);
+    process_a_file($in_file);
 }
 show_flt_fids();
 
