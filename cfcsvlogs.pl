@@ -67,7 +67,8 @@ my $debug_on = 0;
 ##my $def_file = 'C:\GTools\perl\scripts\temp\temp-flights\cflogs';
 ##my $def_file = 'C:\GTools\perl\scripts\temp\temp-flights\flights-2016-07-10.csv';
 ##my $def_file = 'C:\GTools\perl\scripts\temp\temp-flights\flights-2016-07-09.csv';
-my $def_file = 'C:\GTools\perl\scripts\temp\temp-flights\flights-2016-07-07.csv';
+##my $def_file = 'C:\GTools\perl\scripts\temp\temp-flights\flights-2016-07-07.csv';
+my $def_file = 'F:\FGx\crossfeed-dailies\flights-2016-07-30.csv';
 
 ### program variables
 my @warnings = ();
@@ -128,27 +129,6 @@ sub prtw($) {
    $tx =~ s/\n$//;
    prt("$tx\n");
    push(@warnings,$tx);
-}
-
-sub process_in_file_NOT_USED($) {
-    my ($inf) = @_;
-    if (! open INF, "<$inf") {
-        pgm_exit(1,"ERROR: Unable to open file [$inf]\n"); 
-    }
-    my @lines = <INF>;
-    close INF;
-    my $lncnt = scalar @lines;
-    prt("Processing $lncnt lines, from [$inf]...\n");
-    my ($line,$inc,$lnn);
-    $lnn = 0;
-    foreach $line (@lines) {
-        chomp $line;
-        $lnn++;
-        if ($line =~ /\s*#\s*include\s+(.+)$/) {
-            $inc = $1;
-            prt("$lnn: $inc\n");
-        }
-    }
 }
 
 sub fetch_url($) {	# see gettaf01.pl
