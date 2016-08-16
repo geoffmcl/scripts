@@ -14,6 +14,7 @@ use File::Basename;  # split path ($name,$dir,$ext) = fileparse($file [, qr/\.[^
 use File::Spec; # File::Spec->rel2abs($rel); # get ABSOLUTE from REALTIVE get_full_path
 use File::stat;
 use Date::Parse;
+use Time::gmtime;
 use LWP::Simple;
 use JSON;
 use Data::Dumper;
@@ -53,6 +54,7 @@ my $max_show_cs = 1000;
 my $max_table_lines = 25;
 my $min_table_lines =  8;
 my $add_table_captions = 1;
+my $use_utc_time = 1;
 
 my $add_csv_header = 0; # add CSV header, to each **new** file
 my $out_html = $temp_dir."/temphtml2.htm";  # DEFAULT out HTML
@@ -678,8 +680,13 @@ sub get_file_table() {
         $min_flts = ${$ra}[5];
         $max_flts = ${$ra}[6];
         $tm = ${$ra}[7];
-        my @lt = localtime($tm);
-        my $ctm = sprintf( "%02d/%02d/%04d %02d:%02d", $lt[3], $lt[4]+1, $lt[5]+1900, $lt[2], $lt[1]);
+        my ($ctm);
+        if ($use_utc_time) {
+            $ctm = lu_get_YYYYMMDD_hhmmss_UTC($tm);
+        } else {
+            my @lt = localtime($tm);
+            $ctm = sprintf( "%02d/%02d/%04d %02d:%02d", $lt[3], $lt[4]+1, $lt[5]+1900, $lt[2], $lt[1]);
+        }
         ($inf,$dir) = fileparse($ff);
         $h .= "<tr>\n";
         $h .= "<td>$inf</td>\n";
@@ -1912,7 +1919,11 @@ sub process_in_file($) {
     # just file name - $file = ${$ra}[1];
     $tm = ${$ra}[2];    # file time
     my $sz = ${$ra}[3];
-    # my @lt = localtime($tm);
+    #if ($use_utc_time) {
+    #    ## my $ctm = lu_get_YYYYMMDD_hhmmss_UTC($tm);
+    #} else {
+    #    ## my @lt = localtime($tm);
+    #}
     #              0    1   2      3            4       5         6         7
     push(@g_files,[$inf,$sz,$lncnt,$first_upd,$last_upd,$min_flts,$max_flts,$tm]);
     prt("Processed $tot_recs - json groups $min_flts to $max_flts ($g_min_flts/$g_max_flts)\n");
@@ -1957,11 +1968,16 @@ sub process_in_dir($) {
         $file = ${$ra}[1];
         $tm = ${$ra}[2];
         $sz = ${$ra}[3];
-        my @lt = localtime($tm);
-        $msg = sprintf( "%02d/%02d/%04d %02d:%02d %12s %s", $lt[3], $lt[4]+1, $lt[5]+1900,
-                $lt[2], $lt[1], get_nn($sz), $ff );
+        if ($use_utc_time) {
+            $msg = lu_get_YYYYMMDD_hhmmss_UTC($tm);
+        } else {
+            my @lt = localtime($tm);
+            $msg = sprintf( "%02d/%02d/%04d %02d:%02d", $lt[3], $lt[4]+1, $lt[5]+1900,
+                    $lt[2], $lt[1] );
+        }
+        $msg .= sprintf(" %12s %s", get_nn($sz), $ff);
         $ci = sprintf("%2d",$i2);
-        prt("$ci of $max: $msg\n");
+        prt("File: $ci of $max: $msg\n");
         process_in_file($ra);
         $tot_done += $sz;
         $pct = ($tot_done * 100) / $tot_size;
