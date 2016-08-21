@@ -86,7 +86,7 @@ my $g_max_upd = 'N/A';
 my $g_tot_files = 0;
 my $g_tot_records = 0;
 
-my @g_files = ();
+my @g_files = ();   # set of CSV files used to create html summary
 
 sub VERB1() { return $verbosity >= 1; }
 sub VERB2() { return $verbosity >= 2; }
@@ -696,12 +696,12 @@ sub get_file_table() {
         $h .= "<td>$last_upd</td>\n";
         # json groups $g_min_flts to $g_max_flts
         if ($g_min_flts == $min_flts) {
-            $h .= "<td align='right'><b>$min_flts</b></td>\n";
+            $h .= "<td align='right'><em>$min_flts</em></td>\n";
         } else {
             $h .= "<td align='right'>$min_flts</td>\n";
         }
         if ($g_max_flts == $max_flts) {
-            $h .= "<td align='right'><b>$max_flts</b></td>\n";
+            $h .= "<td align='right'><em>$max_flts</em></td>\n";
         } else {
             $h .= "<td align='right'>$max_flts</td>\n";
         }
