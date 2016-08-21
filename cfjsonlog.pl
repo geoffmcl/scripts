@@ -2,6 +2,7 @@
 # NAME: cfjsonlog.pl (was: jsonfeeds.pl)
 # AIM: Fetch, show, and store a json crossfeed log in a target directory.
 # Log file name will change each day, in the form - $out_dir/'flights-YYYY-MM-DD.csv'
+# 2016-08-21 - Minor changes, and update version
 # 07/07/2016 - Moved into useful 'scripts' repo, and renamed to cfjsonlog.pl
 # The default is to fetch and write a flight record each 5 seconds *** FOREVER *** Ctrl+c to abort...
 # Add option -1, to just get one, and write a compact CSV to an -o out-file
@@ -35,7 +36,8 @@ $outfile = path_u2d($outfile) if ($os =~ /win/i);
 open_log($outfile);
 
 # user variables
-my $VERS = "0.0.8 2016-07-22";
+my $VERS = "0.0.9 2016-08-21";
+##my $VERS = "0.0.8 2016-07-22";
 ##my $VERS = "0.0.7 2016-07-07";
 ##my $VERS = "0.0.6 2016-07-06";
 ##my $VERS = "0.0.5 2015-01-09";
