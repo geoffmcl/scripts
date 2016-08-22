@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 # NAME: fg_square.pl
 # AIM: Through a TELNET connection, fly the aircraft on a course
+# 2016-08-23 - Review, of where are we...
 # 30/06/2015 - Much more refinement
 # 03/04/2012 - More changes
 # 16/07/2011 - Try to add flying a course around YGIL, using the autopilot
@@ -27,7 +28,8 @@ my ($LF);
 my $outfile = $perl_dir."/temp.$pgmname.txt";
 open_log($outfile);
 
-my $VERS = "0.0.4 2015-07-04";
+my $VERS = "0.0.5 2016-08-23";
+# my $VERS = "0.0.4 2015-07-04";
 # my $VERS = "0.0.3 2015-06-30";
 # my $VERS = "0.0.2 2012-04-03";
 # my $VERS = "0.0.1 2011-02-16";
@@ -49,9 +51,11 @@ if (defined $ENV{'COMPUTERNAME'}) {
     }
 } else {
     # assumed in Ubuntu - connect to DELL01
-    $HOST = "192.168.1.11"; # DELL01
-    $PORT = 5551;
-    $CONMSG = "Assumed in Ubuntu DELL02 connection to DELL01 ";
+    # $HOST = "192.168.34"; # DELL01
+    # assumed in Ubuntu - connect to WIN7-PC
+    $HOST = "192.168.33"; # WIN07-PC
+    $PORT = 5556;
+    $CONMSG = "Assumed in Ubuntu DELL02 connection to WIN7-PC host $HOST port $PORT";
 }
 
 ### constants
