@@ -2,6 +2,7 @@
 # NAME: cfjsonlog.pl (was: jsonfeeds.pl)
 # AIM: Fetch, show, and store a json crossfeed log in a target directory.
 # Log file name will change each day, in the form - $out_dir/'flights-YYYY-MM-DD.csv'
+# 2016-08-27 - Put the 'sleep' first, to try to overcome a breakage - a kluge! for now...
 # 2016-08-21 - Minor changes, and update version
 # 07/07/2016 - Moved into useful 'scripts' repo, and renamed to cfjsonlog.pl
 # The default is to fetch and write a flight record each 5 seconds *** FOREVER *** Ctrl+c to abort...
@@ -16,6 +17,7 @@ use strict;
 use warnings;
 use File::Basename;  # split path ($name,$dir,$ext) = fileparse($file [, qr/\.[^.]*/] )
 use File::Spec; # File::Spec->rel2abs($rel); # get ABSOLUTE from REALTIVE get_full_path
+use Time::HiRes qw( usleep gettimeofday tv_interval );  # add some precise timing...
 use LWP::Simple;
 use JSON;
 use Data::Dumper;
@@ -33,10 +35,11 @@ require 'fg_wsg84.pl' or die "Unable to load fg_wsg84.pl ...\n";
 our ($LF);
 my $outfile = $temp_dir."/temp.$pgmname.txt";
 $outfile = path_u2d($outfile) if ($os =~ /win/i);
-open_log($outfile);
+open_log2($outfile);    # NEW service, to rename previous log to '.1', '.2', etc - ie keep PREVIOUS
 
 # user variables
-my $VERS = "0.0.9 2016-08-21";
+my $VERS = "0.0.10 2016-08-27";
+##my $VERS = "0.0.9 2016-08-21";
 ##my $VERS = "0.0.8 2016-07-22";
 ##my $VERS = "0.0.7 2016-07-07";
 ##my $VERS = "0.0.6 2016-07-06";
@@ -100,6 +103,80 @@ sub prtw($) {
    $tx =~ s/\n$//;
    prt("$tx\n");
    push(@warnings,$tx);
+}
+
+# get_time_stg($elap) - make sense of an elapsed time seconds
+sub get_time_stg($) {
+    my $elap = shift;
+    my $negative = 0;
+    my $units = '';
+    if ($elap < 0) {
+        $negative = 1;
+        $elap = -$elap;
+    }
+    if ( !($elap > 0.0) ) {
+        return "0.0 s";
+    }
+    if ($elap < 1e-21) {
+        #// yocto - 10^-24
+        $elap *= 1e+21;
+        $units = "ys";
+    } elsif ($elap < 1e-18) {
+        #// zepto - 10^-21
+        $elap *= 1e+18;
+        $units = "zs";
+    } elsif ($elap < 1e-15) {
+        #// atto - 10^-18
+        $elap *= 1e+15;
+        $units = "as";
+    } elsif ($elap < 1e-12) {
+        #// femto - 10^-15
+        $elap *= 1e+12;
+        $units = "fs";
+    } elsif ($elap < 1e-9) {
+        #// pico - 10^-12
+        $elap *= 1e+9;
+        $units = "ps";
+    } elsif ($elap < 1e-6) {
+        #// nanosecond - one thousand millionth (10?9) of a second
+        $elap *= 1e+6;
+        $units = "ns";
+    } elsif ($elap < 1e-3) {
+        #// microsecond - one millionth (10?6) of a second
+        $elap *= 1e+3;
+        $units = "us";
+    } elsif ($elap < 1.0) {
+        #// millisecond
+        $elap *= 1000.0;
+        $elap = int(($elap + 0.5) * 100) / 100;
+        $units = "ms";
+    } elsif ($elap < 60.0) {
+        $elap = int(($elap + 0.5) * 100) / 100;
+        $units = "s";
+    } else {
+        my $secs = int($elap + 0.5);
+        my $mins = int($secs / 60);
+        $secs = ($secs % 60);
+        if ($mins >= 60) {
+            my $hrs = int($mins / 60);
+            $mins = $mins % 60;
+            if ($hrs >= 24) {
+                my $days = int($hrs / 24);
+                $hrs = $hrs % 24;
+                return sprintf("%d days %2d:%02d:%02d hh:mm:ss", $days, $hrs, $mins, $secs);
+            } else {
+                return sprintf("%2d:%02d:%02d hh:mm:ss", $hrs, $mins, $secs);
+            }
+        } else {
+            return sprintf("%2d:%02d mm:ss", $mins, $secs);
+        }
+    }
+    my $res = '';
+    if ($negative) {
+        $res = '-';
+    }
+    $res .= "$elap $units";
+    return $res;
 }
 
 sub process_in_file($) {
@@ -320,6 +397,7 @@ sub repeat_feeds() {
     my ($ra1,$cnt1,$i,$rh2,$line,$msg,$show,$rh3);
     my ($lat2,$lon2,$alt_ft2,$model2,$spd_kts2,$hdg2,$dist_nm2,$type);
     my ($res,$az1,$az2,$dist,$mps,$tsecs);
+    my ($tb,$tn,$ta,$elap,$tm,$lelap,$telap); # start some precise script timings
     my $min_mps = 5; 
     my %hash = ();
     $callsign = 'callsign';
@@ -342,7 +420,30 @@ sub repeat_feeds() {
     $msg = "$callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm\n";
     $header = $msg;
     my $tot_secs = 0;
+    my $tot_sleep = 0;
+    my $sleep_cnt = 0;
+    my $sleep_msg = "N/A";
+    $tb = [gettimeofday];
     while ($repeat) {
+        $tn = [gettimeofday];
+        if ($only_one_feed) {
+            prt("Only one feed requested... and exit...\n");
+            $repeat = 0;
+        } else {
+            $sleep_cnt++;
+            $elap = tv_interval( $tb, $tn );
+            $tm = get_time_stg($elap);
+            prt("Cycles: $sleep_cnt: rt $tm: Sleep for $secs second... $sleep_msg\n");
+            sleep $secs;
+            $ta = [gettimeofday];
+            $lelap = tv_interval( $tn, $ta );
+            $tot_sleep += $lelap;
+            my $cslp = get_time_stg($lelap);
+            $telap = tv_interval( $tb, $ta );
+            my $tslp = get_time_stg($telap);
+            my $tuse = get_time_stg($telap - $tot_sleep);
+            $sleep_msg = " last sleep $cslp, tot $tslp, use $tuse";
+        }
         my $txt1 = fetch_url($feed1); # "http://crossfeed.freeflightsim.org/flights.json";
         my $json = JSON->new->allow_nonref;
         my $rh1 = $json->decode( $txt1 );
@@ -446,14 +547,6 @@ sub repeat_feeds() {
             #}
         } else {
             prt("'flights' is NOT defined in hash 1!\n");
-        }
-        if ($only_one_feed) {
-            prt("Only one feed requested... exit...\n");
-            $repeat = 0;
-        } else {
-            prt("Sleep for $secs second...\n");
-            sleep $secs;
-            $tot_secs += $secs;
         }
     }   # while ($repeat)
 }

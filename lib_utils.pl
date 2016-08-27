@@ -53,6 +53,22 @@ sub open_log {
 	$write_log = 1;
 }
 
+# 2016-08-27 - NEW service, to rename previous log to '.1', '.2', etc - ie keep PREVIOUS
+sub open_log2 {
+	my ($f) = shift;
+    if (-f $f) {
+        my $cnt = 1;
+        my $fil = $f.".$cnt";
+        while ( -f $fil) {
+            $cnt++;
+            $fil = $f.".$cnt";
+        }
+        # rename current LOG to the new name..
+		rename $f, $fil;
+    }
+    open_log($f);   # open the LOG
+}
+
 sub prt_log {
 	if ($write_log) {
 		print $LF shift;
