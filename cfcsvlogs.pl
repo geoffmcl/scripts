@@ -554,7 +554,10 @@ and sim time speed up and slow down, so are always <b>only estimates</b>! And th
 results of one particular, specific crossfeed. That is, no prizes will be awarded on
 these results. ;=)) And as such should not be taken as an general indication of 
 <a target="_blank" href="http://www.flightgear.org/">FlightGear</a> usage, and just a 
-sub-set of MultiPlayer usage.
+sub-set of MultiPlayer usage. Also note the callsign <b>callsig</b> is the <b>DEFAULT</b>
+callsign when the user does not enter his/her own callsign, so this makes the appearance
+of callsign <b>callsig</b> misleading, in that it can be <b>multiple</b> users, probably sometimes
+at the same time... very confusing...
 </p>
 
 EOF
