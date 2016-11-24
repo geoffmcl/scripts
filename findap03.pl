@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 # NAME: findap03.pl
 # AIM: Read FlightGear apt.dat, and find an airport given the name,
+# 2016-11-24 - Add -u to use an icao regex match, where 'K38' will add 'RK38', etc
 # 05/06/2016 - Add -X0, for no circuits, just the runways... and reduce verbosity TODO: option
 # 12/04/2016 - Add to -Xopts, L/R only, H500, XB, ...
 # 10/04/2016 - Add xg output options - see $add_anno
@@ -80,7 +81,8 @@ my $NAVFILE 	  = "$FGROOT/Navaids/nav.dat.gz";	# the NAV, NDB, etc. data file
 my $FIXFILE 	  = "$FGROOT/Navaids/fix.dat.gz";	# the FIX data file
 my $AWYFILE       = "$FGROOT/Navaids/awy.dat.gz";   # Airways data
 # =============================================================================
-my $VERS="Jun 05, 2016. version 1.0.9";
+my $VERS="Nov 24, 2016. version 1.1.0"; # very stable
+###my $VERS="Jun 05, 2016. version 1.0.9";
 ###my $VERS="Apr 10, 2016. version 1.0.8";
 ###my $VERS="Jul 16, 2015. version 1.0.7";
 ###my $VERS="Nov 17, 2014. version 1.0.6";
@@ -148,6 +150,7 @@ my $add_rwy = '';       # specific runways chosen at ICAO -XC22 for just runway 
 my $add_rwy_bbox = 0;   # not very important, just around runway
 my $xgbbox = '';
 my $new_x_opts = 1; # xg airport gen options, with anno, etc...
+my $use_regex_match = 0;    # 20161124 - On say '-icao=K38' can leed to MULTIPLE matches
 
 # radio frequency listing
 my $use_full_list = 0; # seems better to GROUP frequencies
@@ -2304,7 +2307,12 @@ sub load_apt_data {
                 $add = 0;   # add to FOUND a/p, IFF
                 if ($SRCHICAO) {
                     # 1 - ICAO matches
-                    $add = 1 if ($icao =~ /$apticao/);
+                    if ($use_regex_match) {
+                        # NOTE: An ICAO 'K38' will also match RK38, EK38, NK38, OK38, AK38...
+                        $add = 1 if ($icao =~ /$apticao/);
+                    } else {
+                        $add = 1 if ($icao eq $apticao);
+                    }
                 } elsif ($SRCHONLL) {
                     # 2 - searching by LAT,LON position
                     if (($dlat < $maxlatd) && ($dlon < $maxlond)) {
@@ -3613,6 +3621,7 @@ sub give_help {
     prt( " --bbox          (-b) = Output a bounding box for the airport.\n");
     prt( " --file <file>   (-f) = Load commands from this 'file' of commands...\n");
 	prt( " -icao=$apticao           = Search using icao.\n" );
+    prt( " --use-regex     (-u) = Match above icao using regex. 3 char icao can yield others.\n");
 	prt( " -latlon=lat,lon      = Search using latitude, longitude.\n" );
 	prt( " -lonlat=lon,lat      = Search using longitude, latitude.\n" );
 	prt( " -maxout=$max_cnt            = Limit the airport output. A 0 for ALL.\n" );
@@ -3628,7 +3637,7 @@ sub give_help {
     prt( " -range=$max_range_km             = Set Km range when checking for NAVAIDS.\n" );
     prt( " -r                   = Use above range ($max_range_km Km) for searching.\n" );
     prt( " --sidstar       (-s) = Attempt SID/STAR generation. Implies -n, and needs ICAO search.\n");
-    prt( " -tryhard        (-t) = Expand search if no NAVAIDS found in range. " );
+    prt( " --tryhard       (-t) = Expand search if no NAVAIDS found in range. " );
     prt( "(Def=". ($tryharder ? "On" : "Off") . ")\n" );
     prt( " --verbosity (-v[nn]) = Increase or set verbosity. (def=$verbosity)\n");
     prt( " --VOR           (-V) = List only VOR (+NDB)\n");
@@ -3777,6 +3786,9 @@ sub parse_args {
             } elsif (( $sarg =~ /^loadlog$/ )||($sarg =~ /^l$/)) {
                 prt("[v1] Set load log at end of display.\n") if (VERB1());
                 $loadlog = 1;
+            } elsif ($sarg =~ /^u/) {
+                $use_regex_match = 1;
+                prt("[v1] Set to use regex icao matching.\n") if (VERB1());
             ##########################################################
             } elsif ( $arg =~ /-icao=(.+)/i ) {
                 # BY ICAO
@@ -4201,8 +4213,8 @@ sub parse_args {
         } else {
             prt("Searching by lat,lon=$g_center_lat,$g_center_lon, spread $nmaxlatd,$nmaxlond degs\n");
         }
+        prt("[v1] $pgmname, $VERS\n") if (VERB1());
     }
-
 }
 
 sub get_810_spec() {
