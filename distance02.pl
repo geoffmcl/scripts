@@ -3,6 +3,7 @@
 # AIM: Use perl trig function for distance London to Tokyo...
 # from : http://perldoc.perl.org/Math/Trig.html
 # previous disptance.pl, with no use of SIMGEAR
+# 2016-10-03 - Add a get_decimal_stg($dec,$places)
 # 19/04/2016 - If distance between point is less than 1 Km, show meters and feet
 # 08/07/2015 - Move into scripts repo
 # 29/11/2014 - Added -a ICAO1:ICAO2[;ICAO3...] to get airport distances
@@ -32,7 +33,8 @@ require 'lib_utils.pl' or die "Unable to load 'lib_utils.pl' Check paths in \@IN
 require 'fg_wsg84.pl' or die "Unable to load fg_wsg84.pl ...\n";
 require 'lib_fgio.pl' or die "Unable to load 'lib_fgio.pl'! Check location and \@INC content.\n";
 
-my $VERS = "0.0.8 2016-04-19"; # enhance display when distance small
+my $VERS = "0.0.9 2016-10-03"; # enhance display when distance small
+# my $VERS = "0.0.8 2016-04-19"; # enhance display when distance small
 # my $VERS = "0.0.7 2015-07-15"; # some functions moved to library
 # my $VERS = "0.0.6 2015-07-08"; # add to scripts repo
 # my $VERS = "0.0.5 2014-11-29"; # allow ICAO inputs
@@ -83,7 +85,8 @@ my $g_lon1 = $MAD_LL;
 my $g_lat2 = $MAD_LL;
 my $g_lon2 = $MAD_LL;
 
-my $aptdat = "X:\\fgdata\\Airports\\apt.dat.gz";
+my $aptdat = 'D:\FG\fg-64\install\FlightGear\fgdata\Airports\apt.dat.gz';
+# my $aptdat = "X:\\fgdata\\Airports\\apt.dat.gz";
 my $g_ias = 100; # Knots - c182
 #my $g_ias = 80; # Knots - c152-c172
 my $g_speed = $g_ias * $K2KPH; # Knots to Kilometers/Hour
@@ -199,6 +202,33 @@ sub set_decimal_stg($) {
     #}
 }
 
+# round_decimal_stg: to fixed number of decimal places, using sprinft
+sub round_decimal_stg($$) {
+    my ($n, $places) = @_;
+    my $form = '%.'.$places.'f';
+    my $res = sprintf($form,$n);
+    return $res;
+}
+
+# get_dist_stg: assumed given decimal distance in meters - return suitable string
+sub get_dist_stg($) {
+    my ($dist) = @_;
+    my $res = "$dist m";
+    if ($dist < 1000) {
+        if ($dist < 1) {
+            $dist *= 100;   # cm
+            $res = round_decimal_stg($dist,6);  # cm
+            $res .= " cm";
+        }
+    } else {
+        $res = $dist / 1000;
+        set_decimal_stg(\$res);
+        $res .= " km";
+    }
+    return $res;
+}
+
+
 
  # Notice the 90 - latitude: phi zero is at the North Pole
 sub NESW { deg2rad($_[0]), deg2rad(90 - $_[1]) }
@@ -247,7 +277,11 @@ sub show_sg_distance_vs_est($$$$$$) {
     $edpc = " $edpc" while (length($edpc) < 5);
 
     $adhdg = abs($sg_az1 - $esthdg);
-    $ahdiff = ($adhdg / $sg_az1);
+    #### $ahdiff = ($adhdg / $sg_az1);
+    $ahdiff = 0;
+    if ($sg_az1 > 0.0) {
+        $ahdiff = ($adhdg / $sg_az1);
+    }
     $hdgpc = ($ahdiff / 360);
     $hdgpc = int(($hdgpc * 10) + 0.05) / 10;
     if ($ahdiff < $CP_EPSILON) {
@@ -686,7 +720,8 @@ sub show_distance($$$$) {
 
     if (VERB1()) {
         set_decimal1_stg(\$thdg);
-        prt("Center: lat,lon $sg_clat,$sg_clon, heading $thdg, SG dist $sg_dist m.\n");
+        my $ds = get_dist_stg($sg_dist);
+        prt("Center: lat,lon $sg_clat,$sg_clon, heading $thdg, SG dist $ds ($sg_dist m)\n");
     }
     if (VERB2()) {
         prt("From (lon,lat): $lon1,$lat1 to $lon2,$lat2 is about -\n");
