@@ -2,9 +2,11 @@
 # NAME: cfjsonlog.pl (was: jsonfeeds.pl)
 # AIM: Fetch, show, and store a json crossfeed log in a target directory.
 # Log file name will change each day, in the form - $out_dir/'flights-YYYY-MM-DD.csv'
+# 2016-12-06 - Use 'eval' to skip json errors, trim some output...
 # 2016-08-27 - Put the 'sleep' first, to try to overcome a breakage - a kluge! for now...
 # 2016-08-21 - Minor changes, and update version
 # 07/07/2016 - Moved into useful 'scripts' repo, and renamed to cfjsonlog.pl
+# Added to src repo: https://github.com/geoffmcl/scripts
 # The default is to fetch and write a flight record each 5 seconds *** FOREVER *** Ctrl+c to abort...
 # Add option -1, to just get one, and write a compact CSV to an -o out-file
 # All fetches are from a single server "http://crossfeed.freeflightsim.org/flights.json" = Thanks Pete
@@ -38,7 +40,8 @@ $outfile = path_u2d($outfile) if ($os =~ /win/i);
 open_log2($outfile);    # NEW service, to rename previous log to '.1', '.2', etc - ie keep PREVIOUS
 
 # user variables
-my $VERS = "0.0.10 2016-08-27";
+my $VERS = "0.1.0 2016-12-06";
+##my $VERS = "0.0.10 2016-08-27";
 ##my $VERS = "0.0.9 2016-08-21";
 ##my $VERS = "0.0.8 2016-07-22";
 ##my $VERS = "0.0.7 2016-07-07";
@@ -422,9 +425,15 @@ sub repeat_feeds() {
     my $tot_secs = 0;
     my $tot_sleep = 0;
     my $sleep_cnt = 0;
+    my $error_cnt = 0;
     my $sleep_msg = "N/A";
+    my ($new_cnt,$left_cnt,$curr_cnt,$stats);
+    $stats = 'none';
     $tb = [gettimeofday];
     while ($repeat) {
+        $new_cnt = 0;
+        $left_cnt = 0;
+        $curr_cnt = 0;
         $tn = [gettimeofday];
         if ($only_one_feed) {
             prt("Only one feed requested... and exit...\n");
@@ -433,7 +442,8 @@ sub repeat_feeds() {
             $sleep_cnt++;
             $elap = tv_interval( $tb, $tn );
             $tm = get_time_stg($elap);
-            prt("Cycles: $sleep_cnt: rt $tm: Sleep for $secs second... $sleep_msg\n");
+            #prt("Cycles: $sleep_cnt: rt $tm: Sleep for $secs second... $sleep_msg\n");
+            prt("Cycles: $sleep_cnt: rt $tm: Sleep $secs... $stats $sleep_msg\n");
             sleep $secs;
             $ta = [gettimeofday];
             $lelap = tv_interval( $tn, $ta );
@@ -442,11 +452,20 @@ sub repeat_feeds() {
             $telap = tv_interval( $tb, $ta );
             my $tslp = get_time_stg($telap);
             my $tuse = get_time_stg($telap - $tot_sleep);
-            $sleep_msg = " last sleep $cslp, tot $tslp, use $tuse";
+            # $sleep_msg = " last sleep $cslp, tot $tslp, use $tuse";
+            $sleep_msg = " use $tuse, e=$error_cnt";
         }
         my $txt1 = fetch_url($feed1); # "http://crossfeed.freeflightsim.org/flights.json";
         my $json = JSON->new->allow_nonref;
-        my $rh1 = $json->decode( $txt1 );
+        my ($rh1);
+        eval { $rh1 = $json->decode( $txt1 ); };
+        if ($@) {
+            # could show the rejected json feed, but maybe just error text...
+            $txt1 = trim_all($@);
+            $error_cnt++;
+            prt("$error_cnt: Error JSON: $txt1\n");
+            next;
+        }
         ###prt(Dumper($rh1));
 
         my $upd1 = "Unknown";
@@ -470,7 +489,7 @@ sub repeat_feeds() {
                 $rh2 = ${$ra1}[$i]; # extract the hash
                 $fid = ${$rh2}{fid};    # get FID
                 if (defined $hfids{$fid}) {
-                    delete $hfids{$fid}; # REMOVVE from list
+                    delete $hfids{$fid}; # REMOVE from list
                 }
             }
             # any remaining in FIDS need to DIE, have LEFT, no more
@@ -490,13 +509,15 @@ sub repeat_feeds() {
                     $tsecs    = ${$rh3}[9];
                     my $active = secs_HHMMSS($tsecs);
                     $type = "LEFT ".get_sg_dist_stg($dist).", after $active";
-                    display_flight($callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm,$type);
+                    display_flight($callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm,$type) if (VERB5());
                     delete $hash{$fid}; # remove it
+                    $left_cnt++;
                 }
             }
             @fids = keys %hash;
             my $cnt3 = scalar @fids;
-            prt("Updated: $upd1, flights $cnt1... db $cnt2/$cnt3\n");
+            my $ltime = lu_get_YYYYMMDD_hhmmss(time());
+            prt("$ltime: Updated: $upd1, flights $cnt1... db $cnt2/$cnt3\n");
             # now process THIS set of json flights
             for ($i = 0; $i < $cnt1; $i++) {
                 $rh2 = ${$ra1}[$i]; # extract the hash
@@ -524,6 +545,7 @@ sub repeat_feeds() {
                         if ($mps > $min_mps) {
                             $type = "moved ".get_sg_dist_stg($dist);
                             $show = 1;
+                            $curr_cnt++;
                             ${$rh3}[1] = $lat;
                             ${$rh3}[2] = $lon;
                             ${$rh3}[8] += $dist;
@@ -534,13 +556,15 @@ sub repeat_feeds() {
                     #              0         1    2    3       4      5        6    7        8 9 10
                     $hash{$fid} = [$callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm,0,0,$upd1];
                     $show = 1;
+                    $new_cnt++;
                     $type = 'NEW';
                 }
                 if ($show) {
-                    display_flight($callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm,$type);
+                    display_flight($callsign,$lat,$lon,$alt_ft,$model,$spd_kts,$hdg,$dist_nm,$type) if (VERB5());
                     #$msg .= $line;
                 }
             }
+            $stats = "L=$left_cnt, N=$new_cnt, M=$curr_cnt";
             #if (length($out_file)) {
             #    write2file($msg,$out_file);
             #    prt("JSON crossfeed flight list written to $out_file\n");
@@ -652,4 +676,4 @@ sub give_help {
     prt("\n");
 }
 
-# eof - cfjsonlog.pl.pl
+# eof - cfjsonlog.pl
