@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 # NAME: findap03.pl
 # AIM: Read FlightGear apt.dat, and find an airport given the name,
+# 2017-01-14 - Use X:\fgdata, as latest, if available...
 # 2016-11-24 - Add -u to use an icao regex match, where 'K38' will add 'RK38', etc
 # 05/06/2016 - Add -X0, for no circuits, just the runways... and reduce verbosity TODO: option
 # 12/04/2016 - Add to -Xopts, L/R only, H500, XB, ...
@@ -55,7 +56,11 @@ my $PATH_SEP = '/';
 my $CDATROOT="/media/Disk2/FG/fg22/fgdata"; # 20150716 - 3.5++
 if ($os =~ /win/i) {
     $PATH_SEP = "\\";
-    $CDATROOT="F:/fgdata"; # 20140127 - 3.1
+    if (-d "X:\\fgdata") {
+        $CDATROOT="X:\\fgdata"; # 20170114 - 2017.1
+    } else {
+        $CDATROOT="F:/fgdata"; # 20140127 - 3.1
+    }
 }
 unshift(@INC, $perl_dir);
 ###require 'logfile.pl' or die "Error: Unable to locate logfile.pl ...\n";
