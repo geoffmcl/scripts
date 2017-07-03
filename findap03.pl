@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 # NAME: findap03.pl
 # AIM: Read FlightGear apt.dat, and find an airport given the name,
+# 2017-04-04 - Use G:\S as scenery - see TSSCENERY
 # 2017-01-14 - Use X:\fgdata, as latest, if available...
 # 2016-11-24 - Add -u to use an icao regex match, where 'K38' will add 'RK38', etc
 # 05/06/2016 - Add -X0, for no circuits, just the runways... and reduce verbosity TODO: option
@@ -76,7 +77,8 @@ my $DAPTROOT = 'D:\Scenery\terrascenery\data\Scenery\Airports';
 # This NEEDS to be adjusted to YOUR particular default location of these files.
 my $FGROOT = (exists $ENV{'FG_ROOT'})? $ENV{'FG_ROOT'} : $CDATROOT;
 my $SCENEROOT = (exists $ENV{'FG_SCENERY'})? $ENV{'FG_SCENERY'} : $DSCNROOT;
-my $TSSCENERY = 'X:\fgsvnts';
+#my $TSSCENERY = 'X:\fgsvnts';
+my $TSSCENERY = 'G:\S';
 
 #my $FGROOT = (exists $ENV{'FG_ROOT'})? $ENV{'FG_ROOT'} : "C:/FG/27/data";
 # file spec : http://data.x-plane.com/file_specs/Apt810.htm
@@ -1461,7 +1463,8 @@ sub show_airports_found {
             $info = get_atis_info($i,$scnt,\@aptlist2,$gaoff,$dlat,$dlon,$aalt);
             $line .= $info;
         }
-        $line .= " fg=".get_tile($alon,$alat); # +/or? ." (".get_tile_calc($alon,$alat).")";
+        my $tpind = get_tile($alon,$alat);
+        $line .= " fg=$tpind"; # +/or? ." (".get_tile_calc($alon,$alat).")";
         # $line .= ")"; # close
         # show it
 		prt("$line\n"); # print
@@ -2913,7 +2916,7 @@ sub search_nav {
         while ($navs_found < $min_nav_aids) {
             $nmaxlatd += 0.1;
             $nmaxlond += 0.1;
-            $max_range_km += 0.1;
+            $max_range_km *= 1.1;
             if ($usekmrange) {
                 prt("Expanded to [$max_range_km] Km from $ac airport(s)...\n" ) if (VERB1());
             } else {
@@ -3523,7 +3526,7 @@ sub add_sidstar() {
         $min_lon = $lon if ($lon < $min_lon);
     }
     $res = scalar @nf;
-    prt("From $max got $res within 40 km... $max_lat,$max_lon,$min_lat,$min_lon\n");
+    prt("From $max got $res fixes within 40 km... $max_lat,$max_lon,$min_lat,$min_lon\n");
     $xg .= "color gray\n";
     $xg .= "$min_lon $min_lat\n";
     $xg .= "$min_lon $max_lat\n";
@@ -3533,7 +3536,7 @@ sub add_sidstar() {
     $xg .= "NEXT\n";
     $xg .= $apt_xg;;
     write2file($xg,$out_xg);
-    prt("xg map witten to $out_xg\n");
+    prt("xg map of $res fixes witten to $out_xg\n");
     ############################################################
     ### just the closest
     @arr = sort mycmp_ascend_n3 @nf;
@@ -3551,7 +3554,7 @@ sub add_sidstar() {
         $lon = ${$ra}[1];
         $nam = ${$ra}[2];
         $s   = ${$ra}[3];
-        prt(join(" ",@{$ra})."\n");
+        prt("[v5] ".join(" ",@{$ra})."\n") if (VERB5());
         $xg .= "anno $lon $lat $nam\n";
         $max_lat = $lat if ($lat > $max_lat);
         $min_lat = $lat if ($lat < $min_lat);
@@ -3567,7 +3570,7 @@ sub add_sidstar() {
     $xg .= "NEXT\n";
     $xg .= $apt_xg;;
     write2file($xg,$out_xg2);
-    prt("xg map witten to $out_xg2\n");
+    prt("xg map of $res closest fixes witten to $out_xg2\n");
 
 }
 
