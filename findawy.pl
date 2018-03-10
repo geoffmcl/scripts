@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 # NAME: findawy.pl
 # AIM: Given an airport ICAO, or a lat,lon, find all airways, hi and low within a given radius
+# 2018-02-25 - Review, and change to x:\fgdata
 # 16/08/2015 geoff mclane http://geoffair.net/mperl
 use strict;
 use warnings;
@@ -17,7 +18,8 @@ my $PATH_SEP = '/';
 my $CDATROOT="/media/Disk2/FG/fg22/fgdata"; # 20150716 - 3.5++
 if ($os =~ /win/i) {
     $PATH_SEP = "\\";
-    $CDATROOT="F:/fgdata"; # 20140127 - 3.1
+    #$CDATROOT="F:/fgdata"; # 20140127 - 3.1
+    $CDATROOT="x:/fgdata"; # 20180225 - 3.1
 }
 ###require 'logfile.pl' or die "Error: Unable to locate logfile.pl ...\n";
 require 'lib_utils.pl' or die "Unable to load 'lib_utils.pl' Check paths in \@INC...\n";
