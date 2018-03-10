@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 # NAME: findap03.pl
 # AIM: Read FlightGear apt.dat, and find an airport given the name,
+# 2018-03-10 - Add HELIPAD, and water ways
 # 2017-04-04 - Use G:\S as scenery - see TSSCENERY
 # 2017-01-14 - Use X:\fgdata, as latest, if available...
 # 2016-11-24 - Add -u to use an icao regex match, where 'K38' will add 'RK38', etc
@@ -88,7 +89,8 @@ my $NAVFILE 	  = "$FGROOT/Navaids/nav.dat.gz";	# the NAV, NDB, etc. data file
 my $FIXFILE 	  = "$FGROOT/Navaids/fix.dat.gz";	# the FIX data file
 my $AWYFILE       = "$FGROOT/Navaids/awy.dat.gz";   # Airways data
 # =============================================================================
-my $VERS="Nov 24, 2016. version 1.1.0"; # very stable
+my $VERS="Mar 10, 2018. version 1.1.1"; # very stable
+###my $VERS="Nov 24, 2016. version 1.1.0"; # very stable
 ###my $VERS="Jun 05, 2016. version 1.0.9";
 ###my $VERS="Apr 10, 2016. version 1.0.8";
 ###my $VERS="Jul 16, 2015. version 1.0.7";
@@ -545,6 +547,8 @@ sub get_g_aptlist_off($) {
 sub get_atis_info($$$$$$$) {
     my ($ii,$scnt,$raptlist2,$gaoff,$alat,$alon,$aalt) = @_;
     my $info = '';
+    ##                  0      1      2      3      4      5     6     7     8
+    #push(@g_naptlist, [$diff, $icao, $name, $alat, $alon, \@ra, \@wa, \@ha, \@fa ]);
     my $rfa = $g_naptlist[$gaoff-1][8]; # get the ATIS, Tower, ..., frequecies array (ref)
     ###my $rfa = $g_aptlist[$gaoff-1][6]; # get the ATIS, Tower, ..., frequecies array (ref)
     my $rfc = scalar @{$rfa};   # get count for this airport
@@ -1103,6 +1107,20 @@ sub get_bbox_xg($$$$) {
     return $xg;
 }
 
+my ($min_lon,$min_lat,$max_lon,$max_lat);
+my ($min_lons,$min_lats,$max_lons,$max_lats);
+sub add_to_bounds($$) {
+    my ($lat,$lon) = @_;
+    $min_lon = $lon if ($lon < $min_lon);
+    $min_lat = $lat if ($lat < $min_lat);
+    $max_lat = $lat if ($lat > $max_lat);
+    $max_lon = $lon if ($lon > $max_lon);
+    $min_lons = $lon if ($lon < $min_lons);
+    $min_lats = $lat if ($lat < $min_lats);
+    $max_lats = $lat if ($lat > $max_lats);
+    $max_lons = $lon if ($lon > $max_lons);
+}
+
 #                  0=typ, 1=lat, 2=lon, 3=alt, 4=frq, 5-rng, 6-frq2, 7=nid, 8=name, 9=off, 10=dist, 11=az);
 #push(@g_navlist3, [$typ, $nlat, $nlon, $nalt, $nfrq, $nrng, $nfrq2, $nid,  $name,  $off,  $dist,   $az]);
 sub show_airports_found {
@@ -1140,8 +1158,7 @@ sub show_airports_found {
     my ($rwy1,$rwy2);
     my ($rwlen2,$elat1,$elon1,$eaz1,$elat2,$elon2,$eaz2,$hdgr,$hdg1,$hdg2,$az1,$az2);
     my ($lato1,$lono1,$lato2,$lono2,$s);
-    my ($min_lon,$min_lat,$max_lon,$max_lat);
-    my ($min_lons,$min_lats,$max_lons,$max_lats,$got_twr);
+    my ($res,$got_twr);
     # OUTPUT OF AN AIRPORT ENTRY
     $out = '';
     my $skip_helis = 0;
@@ -1296,25 +1313,8 @@ sub show_airports_found {
                 # =======================================================
                 # #######################################################
                 # add runway ends to BOUNDS (bbox)
-                $min_lon = $elon1 if ($elon1 < $min_lon);
-                $min_lat = $elat1 if ($elat1 < $min_lat);
-                $max_lat = $elat1 if ($elat1 > $max_lat);
-                $max_lon = $elon1 if ($elon1 > $max_lon);
-
-                $min_lon = $elon2 if ($elon2 < $min_lon);
-                $min_lat = $elat2 if ($elat2 < $min_lat);
-                $max_lat = $elat2 if ($elat2 > $max_lat);
-                $max_lon = $elon2 if ($elon2 > $max_lon);
-
-                # sum of multiple passes
-                $min_lats = $elat1 if ($elat1 < $min_lats);
-                $max_lats = $elat1 if ($elat1 > $max_lats);
-                $min_lons = $elon1 if ($elon1 < $min_lons);
-                $max_lons = $elon1 if ($elon1 > $max_lons);
-                $min_lats = $elat2 if ($elat2 < $min_lats);
-                $max_lats = $elat2 if ($elat2 > $max_lats);
-                $min_lons = $elon2 if ($elon2 < $min_lons);
-                $max_lons = $elon2 if ($elon2 > $max_lons);
+                add_to_bounds($elat1,$elon1);
+                add_to_bounds($elat2,$elon2);
 
                 ### do the work, even if not used - if ($gen_threshold_xml) {
                     $lato1 = $elat1;
@@ -1358,7 +1358,7 @@ sub show_airports_found {
                 ### always gen the xml }
             } elsif ($type == 100) {
     
-                $rwid  = ${$ra}[1];  # WIDTH in meters? NOT SHOWN
+                $rwid  = ${$ra}[1];  # WIDTH in meters?
                 $surf  = ${$ra}[2];  # add surface type
                 $rwy1  = ${$ra}[8];
                 $elat1 = ${$ra}[9];
@@ -1367,31 +1367,13 @@ sub show_airports_found {
                 $rwy2 = ${$ra}[17];
                 $elat2 = ${$ra}[18];
                 $elon2 = ${$ra}[19];
-                my $res = fg_geo_inverse_wgs_84 ($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$s);
+                $res = fg_geo_inverse_wgs_84 ($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$s);
                 # =======================================================
                 $apt_xg .= rwy_xg_stg($icao,$elat1,$elon1,$elat2,$elon2,$rwid,$rwy1,$rwy2);
                 # =======================================================
                 # add runway ends to BOUNDS (bbox)
-                $min_lon = $elon1 if ($elon1 < $min_lon);
-                $min_lat = $elat1 if ($elat1 < $min_lat);
-                $max_lat = $elat1 if ($elat1 > $max_lat);
-                $max_lon = $elon1 if ($elon1 > $max_lon);
-
-                $min_lon = $elon2 if ($elon2 < $min_lon);
-                $min_lat = $elat2 if ($elat2 < $min_lat);
-                $max_lat = $elat2 if ($elat2 > $max_lat);
-                $max_lon = $elon2 if ($elon2 > $max_lon);
-
-                # sum of multiple passes
-                $min_lats = $elat1 if ($elat1 < $min_lats);
-                $max_lats = $elat1 if ($elat1 > $max_lats);
-                $min_lons = $elon1 if ($elon1 < $min_lons);
-                $max_lons = $elon1 if ($elon1 > $max_lons);
-                $min_lats = $elat2 if ($elat2 < $min_lats);
-                $max_lats = $elat2 if ($elat2 > $max_lats);
-                $min_lons = $elon2 if ($elon2 < $min_lons);
-                $max_lons = $elon2 if ($elon2 > $max_lons);
-
+                add_to_bounds($elat1,$elon1);
+                add_to_bounds($elat2,$elon2);
 
                 # display it
                 # ==========================================================================
@@ -1405,8 +1387,10 @@ sub show_airports_found {
                 # runway markings - magnetic azimuth of the centerline
                 $rwy1 .= ' ' while (length($rwy1) < 3);
                 $rwy2 .= ' ' while (length($rwy2) < 3);
+                $rwid *= $METER_TO_FEET;
+                $rwid = int($rwid + 0.5);
                 $info .= " $rwy1: ".get_ll_stg($elat1,$elon1)." $rwy2: ".get_ll_stg($elat2,$elon2);
-                $info .= " b=$az1/$az2 l=$s ft";
+                $info .= " b=$az1/$az2 l=$s w=$rwid ft";
                 if (defined $runway_surface{$surf}) {
                     $info .= " (".$runway_surface{$surf}.")";
                 }
@@ -1419,6 +1403,68 @@ sub show_airports_found {
             #$annoxg .= "$elon2 $elat2\n";
             #$annoxg .= "NEXT\n";
 
+        }
+        if ($gaoff) {
+            ##                  0      1      2      3      4      5     6     7     8
+            #push(@g_naptlist, [$diff, $icao, $name, $alat, $alon, \@ra, \@wa, \@ha, \@fa ]);
+            my $rwa = $g_naptlist[$gaoff-1][6]; # get waterway array ref
+            my $rha = $g_naptlist[$gaoff-1][7]; # get helipad array ref
+            my $cnt = scalar @{$rwa};
+            if ($cnt) {
+                $info .= "\nwaterways:$cnt:";
+                foreach $ra (@{$rwa}) {
+                    # 0   1      2 3  4           5             6  7           8
+                    # 101 243.84 0 16 29.27763293 -089.35826258 34 29.26458929 -089.35340410
+                    # 101 22.86  0 07 29.12988952 -089.39561501 25 29.13389936 -089.38060001
+                    $rwid  = ${$ra}[1];  # WIDTH in meters?
+                    $rwy1 = ${$ra}[3];
+                    $elat1 = ${$ra}[4];
+                    $elon1 = ${$ra}[5];
+                    $rwy2 = ${$ra}[6];
+                    $elat2 = ${$ra}[7];
+                    $elon2 = ${$ra}[8];
+                    $res = fg_geo_inverse_wgs_84 ($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$s);
+                    add_to_bounds($elat1,$elon1);
+                    add_to_bounds($elat2,$elon2);
+                    # display it
+                    # ==========================================================================
+                    $info .= "\n"; # new line
+                    $s *= $METER_TO_FEET;
+                    $s = int($s + 0.5);
+                    $az1 = int($az1 + 0.5);
+                    $az2 = int($az2 + 0.5);
+                    # runway markings - magnetic azimuth of the centerline
+                    $rwy1 .= ' ' while (length($rwy1) < 3);
+                    $rwy2 .= ' ' while (length($rwy2) < 3);
+                    $rwid *= $METER_TO_FEET;
+                    $rwid = int($rwid + 0.5);
+                    $info .= " $rwy1: ".get_ll_stg($elat1,$elon1)." $rwy2: ".get_ll_stg($elat2,$elon2);
+                    $info .= " b=$az1/$az2 l=$s w=$rwid ft";
+                }
+            }
+            $cnt = scalar @{$rha};
+            if ($cnt) {
+                $info .= "\nhelipads:$cnt:";
+                foreach $ra (@{$rha}) {
+                    # 0   1  2           3            4      5     6     7 8 9 10   11
+                    # 102 H2 52.48160046 013.39580674 355.00 18.90 18.90 2 0 0 0.00 0
+                    # 102 H3 52.48071507 013.39937648 2.64   13.11 13.11 1 0 0 0.00 0
+                    $rwy1 = ${$ra}[1];
+                    $elat1 = ${$ra}[2];
+                    $elon1 = ${$ra}[3];
+                    $rwid  = ${$ra}[5];  # WIDTH in meters?
+                    add_to_bounds($elat1,$elon1);
+
+                    # display
+                    #####################################################
+                    $rwy1 .= ' ' while (length($rwy1) < 3);
+                    $rwid *= $METER_TO_FEET;
+                    $rwid = int($rwid + 0.5);
+                    $info .= "\n";
+                    $info .= " $rwy1: ".get_ll_stg($elat1,$elon1);
+                    $info .= " w=$rwid ft";
+                }
+            }
         }
 
 		$tile = get_bucket_info( $alon, $alat );
@@ -2336,7 +2382,7 @@ sub load_apt_data {
     				#                  0=typ, 1=lat, 2=lon, 3=alt, 4=frq, 5-rng, 6-frq2, 7=nid, 8=name, 9=off, 10=dist, 11=az);
 	    			#push(@g_navlist3, [$typ, $nlat, $nlon, $nalt, $nfrq, $nrng, $nfrq2, $nid, $name, $off, $dist, $az]);
                     my @a = @runways;
-                    #                 0     1      2      3      4      5   6  7  8  9      10     11    12     13   14   15     16
+                    #                 0     1      2      3      4      5   6  7  8  9      10     11    12     13   14   15     16      
                     push(@aptlist2, [$diff, $icao, $name, $alat, $alon, -1, 0, 0, 0, $icao, $name, $off, $dist, $az, \@a, $aalt, $got_twr]); # = @runways
                     $total_lat += $alat;
                     $total_lon += $alon;
@@ -2572,7 +2618,7 @@ sub load_apt_data {
         my @wa = @waterways;
         my @ha = @heliways;
         my @fa = @freqs;
-        #               0      1      2      3      4      5     6     7     8
+        #                  0      1      2      3      4      5     6     7     8
         push(@g_naptlist, [$diff, $icao, $name, $alat, $alon, \@ra, \@wa, \@ha, \@fa ]);
         #                 0      1      2      3      4      5      6
         # push(@g_aptlist, [$diff, $icao, $name, $alat, $alon, $aalt, \@f]);
