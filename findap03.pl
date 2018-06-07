@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 # NAME: findap03.pl
 # AIM: Read FlightGear apt.dat, and find an airport given the name,
+# 2018-06-07 - change fg=<bucket/path> to suit OS
 # 2018-03-10 - Add HELIPAD, and water ways
 # 2017-04-04 - Use G:\S as scenery - see TSSCENERY
 # 2017-01-14 - Use X:\fgdata, as latest, if available...
@@ -89,7 +90,8 @@ my $NAVFILE 	  = "$FGROOT/Navaids/nav.dat.gz";	# the NAV, NDB, etc. data file
 my $FIXFILE 	  = "$FGROOT/Navaids/fix.dat.gz";	# the FIX data file
 my $AWYFILE       = "$FGROOT/Navaids/awy.dat.gz";   # Airways data
 # =============================================================================
-my $VERS="Mar 10, 2018. version 1.1.1"; # very stable
+my $VERS="2018-06-07 version 1.1.2"; # small changes
+###my $VERS="Mar 10, 2018. version 1.1.1"; # very stable
 ###my $VERS="Nov 24, 2016. version 1.1.0"; # very stable
 ###my $VERS="Jun 05, 2016. version 1.0.9";
 ###my $VERS="Apr 10, 2016. version 1.0.8";
@@ -1510,6 +1512,9 @@ sub show_airports_found {
             $line .= $info;
         }
         my $tpind = get_tile($alon,$alat);
+        if ($os =~ /win/i) {
+            $tpind = path_u2d($tpind);
+        }
         $line .= " fg=$tpind"; # +/or? ." (".get_tile_calc($alon,$alat).")";
         # $line .= ")"; # close
         # show it
@@ -4268,6 +4273,9 @@ sub parse_args {
             prt("Searching by lat,lon=$g_center_lat,$g_center_lon, spread $nmaxlatd,$nmaxlond degs\n");
         }
         prt("[v1] $pgmname, $VERS\n") if (VERB1());
+    }
+    if ($os =~ /win/i) {
+        $aptdat = path_u2d($aptdat);
     }
 }
 
