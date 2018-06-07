@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 # NAME: make2cmake.pl
 # AIM: Given an nmake 'makefile' try to generatet the equivalent cmake CMakeLists.txt
+# 2018-05-18 - Some improvement finding the sources, but still not perfect...
 # 03/09/2015 - Copied to the 'scripts' repo for further development
 # 02/09/2013 - Given a base directory, follow sub-directories... and load include files
 # 27/08/2013 - Only show lines not dealt with once
@@ -33,7 +34,8 @@ my $outfile = $temp_dir.$PATH_SEP."temp.$pgmname.txt";
 open_log($outfile);
 
 # user variables
-my $VERS = "0.0.4 2015-09-20";  # on move to scripts repo
+my $VERS = "0.0.5 2018-05-18";  # some improvements
+##my $VERS = "0.0.4 2015-09-20";  # on move to scripts repo
 ##my $VERS = "0.0.3 2013-09-02";
 #my $VERS = "0.0.2 2013-01-09";
 #my $VERS = "0.0.1 2012-07-18";
@@ -82,7 +84,12 @@ my $debug_extra = 0;
 
 ### program variables
 my @warnings = ();
-my %subst = ();
+my %subst = (
+    'STATIC_TARGET' => 'static',
+    'SHARED_TARGET' => 'shared',
+    'STATIC_INSTALL_TARGET' => 'install-static',
+    'SHARED_INSTALL_TARGET' => 'install-shared'
+);
 my %subs_not_found = ();
 my %targets_deps = ();
 my %targets_acts = ();
@@ -287,11 +294,11 @@ sub do_substitutions($$) {
     my $rh = \%subst;
     my @arr = space_split($val);
     my $cnt = scalar @arr;
-    my ($i,$fnd,$rcs,$nval);
+    my ($i,$fnd,$rcs,$nval,$tmp);
     for ($i = 0; $i < $cnt; $i++) {
         $val = $arr[$i];
         if ($val =~ /\$\((.+)\).*\$?/) {
-            my $tmp = $1;
+            $tmp = $1;
             if (defined ${$rh}{$tmp}) {
                 $nval = ${$rh}{$tmp};
                 ### $nval = my_escape($nval);
@@ -314,6 +321,15 @@ sub do_substitutions($$) {
                         $subs_not_found{$tmp} = 1;
                     }
                 }
+            }
+        } elsif ($val =~ /^\@(\w+)\@$/) {
+            $tmp = $1;
+            if (defined ${$rh}{$tmp}) {
+                $nval = ${$rh}{$tmp};
+                $arr[$i] = $nval;
+            } else {
+                prtw("WARNING:$lnn: No sub of [$tmp] in [$val]\nLine [$ival]\n");
+                $subs_not_found{$tmp} = 1;
             }
         }
     }
@@ -708,10 +724,15 @@ sub process_in_file($) {
                 $elnn = $lnn;
                 $act = do_substitutions($act,$blnn);
                 $deps = do_substitutions($deps,$blnn);
-                prt("$blnn-$elnn: TARGET [$targ] deps [$deps]\n actions [$act]\n") if (VERB5());
+                # prt("$blnn-$elnn: TARGET [$targ] deps [$deps]\n actions [$act]\n") if (VERB5());
                 if ((defined $targets_deps{$targ}) && ($targets_deps{$targ} ne $deps)){
-                    prtw("WARNING: TARGET [$targ] deps [".$targets_deps{$targ}."] being over written\n by [$deps]\n");
+                    # prtw("WARNING: TARGET [$targ] deps [".$targets_deps{$targ}."] being over written\n by [$deps]\n");
+                    # 20180518 - hmm this should just be ADDITIONAL depends
+                    $tmp = $targets_deps{$targ}; # get current depends
+                    $deps = "$tmp $deps";
+                    prt("TARGET:1: [$targ] Added [$deps] to existing [$tmp]\n") if (VERB5());
                 }
+                prt("$blnn-$elnn: TARGET [$targ] deps [$deps]\n actions [$act]\n") if (VERB5());
                 ##################################################################################
                 $targets_deps{$targ} = $deps;
                 $targets_acts{$targ} = $act;
@@ -769,10 +790,15 @@ sub process_in_file($) {
                     $elnn = $lnn;
                     $act = do_substitutions($act,$blnn);
                     $deps = do_substitutions($deps,$blnn);
-                    prt("$blnn-$elnn: Target [$targ] deps [$deps]\n actions [$act]\n") if (VERB5());
+                    #prt("$blnn-$elnn: Target [$targ] deps [$deps]\n actions [$act]\n") if (VERB5());
                     if ((defined $targets_deps{$targ}) && ($targets_deps{$targ} ne $deps) && !curr_dep_incs_prev($targets_deps{$targ},$deps)){
-                        prtw("WARNING: Target [$targ] deps [".$targets_deps{$targ}."] being over written\nwith [$deps]") if (VERB2());
+                        # prtw("WARNING: Target [$targ] deps [".$targets_deps{$targ}."] being over written\nwith [$deps]") if (VERB2());
+                        # 20180518 - hmm this should just be ADDITIONAL depends
+                        $tmp = $targets_deps{$targ}; # get current depends
+                        $deps = "$tmp $deps";
+                        prt("TARGET:2: [$targ} Added [$deps] to existing [$tmp]\n") if (VERB5());
                     }
+                    prt("$blnn-$elnn: Target [$targ] deps [$deps]\n actions [$act]\n") if (VERB5());
                     ##################################################################################
                     $targets_deps{$targ} = $deps;
                     $targets_acts{$targ} = $act;
@@ -920,6 +946,10 @@ sub get_type_from_key($$) {
         $type = 'Static Library';   # not sure about this
     } elsif ($key =~ /\.exe$/i) {
         $type = 'Application';  # how to know if this or 'Console Application'
+    } elsif ($key =~ /static/) {
+        $type = 'Static Library';
+    } elsif ($key =~ /shared/) {
+        $type = 'Dynamic-Link Library';
     } elsif ( !($key =~ /\./) ) {
         $type = 'Console Application'; # FIX20130501 - choose it is a linux console app
         prtw("WARNING: Choosing a 'Console Application' for key [$key]! CHECK ME!\n");
@@ -1055,6 +1085,27 @@ sub can_find_source_for_obj($$$) {
     return 0;
 }
 
+my @std_ext = ( '.c', '.cpp', '.cc', '.cxx' );
+
+# if (find_src_of_obj( \$fil3, \$ff, $fdir) ) {
+sub find_src_for_obj($$$) {
+    my ($rfil3, $rff, $fdir) = @_;
+    my $fil3 = ${$rfil3};   # get the file name
+    my ($name,$dir,$ext) = fileparse($fil3, qr/\.[^.]*/ );
+    my ($file,$ff);
+    prt("FIND SOURCE:3: for object '$fil3', name $name, ext $ext, in $fdir...\n") if (VERB9());
+    foreach $ext (@std_ext) {
+        $file = $name.$ext;
+        $ff = $fdir.$file;
+        prt("FIND SOURCE:4: for file '$file', ff '$ff'...\n") if (VERB9());
+        if (-f $ff) {
+            ${$rfil3} = $file;
+            ${$rff} = $ff;
+            return 1;
+        }
+    }
+    return 0;
+}
 
 ##################################################################################
 ### stored values
@@ -1153,6 +1204,7 @@ sub sort_target_deps() {
                     $cnt2++;
                     $ff = File::Spec->rel2abs($fdir.$fil);
                     $ok = "TARGET NOT FOUND!";
+                    prt("SEARCH SOURCE:1: '$fil', '$ff'...\n") if (VERB9());
                     if (defined ${$rh}{$fil}) {
                         $val2 = ${$rh}{$fil}; # this could/should be the sources for this target
                         $fil2 = ${$rhf}{$fil}; # and the source makefile it was in...
@@ -1162,12 +1214,17 @@ sub sort_target_deps() {
                         foreach $fil3 (@arr3) {
                             $cnt3++;
                             $ff = File::Spec->rel2abs($fdir.$fil3);
+                            prt("SEARCH SOURCE:2: '$fil3', '$ff'...\n") if (VERB9());
                             $ok = "NF";
                             ### $ok = (-f $ff) ? "ok" : "NF";
                             if (-f $ff) {
                                 $ok = "ok";
                                 # NO - this adds header directories as well
                                 # add_to_valid_source_dirs($ff);
+                            } elsif ($fil3 =~ /\.o$/) {
+                                if (find_src_for_obj( \$fil3, \$ff, $fdir) ) {
+                                    $ok = "ok";
+                                }
                             }
                             prt(" $cnt2:$cnt3: targ [$fil] source $ff $ok ($fil3)\n") if (VERB2());
                             if (defined $dupes{$ff}) {
@@ -1544,6 +1601,10 @@ sub enumerate_project_hashes() {
             next;
         }
         prt("Project: [$pn], type $type, with $cnt sources, $ccnt C/C++, $hcnt Hdrs, $ocnt O.\n");
+        if (VERB9()) {
+            prt("SOURCES: ".join(" ",@{$rca})."\n");
+            prt("MAKEFILE SOURCE: $minf\n");
+        }
         $cmake .= "\n# Project: [$pn], type $type, with $cnt sources, $ccnt C/C++, $hcnt Hdrs, $ocnt O.\n";
         #if ($type eq 'Dynamic-Link Library') {
         #} elsif ($type eq 'Static Library') {
@@ -1587,12 +1648,12 @@ sub enumerate_project_hashes() {
         #    $cmake .= 'STATIC';
         #}
         $cmake .= "\${LIB_TYPE}";
-        $cmake .= "\n";
-        $cmake .= "      \${$var1}\n";
+        # $cmake .= "\n";
+        $cmake .= " \${$var1}";
         if (length($var2)) {
-            $cmake .= "      \${$var2}\n";
+            $cmake .= " \${$var2}";
         }
-        $cmake =~ s/\n$//;
+        # $cmake =~ s/\n$//;
         $cmake .= " )\n";
         $cmake .= "list (APPEND add_LIBS $pn )\n";
         $cmake .= "list (APPEND inst_LIBS $pn )\n";
