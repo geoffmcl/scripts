@@ -1,6 +1,8 @@
 #!/usr/bin/perl
 # NAME: findap03.pl
 # AIM: Read FlightGear apt.dat, and find an airport given the name,
+# 2018-06-09 - allow apt.dat, as well as apt.dat.gz, use for ($i = 0; $i < $cnt; $i++), and
+#              fix last apt entry...
 # 2018-06-07 - change fg=<bucket/path> to suit OS
 # 2018-03-10 - Add HELIPAD, and water ways
 # 2017-04-04 - Use G:\S as scenery - see TSSCENERY
@@ -90,7 +92,8 @@ my $NAVFILE 	  = "$FGROOT/Navaids/nav.dat.gz";	# the NAV, NDB, etc. data file
 my $FIXFILE 	  = "$FGROOT/Navaids/fix.dat.gz";	# the FIX data file
 my $AWYFILE       = "$FGROOT/Navaids/awy.dat.gz";   # Airways data
 # =============================================================================
-my $VERS="2018-06-07 version 1.1.2"; # small changes
+my $VERS="2018-06-09 version 1.1.3"; # enhancements...
+###my $VERS="2018-06-07 version 1.1.2"; # small changes
 ###my $VERS="Mar 10, 2018. version 1.1.1"; # very stable
 ###my $VERS="Nov 24, 2016. version 1.1.0"; # very stable
 ###my $VERS="Jun 05, 2016. version 1.0.9";
@@ -2245,11 +2248,14 @@ sub show_navaids_found {
 # rwy lat        lon        num true    feet displament/extension  wid lights surf shld mark smooth signs VASI
 # 100 in Rev 1000 data
 sub load_apt_data {
-    my ($cnt,$msg);
+    my ($i,$cnt,$msg);
     prt("[v9] Loading $aptdat file ...\n") if (VERB9());
     mydie("ERROR: Can NOT locate $aptdat ...$!...\n") if ( !( -f $aptdat) );
-    ###open IF, "<$aptdat" or mydie("OOPS, failed to open [$aptdat] ... check name and location ...\n");
-    open IF, "gzip -d -c $aptdat|" or mydie( "ERROR: CAN NOT OPEN $aptdat...$!...\n" );
+    if ($aptdat =~ /\.gz$/) {
+        open IF, "gzip -d -c $aptdat|" or mydie( "ERROR: CAN NOT OPEN $aptdat...$!...\n" );
+    } else {
+        open IF, "<$aptdat" or mydie("OOPS, failed to open [$aptdat] ... check name and location ...\n");
+    }
     my @lines = <IF>;
     close IF;
     $cnt = scalar @lines;
@@ -2294,31 +2300,40 @@ sub load_apt_data {
     }
     $msg .= " got $cnt lines, FOR airports,rwys,txwys... ";
     $g_version = 0;
-    foreach $line (@lines) {
+    my $lncnt = 0;
+    # eat first two line, and get version
+    for ($i = 0; $i < $cnt; $i++) {
+        $lncnt++;
+        $line = $lines[$i];
         $line = trimall($line);
-        if ($line =~ /\s+Version\s+/i) {
-            @arr2 = split(/\s+/,$line);
-            $g_version = $arr2[0];
-            $msg .= "Version $g_version";
+        $len = length($line);
+        if ($i == 0) {
+            # test line 1 - just a letter 'I'
+        } elsif ($i == 1) {
+            # version line
+            if ($line =~ /^(\d+)\s*/) {
+                $g_version = $1;
+                if ($len > 80) {
+                    $len = index($line,',');
+                    $len = 80 if ($len <= 0);
+                    $line = substr($line,0,$len);
+                }
+                $msg .= "Version $g_version";
+            }
+            prt("$line ($g_version) file: $aptdat\n");
+            $i++;
             last;
         }
     }
     prt("$msg\n") if (VERB1());
-    my $lncnt = 0;
     #my $acsv = "icao,latitude,longitude,name\n";
-    foreach $line (@lines) {
+    # 20180609 - start at 3rd line in the file...
+    for (; $i < $cnt; $i++) {
+        $line = $lines[$i];
         $lncnt++;
         $line = trimall($line);
         $len = length($line);
         next if ($len == 0);
-        next if ($line =~ /^I/);
-        if ($line =~ /^\d+\s+Version\s+/) {
-            #    my $ind = index($line,',');
-            $len = index($line,',');
-            $len = 80 if ($len <= 0);
-            prt(substr($line,0,$len)." ($g_version) file: $aptdat\n");
-            next;
-        }
         ###prt("$line\n");
         my @arr = split(/ /,$line);
         push(@line_array,$line);
@@ -2406,6 +2421,7 @@ sub load_apt_data {
             @line_array = ();   # clear ALL lines of this AIRPORT
             push(@line_array,$line);
             $apt = $line;
+            prt("[v9]:$lncnt:APT: $apt\n") if (VERB9());
             $rwycnt = 0;
             $wwcnt = 0;
             $helicnt = 0;
@@ -2535,22 +2551,34 @@ sub load_apt_data {
             push(@heliways, \@a2);
             $helicnt++;
         } elsif ($type == 110) {
-            # 110 2 0.00 134.10 runway sholder
+            # 110 2 0.00 134.10 runway shoulder
+            # 110 1 0.25 153.2800 Taxiway - Must form a closed loop
         } elsif ($type == 111) {
+            # Node - like taxiway segment 
             # 111 22.30419700 114.21613100
         } elsif ($type == 112) {
+            # Node with Bezier control point - like taxiway
             # 112 22.30449500 114.21644400 22.30480900 114.21677000 51 102
+            # 112  40.15672300 -008.46843700  40.15670200 -008.46846200
         } elsif ($type == 113) {
+            # Node with implicit close of loop Implied join to first node in chain
             # 113 22.30370300 114.21561700
         } elsif ($type == 114) {
+            # Node with Bezier control point, with implicit close of loop 
+            # Implied join to first node in chain
             # 114 43.29914799 -008.38013558 43.29965322 -008.37970933
         } elsif ($type == 115) {
+            # Node terminating a string (no close loop) 
             # 115 22.31009400 114.21038500
         } elsif ($type == 116) {
+            # Node with Bezier control point, terminating a string (no close loop)
             # 116 43.30240028 -008.37799316 43.30271076 -008.37878407
         } elsif ($type == 120) {
+            # Linear feature (painted line or light string) header 
+            # Can form closed loop or simple string
             # 120 hold lines W A13
         } elsif ($type == 130) {
+            # Airport boundary header Must form a closed loop
             # 130 Airport Boundary
         } elsif ($type == 1000) {
             # 1000 Northerly flow
@@ -2631,15 +2659,21 @@ sub load_apt_data {
         $totaptcnt++;	# count another AIRPORT
         $add = 0;
         if ($SRCHICAO) {
-            $add = 1 if ($name =~ /$apticao/);
-        } else {
-            if ($SRCHONLL) {
-                if (($dlat < $maxlatd) && ($dlon < $maxlond)) {
-                    $add = 1;
-                }
+            # 1 - ICAO matches
+            if ($use_regex_match) {
+                # NOTE: An ICAO 'K38' will also match RK38, EK38, NK38, OK38, AK38...
+                $add = 1 if ($icao =~ /$apticao/);
             } else {
-                $add = 1 if ($name =~ /$aptname/i);
+                $add = 1 if ($icao eq $apticao);
             }
+        } elsif ($SRCHONLL) {
+            # 2 - searching by LAT,LON position
+            if (($dlat < $maxlatd) && ($dlon < $maxlond)) {
+                $add = 1;
+            }
+        } else {
+            # 3 - searching by airport name
+            $add = 1 if ($name =~ /$aptname/i);
         }
         if ($add) {
              $off = near_given_point( $alat, $alon, \$dist, \$az ); # if ($SRCHONLL), near GLOBAL center
@@ -2657,6 +2691,8 @@ sub load_apt_data {
             $icao_lon = $alon;
             $total_apts++;
         }
+    } else {
+        prt("What! NO LAST AIRPORT $apt\n"); 
     }
     if ( (! $SRCHONLL) && $total_apts) {
         # either by ICAO or Name search, so this become CENTER lat/lon
@@ -4497,6 +4533,19 @@ ZMH    26.511111 -077.076944 ZQA    25.025517 -077.446428 2 060 600 BR70V
 ZMR    41.530181 -005.639697 ZORBA  40.188067 -005.393864 2 245 460 UW990
 99
 
+EOF
+    return $txt;
+}
+
+sub node1000() {
+    my $txt = <<EOF;
+112 Row code for a node. First node must follow an appropriate header row 111 thru 116
+47.53752190 [All nodes] Latitude of node in decimal degrees Eight decimal places supported
+-122.30826710 [All nodes] Longitude of node in decimal degrees Eight decimal places supported
+47.53757385 [112, 114, 116 only] Latitude of Bezier control point in decimal degrees Eight decimal places supported. Ignore for 111, 113, 115
+-122.30824831 [112, 114, 116 only] Latitude of Bezier control point in decimal degrees Eight decimal places supported. Ignore for 111, 113, 115
+3 [Not for 115 or 116] Code for painted line type on line segment starting at this node Integer Line Type Code (see below). Not for 115 or 116
+102 [Not for 115 or 116] Code for lighting on line segment starting at this node Integer Line Type Code (see below). Not for 115 or 116
 EOF
     return $txt;
 }
