@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 # NAME: msvclog.pl
 # AIM: Read a MSVC build log output, and report success and failed projects
+# 2018-06-22 - Accept cmake out message(STATUS "messages...") better, before 'Configuring done' 
 # 2018-05-21 - Add show of 'error' lines
 # 2018-04-12 - Show 'begin' line if date or time...
 # 2018-02-28 - Skip ComputeCustomBuildOutput:
@@ -23,7 +24,6 @@ use strict;
 use warnings;
 use File::Basename;  # split path ($name,$dir,$ext) = fileparse($file [, qr/\.[^.]*/] )
 use Cwd;
-my $os = $^O;
 my $os = $^O;
 my ($pgmname,$perl_dir) = fileparse($0);
 my $temp_dir = $perl_dir . "/temp";
@@ -73,6 +73,7 @@ my $curr_out = '';
 # /wd4244 /wd4305 /wd4477 /wd4996 /wd4005 /wd4273 /wd4267 /wd4474
 my %warn_disabled = ();
 my %flags_seen = ();
+my $had_end_cmake = 0;
 
 sub VERB1() { return $verbosity >= 1; }
 sub VERB2() { return $verbosity >= 2; }
@@ -401,6 +402,13 @@ sub process_in_file($) {
         } elsif ($line =~ /^\s+All\s+outputs\s+are\s+up-to-date.$/) {
             next;
         } elsif ($line =~ /^--\s+/) {
+            # End of cmake config and gen phases
+            # -- Configuring done
+            # -- Generating done
+            # -- Build files have been written to: Z:/build-netcdf.x64
+            if ($tline =~ /^--\s+Configuring\s+done$/) {
+                $had_end_cmake = 1; #near end of cmake conf & gen
+            }
             if ($show_cmake_mess) {
                 # -- Configuring incomplete, errors occurred!
                 prt("$lnn: $line\n");
@@ -773,6 +781,20 @@ sub process_in_file($) {
             prt("$lnn:$line:\n$linklin\n") if (VERB9());
             $i = $j - 1;    # update position
             next;
+        } elsif ($cmd1 eq 'MakeDirsForLink:') {
+            # just skip over these command
+            $linklin = '';
+            $tmp = $line;
+            # start at NEXT line
+            for ($j = $lnn; $j < $lncnt; $j++) {
+                $tmp = $lines[$j];
+                last if ( !($tmp =~ /^\s/) );
+                $tmp =~ s/^\s+//;
+                $linklin .= " $tmp";
+            }
+            prt("$lnn:$line:\n$linklin\n") if (VERB9());
+            $i = $j - 1;    # update position
+            next;
         }
 
         if ( ($size == 1) && is_c_source($cmd1) ) {
@@ -1136,9 +1158,9 @@ sub process_in_file($) {
                 } elsif ($line =~ /^Build\s+started\s(.+)$/) {
                     # ...
                 } elsif ($line =~ /^ERROR:\s+cmake\s+build\s+Debug/i) {
-                    # 791:WARNING: UNPARSED 'ERROR: cmake build Debug ' *** FIX ME **
+                    # 791:UNPARSED 'ERROR: cmake build Debug ' *** FIX ME **
                 } elsif ($line =~ /Build\s+FAILED/) {
-                    # 639:WARNING: UNPARSED 'Build FAILED.' *** FIX ME **
+                    # 639:UNPARSED 'Build FAILED.' *** FIX ME **
                 } elsif ($line =~ /^Setup\s+Qt/) {
                     # 'Setup Qt 5 64-bits D:\Qt5.6.1\5.6\msvc2015_64 '
                 ###} elsif ($line =~ /^Begin\s+(\d{4}-\d{2}-\d{2})/) {
@@ -1200,7 +1222,9 @@ sub process_in_file($) {
                 } elsif ($line =~ /Environment\s+initialized/) {
                     # ignore '[vcvarsall.bat] Environment initialized for: 'x64''
                 } else {
-                    prtw("$lnn:WARNING: UNPARSED '$line' *** FIX ME **\n");
+                    if ($had_end_cmake) {
+                        prtw("$lnn:WARNING: UNPARSED '$line' *** FIX ME **\n");
+                    }
                 }
                 #############################################################################
             }
