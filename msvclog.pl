@@ -823,6 +823,8 @@ sub process_in_file($) {
             next;
         } elsif ($line =~ /\(Link target\)\s+->/) {
             next;
+        } elsif ($line =~ /\(Lib target\)\s+->/) {
+            next;
         } elsif ($line =~ /^Build\s+succeeded\./) {
             next;
         }
