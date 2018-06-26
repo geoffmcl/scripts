@@ -1050,6 +1050,26 @@ sub process_in_file($) {
                     push(@warns,$trline);
                 }
             }
+        } elsif ($line =~ /^error:\s+/) {
+            #pgm_exit(1,"$lnn: $line\n");
+            if (! defined $error_lines{$line}) {
+                $errorcnt++;
+                $error_lines{$line} = 1;
+                $trline = get_trim_error($line);
+                push(@error,$trline);
+            }
+            # Deal with multiple lines
+            $linklin = '';
+            # start at NEXT line
+            for ($j = $lnn; $j < $lncnt; $j++) {
+                $tmp = $lines[$j];
+                last if ($tmp =~ /^\w/);
+                $tmp =~ s/^\s+//;
+                $linklin .= " $tmp";
+            }
+            #pgm_exit(1,"$lnn: $line\n$linklin\nTEMP EXIT\n");
+            prt("$lnn:$line:\n$linklin\n") if (VERB9());
+            $i = $j - 1;    # update position
         } else {
             if ($line =~ /^ClCompile:$/) {
                 # could collect compile lines
@@ -1223,6 +1243,12 @@ sub process_in_file($) {
                     # ignore '** Visual Studio 2017 Developer Command Prompt v15.5.4'
                 } elsif ($line =~ /Environment\s+initialized/) {
                     # ignore '[vcvarsall.bat] Environment initialized for: 'x64''
+                } elsif ($line =~ /^Compiling\s*/i) {
+                    # 'Compiling TerraGear'
+                } elsif ($line =~ /^All done/i) {
+                    # 'All done!'
+                } elsif ($line =~ /^No\s+pause/i) {
+                    # 'No pause reqested'
                 } else {
                     if ($had_end_cmake) {
                         prtw("$lnn:WARNING: UNPARSED '$line' *** FIX ME **\n");
