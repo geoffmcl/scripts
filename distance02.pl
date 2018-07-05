@@ -3,6 +3,7 @@
 # AIM: Use perl trig function for distance London to Tokyo...
 # from : http://perldoc.perl.org/Math/Trig.html
 # previous disptance.pl, with no use of SIMGEAR
+# 2018-07-05 - Add intermediate points to xg file,...
 # 2016-10-03 - Add a get_decimal_stg($dec,$places)
 # 19/04/2016 - If distance between point is less than 1 Km, show meters and feet
 # 08/07/2015 - Move into scripts repo
@@ -33,7 +34,8 @@ require 'lib_utils.pl' or die "Unable to load 'lib_utils.pl' Check paths in \@IN
 require 'fg_wsg84.pl' or die "Unable to load fg_wsg84.pl ...\n";
 require 'lib_fgio.pl' or die "Unable to load 'lib_fgio.pl'! Check location and \@INC content.\n";
 
-my $VERS = "0.0.9 2016-10-03"; # enhance display when distance small
+my $VERS = "0.1.0 2018-07-05"; # enhance display when distance small
+#my $VERS = "0.0.9 2016-10-03"; # enhance display when distance small
 # my $VERS = "0.0.8 2016-04-19"; # enhance display when distance small
 # my $VERS = "0.0.7 2015-07-15"; # some functions moved to library
 # my $VERS = "0.0.6 2015-07-08"; # add to scripts repo
@@ -96,6 +98,7 @@ my $g_interval = $MAD_LL;
 my $got_icao = 0;
 my $do_global_vals = 0;
 my $verbosity = 0;
+# my $use_new_course = 1;
 
 my ($usr_wind_dir,$usr_wind_spd);
 my $got_wind = 0;
@@ -443,6 +446,40 @@ sub get_heading_stg($) {
 }
 
 
+my $x_min_lat = 400;
+my $x_min_lon = 400;
+my $x_max_lat = -400;
+my $x_max_lon = -400;
+
+sub add_to_bbox($$) {
+    my ($lon,$lat) = @_;
+    $x_min_lat = $lat if ($lat < $x_min_lat);
+    $x_min_lon = $lon if ($lon < $x_min_lon);
+    $x_max_lat = $lat if ($lat > $x_max_lat);
+    $x_max_lon = $lon if ($lon > $x_max_lon);
+}
+
+sub get_x_bbox($) {
+    my $color = shift;
+    my $xg = "# bbox $x_min_lon $x_min_lat $x_max_lon $x_max_lat\n";
+    if (($x_min_lat == 400) ||
+        ($x_min_lon == 400) ||
+        ($x_max_lat == -400) ||
+        ($x_max_lon == -400))
+    {
+        $xg = "# no bbox\n";
+    } else {
+        $xg .= "color $color\n";
+        $xg .= "$x_min_lon $x_min_lat\n";
+        $xg .= "$x_min_lon $x_max_lat\n";
+        $xg .= "$x_max_lon $x_max_lat\n";
+        $xg .= "$x_max_lon $x_min_lat\n";
+        $xg .= "$x_min_lon $x_min_lat\n";
+        $xg .= "NEXT\n";
+    }
+    return $xg;
+}
+
 sub show_intervals($$$$) {
     my ($lat1,$lon1,$lat2,$lon2) = @_;
     my ($dsg_az1,$dsg_az2,$sg_dist,$dist_m,$ikm,$dnm);
@@ -451,6 +488,7 @@ sub show_intervals($$$$) {
     $max = $g_interval;
     my $dist = $sg_dist;
     $dist = $sg_dist / $max if ($max > 0);
+    my $xg = "color gray\n";
     ###if (VERB5()) {
     ###    prt("List of $g_interval intervals from $lat1,$lon1,\n");
     ###    prt("on azimuth $dsg_az1, $sg_dist meters, to $lat2,$lon2\n");
@@ -468,9 +506,13 @@ sub show_intervals($$$$) {
         $naz2  = get_heading_stg($dsg_az1);
         $scnt = " " x length($scnt);
         prt("$scnt $nlat2 $nlon2 in $g_interval legs.\n");
+        $xg .= "# $lat1,$lon1 to $lat2,$lon2, hdg $naz2, in $g_interval legs, steps $ikm km, $dnm nm.\n";
         ###prt("$scnt $nlat2 $nlon2 in $g_interval legs $ikm km. $dnm nm.\n");
     ###}
     $scnt = sprintf("%3d:",0);
+    $xg .= "$lon1 $lat1 ; Start\n";
+    add_to_bbox($lon1,$lat1);
+    my ($n_az1,$n_az2,$n_dist);
     if (VERB9()) {
         $nlat2 = get_latlon_stg($lat1);
         $nlon2 = get_latlon_stg($lon1);
@@ -482,6 +524,8 @@ sub show_intervals($$$$) {
         $i2 = $i + 1;
         $dist_m = $dist * $i2;
         fg_geo_direct_wgs_84( $lat1, $lon1, $dsg_az1, $dist_m, \$nlat, \$nlon, \$naz );
+        # get correction - from new location to destination
+        $res = fg_geo_inverse_wgs_84 ($nlat,$nlon,$lat2,$lon2,\$n_az1,\$n_az2,\$n_dist);
         $scnt = sprintf("%3d:",$i2);
         $ikm = $dist_m / 1000;
         $dnm = $ikm * $Km2NMiles;
@@ -494,6 +538,10 @@ sub show_intervals($$$$) {
             $raz -= 360 if ($raz > 360);
             $naz2  = get_heading_stg($raz);
             prt("$scnt $nlat2 $nlon2 $naz2 $ikm km. $dnm nm.\n");
+        $xg .= "$nlon $nlat ; $scnt: $ikm km. $dnm nm.\n";
+        ### $xg .= "$nlon $nlat ; $scnt $dsg_az1 - $n_az1?\n";
+        add_to_bbox($nlon,$nlat);
+        # $dsg_az1 = $n_az1 if ($use_new_course); # maybe NOT correct
         #} else {
         #    prt("$scnt $nlat $nlon $naz\n");
         #}
@@ -512,6 +560,11 @@ sub show_intervals($$$$) {
         ###prt("$scnt $nlat2 $nlon2 $naz2 $ikm km. $dnm nm.\n");
         prt("$scnt $nlat2 $nlon2 $naz2\n");
     #}
+    $xg .= "$lon2 $lat2 ; Destination\n";
+    $xg .= "NEXT\n";
+    add_to_bbox($lon2,$lat2);
+    $xg = get_x_bbox("gray").$xg;
+    return $xg;
 }
 
 sub get_wind_xg($$$$$$) {
@@ -681,12 +734,6 @@ sub show_distance($$$$) {
 
     }
 
-    if (length($xg_out)) {
-        $xg_out = ($os =~ /win/i) ? path_u2d($xg_out) : path_d2u($xg_out);
-        write2file($xg,$xg_out);
-        prt("Written xg output to $xg_out\n");
-    }
-
     ########################################################################
     # derived (for display)
     ########################################################################
@@ -754,8 +801,15 @@ sub show_distance($$$$) {
     }
     # =================================================
     if ($g_interval != $MAD_LL) {
-        show_intervals($lat1,$lon1,$lat2,$lon2);
+        $xg .= show_intervals($lat1,$lon1,$lat2,$lon2);
     }
+
+    if (length($xg_out)) {
+        $xg_out = ($os =~ /win/i) ? path_u2d($xg_out) : path_d2u($xg_out);
+        write2file($xg,$xg_out);
+        prt("Written xg output to $xg_out\n");
+    }
+
     return $d_km;
 }
 
