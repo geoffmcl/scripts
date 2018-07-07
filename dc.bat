@@ -13,7 +13,7 @@
 @REM # presently has some rigid default... lots of work... help needed...
 @REM #======================================================================
 @REM Deal with script version - pre release
-@set DC_VERSION=0.0.11
+@set DC_VERSION=0.0.12
 @set DC_DATE=20180708
 @REM Set VERSION dc.v0.2.bat 20180627
 @REM Set VERSION dc.v0.1.bat 20180627
