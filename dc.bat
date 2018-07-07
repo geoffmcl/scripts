@@ -13,8 +13,8 @@
 @REM # presently has some rigid default... lots of work... help needed...
 @REM #======================================================================
 @REM Deal with script version - pre release
-@set DC_VERSION=0.0.9
-@set DC_DATE=20180629
+@set DC_VERSION=0.0.10
+@set DC_DATE=20180706
 @REM Set VERSION dc.v0.2.bat 20180627
 @REM Set VERSION dc.v0.1.bat 20180627
 @REM Set VERSION dc.bat 20180626
@@ -24,7 +24,7 @@
 @set DC_ERRORS=0
 @REM * -a y/n  y=do vcpkg update n=skip vcpkg update            default=y
 @REM if /I "%TMPARG%" == "a" GOTO :SET_DO_UPDATES
-@set DC_DO_UPDATES=n
+@set DC_DO_UPDATES=y
 @REM set DC_ARGUMENTS=CMAKE OSG PLIB OPENRTI SIMGEAR FGFS DATA FGRUN FGO FGX OPENRADAR ATCPIE TERRAGEAR TERRAGEARGUI
 @set DC_ARGUMENTS=OSG PLIB SIMGEAR FGFS DATA TERRAGEAR
 @set DC_SET_ARGS=
@@ -34,7 +34,7 @@
 @REM * -r y|n  y=reconfigure programs before compiling them  n=do not reconfigure    default=y
 @REM * -r y/n  y=reconfigure del CMakeLists.txt  n=do not reconfigure default=n
 @REM if /I "%TMPARG%" == "r" GOTO :SET_DO_RECONFIG
-@set DC_DO_CMAKE=n
+@set DC_DO_CMAKE=y
 @set DC_TRIPLET=x64-windows
 @set DC_VCPKG_TRIP=--triplet %DC_TRIPLET%
 @set ERROR_COUNT=0
@@ -47,7 +47,7 @@
 @REM set DOPAUSE=pause
 @REM Begin some configuration options... like download_and_compile.sh
 @if %DC_TGBRANCH%x EQU x (
-@set DC_TGBRANCH=scenery/ws2.0
+@set DC_TGBRANCH=next
 )
 @if %DC_TGREPO%x EQU x (
 @set DC_TGREPO=https://git.code.sf.net/p/flightgear/terragear
@@ -142,8 +142,17 @@
 @if /I "%TMPARG%" == "a" GOTO :SET_DO_UPDATES
 @REM * -r y/n  y=reconfigure del CMakeLists.txt  n=do not reconfigure default=y
 @if /I "%TMPARG%" == "r" GOTO :SET_DO_RECONFIG
+@REM * -o y/n  y=do openscene graph  n=skip redoing OSG - default=y
+@if /I "%TMPARG%" == "o" GOTO :SET_DO_OSG
 @REM more args
 @goto ERROR_UKNOWN_ARGUMENT
+:SET_DO_OSG
+@if /I "%TMPPARAM%" == "y" GOTO :SET_OSG
+@if /I "%TMPPARAM%" == "n" GOTO :SET_OSG
+@goto :ERROR_BAD_ARGUMENT2
+:SET_OSG
+@set DC_DO_OSG=%TMPPARAM%
+@goto RPT
 
 :SET_DO_RECONFIG
 @if /I "%TMPPARAM%" == "y" GOTO :SET_RECONF
@@ -207,8 +216,7 @@
 
 @if %DC_ERRORS% GTR 0 goto ISERR
 @REM if NOT "%DC_ERRORS%x" == "0x" goto ISERR
-
-@echo Process arguments %DC_SET_ARGS%, do update, -a %DC_DO_UPDATES%, do cmake, -r %DC_DO_CMAKE%
+@echo By dc %DC_VERSION%, %DC_DATE%, args %DC_SET_ARGS%, do update, -a %DC_DO_UPDATES%, do cmake, -r %DC_DO_CMAKE%, do osg -o %DC_DO_OSG%
 
 @REM TODO: Seems boost IS required for some of the 3rdParty libs, so can NOT be avoided!
 @REM if %DC_DO_BOOST% EQU y (
@@ -250,10 +258,19 @@
     )
 )
 
+@REM OSG HAS to be built once - but until version change, few updates... so skip if requested
+@REM TODO: Should be able to switch OSG version
+@IF NOT EXIST openscenegraph-3.4-git/NUL (
+@set DC_DO_OSG=y
+)
+@if NOT EXIST %ROOT_DIR%/Stage/bin/osgversion.exe (
+@set DC_DO_OSG=y
+)
+
 @if %DC_DO_OSG% EQU y (
 @call :INSTALL_OSG
 ) else (
-@echo Using pre-installed OSG %OSG_DIR%
+@echo Skip re-install of OSG... use installed OSG %OSG_DIR%
 )
 
 @IF NOT EXIST simgear-git/NUL (
@@ -278,13 +295,13 @@
     @cd %ROOT_DIR%
 )
 
-@IF NOT EXIST terragear-ws2.0-git/NUL (
-	@mkdir terragear-ws2.0-build
+@IF NOT EXIST terragear-git/NUL (
+	@mkdir terragear-build
 	@echo Downloading TerraGear . . .
-	git clone -b %DC_TGBRANCH% %DC_TGREPO% terragear-ws2.0-git
+	git clone -b %DC_TGBRANCH% %DC_TGREPO% terragear-git
 ) ELSE (
 	@echo Updating TerraGear . . .
-	@cd terragear-ws2.0-git
+	@cd terragear-git
 	git pull
     @cd %ROOT_DIR%
 )
@@ -292,18 +309,18 @@
 @if %DC_DO_OSG% EQU y (
 @call :BUILD_OSG
 ) else (
-@echo Using pre-installed OSG %OSG_DIR%
+@echo Skip build osg... use installed OSG %OSG_DIR%
 )
 
-@ECHO Compiling SimGear . . .
+@ECHO Compiling SimGear . . . do cmake %DC_DO_CMAKE%
 @cd simgear-build
-@if %DC_DO_CMAKE% EQU y (
-    @if EXIST CMakeCache.txt (
+@if EXIST CMakeCache.txt (
+    @if %DC_DO_CMAKE% EQU y (
         @del CMakeCache.txt
         @echo Reconfigure simgear built
+    ) else (
+       @goto :DN_SG_CMAKE
     )
-) else (
-   @goto :DN_SG_CMAKE
 )
 @echo Doing 'cmake ..\simgear-git -G  %CMAKE_TOOLCHAIN% -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH%  -DCMAKE_INSTALL_PREFIX:PATH=%ROOT_DIR%/Stage'
 @cmake ..\simgear-git -G  %CMAKE_TOOLCHAIN% ^
@@ -342,18 +359,19 @@ cmake --build . --config Release --target INSTALL
 
 @REM :DOTERRA
 
-@ECHO Compiling TerraGear . . .
-@cd terragear-ws2.0-build
-@if %DC_DO_CMAKE% EQU y (
-    @if EXIST CMakeCache.txt (
+@ECHO Compiling TerraGear . . .  do cmake %DC_DO_CMAKE%
+@cd terragear-build
+@if EXIST CMakeCache.txt (
+    @if %DC_DO_CMAKE% EQU y (
         @del CMakeCache.txt
         @echo Reconfigure terragear built
+    ) else (
+        @echo Avoiding doing TG cmake...
+        @goto :DN_TG_CMAKE
     )
-) else (
-    @goto :DN_TG_CMAKE
 )
-@echo Doing 'cmake ..\terragear-ws2.0-git -G  %CMAKE_TOOLCHAIN% -DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH% -DCMAKE_INSTALL_PREFIX:PATH=%ROOT_DIR%/Stage'
-@cmake ..\terragear-ws2.0-git -G  %CMAKE_TOOLCHAIN% ^
+@echo Doing 'cmake ..\terragear-git -G  %CMAKE_TOOLCHAIN% -DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH% -DCMAKE_INSTALL_PREFIX:PATH=%ROOT_DIR%/Stage'
+@cmake ..\terragear-git -G  %CMAKE_TOOLCHAIN% ^
 	-DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH% ^
 	-DCMAKE_INSTALL_PREFIX:PATH=%ROOT_DIR%/Stage
 :DN_TG_CMAKE
@@ -364,20 +382,20 @@ cmake --build . --config Release --target INSTALL
 @set FAILED_PROJ=%FAILED_PROJ% TerraGear
 )
 @cd %ROOT_DIR%
-@if EXIST terragear-ws2.0-git\version (
-@set /P DC_TG_VERSION=< terragear-ws2.0-git\version
+@if EXIST terragear-git\version (
+@set /P DC_TG_VERSION=< terragear-git\version
 ) else (
 @echo Failed to locate TG version file
 )
 
 @if %ERROR_COUNT% EQU 0 (
 @call :WRITE_BAT
-@echo Done TerrGear - CD %ROOT_DIR%\Stage\bin - to being using the tools
+@echo Done TerrGear - CD %ROOT_DIR%\Stage\bin - to use TG Tools v.%DC_TG_VERSION%
 ) else (
 @echo Done TerrGear . . . Need to maybe fix the errors...
 )
 @echo.
-@ECHO All done! Error count %ERROR_COUNT% FAILED_PROJ=%FAILED_PROJ%
+@ECHO Done dc.bat %DC_VERSION%, %DC_DATE%. Error count %ERROR_COUNT%, FAILED_PROJ=%FAILED_PROJ%
 @echo.
 
 @%DOPAUSE%
@@ -487,6 +505,8 @@ cd %ROOT_DIR%
 @REM if /I "%TMPARG%" == "a" GOTO :SET_DO_UPDATES
 @echo * -r y/n  y=reconfigure, ie del CMakeCache.txt n=do not reconfigure default=y
 @REM if /I "%TMPARG%" == "r" GOTO :SET_DO_RECONFIG
+@echo * -o y/n  y=do openscene graph  n=skip redoing OSG - default=y
+@REM if /I "%TMPARG%" == "o" GOTO :SET_DO_OSG
 @REM TODO: Need more options, and arg list not followed
 @echo One or more of %DC_ARGUMENTS%
 @echo * without options or with ALL it recompiles the content of the DC_SET_ARGS variable.
