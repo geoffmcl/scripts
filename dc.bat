@@ -26,7 +26,7 @@
 @REM if /I "%TMPARG%" == "a" GOTO :SET_DO_UPDATES
 @set DC_DO_UPDATES=y
 @REM set DC_ARGUMENTS=CMAKE OSG PLIB OPENRTI SIMGEAR FGFS DATA FGRUN FGO FGX OPENRADAR ATCPIE TERRAGEAR TERRAGEARGUI
-@set DC_ARGUMENTS=OSG PLIB SIMGEAR FGFS DATA TERRAGEAR
+@set DC_ARGUMENTS=OSG PLIB SIMGEAR FGFS DATA TERRAGEAR TERRAGEARGUI
 @set DC_SET_ARGS=
 @set DC_DEFAULT=SIMGEAR TERRAGEAR
 @set DC_DO_OSG=y
@@ -40,6 +40,8 @@
 @set ERROR_COUNT=0
 @set FAILED_PROJ=
 @set DOPAUSE=echo No pause requested
+@set GIT_EXE=git
+@set CMAKE_EXE=cmake
 @REM set TMPDRV=x:
 @REM if NOT EXIST %TMPDRV%\nul (
 @REM echo Warning: The %TMPDRV% is not setup...
@@ -57,7 +59,10 @@
 @set DC_FGREPO=https://git.code.sf.net/p/flightgear/flightgear
 @set DC_SGREPO=https://git.code.sf.net/p/flightgear/simgear
 @set DC_OSGBRANCH=OpenSceneGraph-3.4
-
+@REM TG GUI
+@set "DC_TGGUI_REPO=git://git.code.sf.net/p/flightgear/fgscenery/terrageargui"
+@set "DC_TGGUI_BRANCH=master"
+@set TGGUI_INSTALL_DIR=%ROOT_DIR%/Stage
 @REM These should be passed in on command, or in environment...
 @REM set OSG_DIR=%TMPDRV%\install\msvc140-64\OpenSceneGraph
 @REM set BOOST_ROOT=C:\local\boost_1_62_0
@@ -206,17 +211,18 @@
 @if NOT "%DC_WANTS_HELP%x" == "x" goto :HELP
 
 @REM No projects argment given, use default
-@if %DC_SET_ARGS%x EQU x (
+@if "%DC_SET_ARGS%x" EQU "x" (
 @set DC_SET_ARGS=%DC_DEFAULT%
 ) else (
-    @if %DC_SET_ARGS%x EQU ALLx (
+    @if "%DC_SET_ARGS%x" EQU "ALLx" (
        @set DC_SET_ARGS=%DC_ARGUMENTS%
     )    
 )
 
 @if %DC_ERRORS% GTR 0 goto ISERR
 @REM if NOT "%DC_ERRORS%x" == "0x" goto ISERR
-@echo By dc %DC_VERSION%, %DC_DATE%, args %DC_SET_ARGS%, do update, -a %DC_DO_UPDATES%, do cmake, -r %DC_DO_CMAKE%, do osg -o %DC_DO_OSG%
+@set DC_DO_OPTS=do update, -a %DC_DO_UPDATES%, do cmake, -r %DC_DO_CMAKE%, do osg -o %DC_DO_OSG%
+@echo By dc %DC_VERSION%, %DC_DATE%, args %DC_SET_ARGS%, %DC_DO_OPTS%
 
 @REM TODO: Seems boost IS required for some of the 3rdParty libs, so can NOT be avoided!
 @REM if %DC_DO_BOOST% EQU y (
@@ -241,7 +247,7 @@
         @echo Updating vcpkg . . .
         @cd vcpkg-git
         @REM ========================
-        git pull
+        call git pull
         
         @echo Updating vcpkg . . . %DC_VCPKG_TRIP%
         vcpkg update
@@ -280,7 +286,7 @@
 ) ELSE (
 	@echo Updating SimGear . . .
 	@cd simgear-git
-	git pull
+	@call git pull
     @cd %ROOT_DIR%
 )
 
@@ -291,7 +297,7 @@
 ) ELSE (
 	@echo Updating FlightGear . . .
 	cd flightgear-git
-	git pull
+	@call git pull
     @cd %ROOT_DIR%
 )
 
@@ -302,7 +308,7 @@
 ) ELSE (
 	@echo Updating TerraGear . . .
 	@cd terragear-git
-	git pull
+	@call git pull
     @cd %ROOT_DIR%
 )
 
@@ -324,6 +330,10 @@
 
 @echo.
 @ECHO Compiling SimGear . . . do cmake %DC_DO_CMAKE%
+@echo ##############################
+@echo #########  %DC_PROJ%  ##########
+@echo ##############################
+
 @cd simgear-build
 @if EXIST CMakeCache.txt (
     @if %DC_DO_CMAKE% EQU y (
@@ -365,6 +375,9 @@
 @REM Is 'next', so may fail time to time... like Jenkins...
 @echo.
 @ECHO Compiling FlightGear . . . do cmake %DC_DO_CMAKE%
+@echo ##############################
+@echo #########  %DC_PROJ%  ##########
+@echo ##############################
 @cd flightgear-build
 @if EXIST CMakeCache.txt (
     @if %DC_DO_CMAKE% EQU y (
@@ -404,6 +417,9 @@
 
 @echo.
 @ECHO Compiling TerraGear . . .  do cmake %DC_DO_CMAKE%
+@echo ##############################
+@echo #########  %DC_PROJ%  ##########
+@echo ##############################
 @cd terragear-build
 @if EXIST CMakeCache.txt (
     @if %DC_DO_CMAKE% EQU y (
@@ -428,6 +444,72 @@
 @cd %ROOT_DIR%
 :DN_TG_PROJ
 
+@REM ############################################################
+@set DC_ACT=n
+@set DC_PROJ=terrageargui
+@for %%i in (%DC_SET_ARGS%) do @(if /I %%i EQU %DC_PROJ% (@set DC_ACT=y))
+@if %DC_ACT% EQU y (
+@echo Doing %DC_PROJ% . . . do cmake %DC_DO_CMAKE%
+) else (
+@echo Skip %DC_PROJ%
+@goto :DN_TGGUI_PROJ
+)
+
+@echo ##############################
+@echo #########  %DC_PROJ%  ##########
+@echo ##############################
+@REM ########################################################
+@REM ### clone/update source
+@if EXIST %DC_PROJ%\nul (
+	@CALL :_gitUpdate terrageargui
+) ELSE (
+    @echo Cloning "%DC_TGGUI_REPO%"...
+	@call git clone -b %DC_TGGUI_BRANCH% %DC_TGGUI_REPO% %DC_PROJ%
+    @if ERRORLEVEL 1 (
+        @set /A ERROR_COUNT+=1
+        @set FAILED_PROJ=%FAILED_PROJ% %DC_PROJ%
+        @echo 'CALL %GIT_EXE% clone "%TG_REPO%"' FAILED!
+        @goto :DN_TGGUI_BLD
+    )
+)
+
+@REM ### configure and build source
+@IF NOT exist %DC_PROJ%-build\nul @(mkdir %DC_PROJ%-build)
+@REM in BUILD directory
+@cd %DC_PROJ%-build
+@if EXIST CMakeCache.txt (
+    @if %DC_DO_CMAKE% EQU y (
+        @del CMakeCache.txt
+        @echo Reconfigure %DC_PROJ% built
+    ) else (
+        @echo Avoiding doing %DC_PROJ% cmake...
+        @goto :DN_TGGUI_CMAKE
+    )
+)
+
+@CALL "%CMAKE_EXE%" ..\%DC_PROJ% ^
+		-G %CMAKE_TOOLCHAIN% ^
+	    -DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH% ^
+		-DCMAKE_EXE_LINKER_FLAGS="/SAFESEH:NO" ^
+		-DCMAKE_INSTALL_PREFIX:PATH="%TGGUI_INSTALL_DIR%"
+
+:DN_TGGUI_CMAKE
+@REM IF %COMPILE% EQU 1 (
+	@CALL "%CMAKE_EXE%" --build . --config Release --target INSTALL
+@REM )
+    @if ERRORLEVEL 1 (
+        @set /A ERROR_COUNT+=1
+        @set FAILED_PROJ=%FAILED_PROJ% %DC_PROJ%
+        @echo 'CALL %CMAKE_EXE% --build FAILED!
+    )
+
+@cd %ROOT_DIR%
+:DN_TGGUI_BLD    
+
+:DN_TGGUI_PROJ
+@echo.
+
+
 @if EXIST terragear-git\version (
 @set /P DC_TG_VERSION=< terragear-git\version
 ) else (
@@ -441,7 +523,8 @@
 @echo Done %DC_SET_ARGS% . . . Need to maybe fix the errors...
 )
 @echo.
-@ECHO Done dc.bat %DC_VERSION%, %DC_DATE%. Error count %ERROR_COUNT%, FAILED_PROJ=%FAILED_PROJ%
+@REM ECHO Done dc.bat %DC_VERSION%, %DC_DATE%. Error count %ERROR_COUNT%, FAILED_PROJ=%FAILED_PROJ%, on args %DC_SET_ARGS%
+@ECHO Done dc.bat %DC_VERSION%, %DC_DATE%. On args %DC_SET_ARGS%, Errors %ERROR_COUNT%, Failed=%FAILED_PROJ%, %DC_DO_OPTS%
 @echo.
 
 @%DOPAUSE%
@@ -522,7 +605,7 @@ cd %ROOT_DIR%
 ) ELSE (
 	@echo Updating OpenSceneGraph . . .
 	@cd openscenegraph-3.4-git
-	git pull
+	@call git pull
 )
 @cd %ROOT_DIR%
 
@@ -532,7 +615,7 @@ cd %ROOT_DIR%
 ) ELSE (
 	@echo Updating OpenSceneGraph Test Data . . .
 	cd openscenegraph-data-git
-	git pull
+	@call git pull
 )
 @cd %ROOT_DIR%
 @goto :EOF
@@ -559,6 +642,22 @@ cd %ROOT_DIR%
 @echo * Feel you free to customize the DC_DEFAULT variable available on the top of this script
 @echo.
 @goto :EOF
+
+REM ###########################    HELPER FUNCTION    ####################################
+:_gitUpdate
+    @REM @IF %PULL% EQU 1
+    @if %DC_DO_UPDATES% EQU y (
+       @echo Pulling %1...
+		@cd %1
+		@CALL %GIT_EXE% stash
+		REM CALL %GIT_EXE% pull -r - what is this -r???
+		@CALL %GIT_EXE% pull
+		@CALL %GIT_EXE% stash pop
+		@cd ..
+	) else (
+        @echo No update pull configured
+    )
+@GOTO :EOF
 
 :ISERR
 @endlocal
