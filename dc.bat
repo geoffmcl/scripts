@@ -13,11 +13,14 @@
 @REM # presently has some rigid default... lots of work... help needed...
 @REM #======================================================================
 @REM Deal with script version - pre release
-@set DC_VERSION=0.0.10
-@set DC_DATE=20180706
+@set DC_VERSION=0.0.11
+@set DC_DATE=20180708
 @REM Set VERSION dc.v0.2.bat 20180627
 @REM Set VERSION dc.v0.1.bat 20180627
 @REM Set VERSION dc.bat 20180626
+@REM d-and-c.x64.bat v1.3.11 20160522 - use external make3rd.x64.bat ...
+@REM Original: Clement de l'Hamaide - Oct 2013
+@REM Required software: Visual Studio 10, CMake, SVN, GIT, gmp and libcgal
 @set DC_TG_VERSION=N/A
 @set ROOT_DIR=%CD%
 @set DC_WANTS_HELP=
