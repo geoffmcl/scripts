@@ -26,7 +26,8 @@
 @REM if /I "%TMPARG%" == "a" GOTO :SET_DO_UPDATES
 @set DC_DO_UPDATES=y
 @REM set DC_ARGUMENTS=CMAKE OSG PLIB OPENRTI SIMGEAR FGFS DATA FGRUN FGO FGX OPENRADAR ATCPIE TERRAGEAR TERRAGEARGUI
-@set DC_ARGUMENTS=OSG PLIB SIMGEAR FGFS DATA TERRAGEAR TERRAGEARGUI
+@REM set DC_ARGUMENTS=OSG PLIB SIMGEAR FGFS DATA TERRAGEAR TERRAGEARGUI
+@set DC_ARGUMENTS=SIMGEAR FLIGHTGEAR FGDATA TERRAGEAR TERRAGEARGUI
 @set DC_SET_ARGS=
 @set DC_DEFAULT=SIMGEAR TERRAGEAR
 @set DC_DO_OSG=y
@@ -63,6 +64,10 @@
 @set "DC_TGGUI_REPO=git://git.code.sf.net/p/flightgear/fgscenery/terrageargui"
 @set "DC_TGGUI_BRANCH=master"
 @set TGGUI_INSTALL_DIR=%ROOT_DIR%/Stage
+@REM fgdata
+@set DC_FGDATA_REPO=git://git.code.sf.net/p/flightgear/fgdata
+@set DC_FGDATA_BRANCH=next
+
 @REM These should be passed in on command, or in environment...
 @REM set OSG_DIR=%TMPDRV%\install\msvc140-64\OpenSceneGraph
 @REM set BOOST_ROOT=C:\local\boost_1_62_0
@@ -508,7 +513,39 @@
 
 :DN_TGGUI_PROJ
 @echo.
+@REM ############################################################
+@set DC_ACT=n
+@set DC_PROJ=fgdata
+@for %%i in (%DC_SET_ARGS%) do @(if /I %%i EQU %DC_PROJ% (@set DC_ACT=y))
+@if %DC_ACT% EQU y (
+@echo Doing %DC_PROJ% . . . do cmake %DC_DO_CMAKE%
+) else (
+@echo Skip %DC_PROJ%
+@goto :DN_FGDATA_PROJ
+)
 
+@echo ##############################
+@echo #########  %DC_PROJ%  ##########
+@echo ##############################
+@REM ########################################################
+@REM ### clone/update source
+@if EXIST %DC_PROJ%\nul (
+	@CALL :_gitUpdate fgdata
+) ELSE (
+    @echo Cloning "%DC_FGDATA_REPO%"...
+	@call git clone -b %DC_FGDATA_BRANCH% %DC_FGDATA_REPO% %DC_PROJ%
+    @if ERRORLEVEL 1 (
+        @set /A ERROR_COUNT+=1
+        @set FAILED_PROJ=%FAILED_PROJ% %DC_PROJ%
+        @echo 'CALL %GIT_EXE% clone "%TG_REPO%"' FAILED!
+        @goto :DN_FGDATA_PROJ
+    )
+)
+
+@echo Done %DC_PROJ% update...
+
+@REM ############################################################
+:DN_FGDATA_PROJ
 
 @if EXIST terragear-git\version (
 @set /P DC_TG_VERSION=< terragear-git\version
@@ -655,7 +692,9 @@ REM ###########################    HELPER FUNCTION    ##########################
 		@CALL %GIT_EXE% stash pop
 		@cd ..
 	) else (
-        @echo No update pull configured
+@REM * -a y/n  y=do vcpkg update n=skip vcpkg update            default=y
+@REM if /I "%TMPARG%" == "a" GOTO :SET_DO_UPDATES
+        @echo No update pull configured - -a %DC_DO_UPDATES%
     )
 @GOTO :EOF
 
