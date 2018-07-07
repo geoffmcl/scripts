@@ -287,35 +287,39 @@
 @echo Skip re-install of OSG... use installed OSG %OSG_DIR%
 )
 
-@IF NOT EXIST simgear-git/NUL (
-	@mkdir simgear-build
-	@echo Downloading SimGear . . .
-	git clone -b next %DC_SGREPO% simgear-git
+@REM Ensure base data cloned/updated, for each proj SG/FG/TG
+@set PC_PROJ=simgear
+@IF NOT EXIST %PC_PROJ%/NUL (
+	@mkdir %PC_PROJ%-build
+	@echo Downloading %PC_PROJ% . . .
+	git clone -b next %DC_SGREPO% %PC_PROJ%
 ) ELSE (
-	@echo Updating SimGear . . .
-	@cd simgear-git
+	@echo Updating %PC_PROJ% . . .
+	@cd %PC_PROJ%
 	@call git pull
     @cd %ROOT_DIR%
 )
 
-@IF NOT EXIST flightgear-git/NUL (
-	@mkdir flightgear-build
-	@echo Downloading FlightGear . . .
-	git clone -b next %DC_FGREPO% flightgear-git
+@set PC_PROJ=flightgear
+@IF NOT EXIST %PC_PROJ%/NUL (
+	@mkdir %PC_PROJ%-build
+	@echo Downloading %PC_PROJ% . . .
+	git clone -b next %DC_FGREPO% %PC_PROJ%
 ) ELSE (
 	@echo Updating FlightGear . . .
-	cd flightgear-git
+	cd %PC_PROJ%
 	@call git pull
     @cd %ROOT_DIR%
 )
 
-@IF NOT EXIST terragear-git/NUL (
-	@mkdir terragear-build
-	@echo Downloading TerraGear . . .
-	git clone -b %DC_TGBRANCH% %DC_TGREPO% terragear-git
+@set PC_PROJ=terragear
+@IF NOT EXIST %PC_PROJ%/NUL (
+	@mkdir %PC_PROJ%-build
+	@echo Downloading %PC_PROJ% . . .
+	git clone -b %DC_TGBRANCH% %DC_TGREPO% %PC_PROJ%
 ) ELSE (
-	@echo Updating TerraGear . . .
-	@cd terragear-git
+	@echo Updating %PC_PROJ% . . .
+	@cd %PC_PROJ%
 	@call git pull
     @cd %ROOT_DIR%
 )
@@ -351,9 +355,8 @@
        @goto :DN_SG_CMAKE
     )
 )
-@echo Doing 'cmake ..\simgear-git -G  %CMAKE_TOOLCHAIN% -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH%  -DCMAKE_INSTALL_PREFIX:PATH=%ROOT_DIR%/Stage'
-@cmake ..\simgear-git -G  %CMAKE_TOOLCHAIN% ^
-	-DCMAKE_BUILD_TYPE=Release ^
+@echo Doing 'cmake ..\simgear -G  %CMAKE_TOOLCHAIN% -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH%  -DCMAKE_INSTALL_PREFIX:PATH=%ROOT_DIR%/Stage'
+@cmake ..\simgear -G  %CMAKE_TOOLCHAIN% ^
 	-DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH% ^
 	-DCMAKE_INSTALL_PREFIX:PATH=%ROOT_DIR%/Stage
 :DN_SG_CMAKE    
@@ -396,8 +399,8 @@
         @goto :DN_FG_CMAKE
     )
 )
-@echo Doing 'cmake ..\flightgear-git -G  %CMAKE_TOOLCHAIN% -DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH%;%QT5x64% -DCMAKE_INSTALL_PREFIX:PATH=%ROOT_DIR%/Stage -DOSG_FSTREAM_EXPORT_FIXED:BOOL=1'
-@cmake ..\flightgear-git -G  %CMAKE_TOOLCHAIN% ^
+@echo Doing 'cmake ..\flightgear -G  %CMAKE_TOOLCHAIN% -DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH%;%QT5x64% -DCMAKE_INSTALL_PREFIX:PATH=%ROOT_DIR%/Stage -DOSG_FSTREAM_EXPORT_FIXED:BOOL=1'
+@cmake ..\flightgear -G  %CMAKE_TOOLCHAIN% ^
     -DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH%;%QT5x64% ^
     -DCMAKE_INSTALL_PREFIX:PATH=%ROOT_DIR%/Stage ^
  	-DOSG_FSTREAM_EXPORT_FIXED:BOOL=1
@@ -438,8 +441,8 @@
         @goto :DN_TG_CMAKE
     )
 )
-@echo Doing 'cmake ..\terragear-git -G  %CMAKE_TOOLCHAIN% -DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH% -DCMAKE_INSTALL_PREFIX:PATH=%ROOT_DIR%/Stage'
-@cmake ..\terragear-git -G  %CMAKE_TOOLCHAIN% ^
+@echo Doing 'cmake ..\terragear -G  %CMAKE_TOOLCHAIN% -DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH% -DCMAKE_INSTALL_PREFIX:PATH=%ROOT_DIR%/Stage'
+@cmake ..\terragear -G  %CMAKE_TOOLCHAIN% ^
 	-DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH% ^
 	-DCMAKE_INSTALL_PREFIX:PATH=%ROOT_DIR%/Stage
 :DN_TG_CMAKE
@@ -550,8 +553,8 @@
 @REM ############################################################
 :DN_FGDATA_PROJ
 
-@if EXIST terragear-git\version (
-@set /P DC_TG_VERSION=< terragear-git\version
+@if EXIST terragear\version (
+@set /P DC_TG_VERSION=< terragear\version
 ) else (
 @echo Failed to locate TG version file
 )
