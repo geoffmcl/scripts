@@ -312,6 +312,17 @@
 @echo Skip build osg... use installed OSG %OSG_DIR%
 )
 
+@set DC_ACT=n
+@set DC_PROJ=SIMGEAR
+@for %%i in (%DC_SET_ARGS%) do @(if %%i EQU %DC_PROJ% (@set DC_ACT=y))
+@if %DC_ACT% EQU y (
+@echo Doing %DC_PROJ%
+) else (
+@echo Skip %DC_PROJ%
+@goto DN_SG_PROJ
+)
+
+@echo.
 @ECHO Compiling SimGear . . . do cmake %DC_DO_CMAKE%
 @cd simgear-build
 @if EXIST CMakeCache.txt (
@@ -336,29 +347,62 @@
 )
 @cd %ROOT_DIR%
 @ECHO Done SimGear . . .
+:DN_SG_PROJ
 
 @REM :DOFG
+@set DC_ACT=n
+@set DC_PROJ=FLIGHTGEAR
+@for %%i in (%DC_SET_ARGS%) do @(if %%i EQU %DC_PROJ% (@set DC_ACT=y))
+@if %DC_ACT% EQU y (
+@echo Doing %DC_PROJ%
+) else (
+@echo Skip %DC_PROJ%
+@goto DN_FG_PROJ
+)
 
 @REM Currently broken. Intended for future use.
-@REM Currently fails on PLIB, which does not seem in vcpkg
-@goto DNFG
-@ECHO Compiling FlightGear . . .
+@REM Currently fails on PLIB, which does not seem in vcpkg, but can set ENV PLIBDIR to find installed PLIB
+@REM Is 'next', so may fail time to time... like Jenkins...
+@echo.
+@ECHO Compiling FlightGear . . . do cmake %DC_DO_CMAKE%
 @cd flightgear-build
-cmake ..\flightgear-git -G  %CMAKE_TOOLCHAIN% ^
+@if EXIST CMakeCache.txt (
+    @if %DC_DO_CMAKE% EQU y (
+        @del CMakeCache.txt
+        @echo Reconfigure flightgear built
+    ) else (
+        @echo Avoiding doing FG cmake...
+        @goto :DN_FG_CMAKE
+    )
+)
+@echo Doing 'cmake ..\flightgear-git -G  %CMAKE_TOOLCHAIN% -DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH%;%QT5x64% -DCMAKE_INSTALL_PREFIX:PATH=%ROOT_DIR%/Stage -DOSG_FSTREAM_EXPORT_FIXED:BOOL=1'
+@cmake ..\flightgear-git -G  %CMAKE_TOOLCHAIN% ^
     -DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH%;%QT5x64% ^
     -DCMAKE_INSTALL_PREFIX:PATH=%ROOT_DIR%/Stage ^
  	-DOSG_FSTREAM_EXPORT_FIXED:BOOL=1
-cmake --build . --config Release --target INSTALL
+:DN_FG_CMAKE    
+@echo Doing 'cmake --build . --config Release --target INSTALL'
+@cmake --build . --config Release --target INSTALL
 @if ERRORLEVEL 1 (
 @set /A ERROR_COUNT+=1
 @set FAILED_PROJ=%FAILED_PROJ% FlightGear
 )
 @cd %ROOT_DIR%
 @ECHO Done FlightGear . . .
-:DNFG
+:DN_FG_PROJ
 
 @REM :DOTERRA
+@set DC_ACT=n
+@set DC_PROJ=TERRAGEAR
+@for %%i in (%DC_SET_ARGS%) do @(if %%i EQU %DC_PROJ% (@set DC_ACT=y))
+@if %DC_ACT% EQU y (
+@echo Doing %DC_PROJ%
+) else (
+@echo Skip %DC_PROJ%
+@goto DN_TG_PROJ
+)
 
+@echo.
 @ECHO Compiling TerraGear . . .  do cmake %DC_DO_CMAKE%
 @cd terragear-build
 @if EXIST CMakeCache.txt (
@@ -382,6 +426,8 @@ cmake --build . --config Release --target INSTALL
 @set FAILED_PROJ=%FAILED_PROJ% TerraGear
 )
 @cd %ROOT_DIR%
+:DN_TG_PROJ
+
 @if EXIST terragear-git\version (
 @set /P DC_TG_VERSION=< terragear-git\version
 ) else (
@@ -392,7 +438,7 @@ cmake --build . --config Release --target INSTALL
 @call :WRITE_BAT
 @echo Done TerrGear - CD %ROOT_DIR%\Stage\bin - to use TG Tools v.%DC_TG_VERSION%
 ) else (
-@echo Done TerrGear . . . Need to maybe fix the errors...
+@echo Done %DC_SET_ARGS% . . . Need to maybe fix the errors...
 )
 @echo.
 @ECHO Done dc.bat %DC_VERSION%, %DC_DATE%. Error count %ERROR_COUNT%, FAILED_PROJ=%FAILED_PROJ%
