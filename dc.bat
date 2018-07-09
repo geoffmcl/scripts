@@ -13,7 +13,7 @@
 @REM # presently has some rigid default... lots of work... help needed...
 @REM #======================================================================
 @REM Deal with script version - pre release
-@set DC_VERSION=0.0.12
+@set DC_VERSION=0.0.13
 @set DC_DATE=20180708
 @REM Set VERSION dc.v0.2.bat 20180627
 @REM Set VERSION dc.v0.1.bat 20180627
@@ -62,7 +62,8 @@
 @REM set DC_3RDPARTY=boost cgal curl freeglut freetype gdal glew jasper libxml2 openal-soft openjpeg openssl sdl2 tiff zlib
 @set DC_FGREPO=https://git.code.sf.net/p/flightgear/flightgear
 @set DC_SGREPO=https://git.code.sf.net/p/flightgear/simgear
-@set DC_OSGBRANCH=OpenSceneGraph-3.4
+@set DC_OSG_BRANCH=OpenSceneGraph-3.4
+@set DC_OSG_REPO=https://github.com/openscenegraph/OpenSceneGraph.git
 @REM TG GUI
 @set "DC_TGGUI_REPO=git://git.code.sf.net/p/flightgear/fgscenery/terrageargui"
 @set "DC_TGGUI_BRANCH=master"
@@ -109,7 +110,7 @@
 @REM if NOT EXIST %BOOST_ROOT%\nul (
 @REM echo Warning: Unable to locate Boost %BOOST_ROOT%
 @REM set DC_DO_BOOST=y
-@REM	-DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH%%ROOT_DIR%/Stage;%ROOT_DIR%/vcpkg-git/installed/x64-windows
+@REM -DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH%%ROOT_DIR%/Stage;%ROOT_DIR%/vcpkg-git/installed/x64-windows
 @REM ) else (
 @REM echo Using installed boost %BOOST_ROOT%
 @REM set DC_PREFIX_PATH=%BOOST_ROOT%;%ROOT_DIR%/Stage;%ROOT_DIR%/vcpkg-git/installed/x64-windows
@@ -276,9 +277,11 @@
 @REM TODO: Should be able to switch OSG version
 @IF NOT EXIST openscenegraph-3.4-git/NUL (
 @set DC_DO_OSG=y
+@echo Force OSG first time install...
 )
 @if NOT EXIST %ROOT_DIR%/Stage/bin/osgversion.exe (
 @set DC_DO_OSG=y
+@echo Force OSG build... no install found...
 )
 
 @if %DC_DO_OSG% EQU y (
@@ -290,37 +293,37 @@
 @REM Ensure base data cloned/updated, for each proj SG/FG/TG
 @set PC_PROJ=simgear
 @IF NOT EXIST %PC_PROJ%/NUL (
-	@mkdir %PC_PROJ%-build
-	@echo Downloading %PC_PROJ% . . .
-	git clone -b next %DC_SGREPO% %PC_PROJ%
+    @mkdir %PC_PROJ%-build
+    @echo Downloading %PC_PROJ% . . .
+    git clone -b next %DC_SGREPO% %PC_PROJ%
 ) ELSE (
-	@echo Updating %PC_PROJ% . . .
-	@cd %PC_PROJ%
-	@call git pull
+    @echo Updating %PC_PROJ% . . .
+    @cd %PC_PROJ%
+    @call git pull
     @cd %ROOT_DIR%
 )
 
 @set PC_PROJ=flightgear
 @IF NOT EXIST %PC_PROJ%/NUL (
-	@mkdir %PC_PROJ%-build
-	@echo Downloading %PC_PROJ% . . .
-	git clone -b next %DC_FGREPO% %PC_PROJ%
+    @mkdir %PC_PROJ%-build
+    @echo Downloading %PC_PROJ% . . .
+    git clone -b next %DC_FGREPO% %PC_PROJ%
 ) ELSE (
-	@echo Updating FlightGear . . .
-	cd %PC_PROJ%
-	@call git pull
+    @echo Updating FlightGear . . .
+    cd %PC_PROJ%
+    @call git pull
     @cd %ROOT_DIR%
 )
 
 @set PC_PROJ=terragear
 @IF NOT EXIST %PC_PROJ%/NUL (
-	@mkdir %PC_PROJ%-build
-	@echo Downloading %PC_PROJ% . . .
-	git clone -b %DC_TGBRANCH% %DC_TGREPO% %PC_PROJ%
+    @mkdir %PC_PROJ%-build
+    @echo Downloading %PC_PROJ% . . .
+    git clone -b %DC_TGBRANCH% %DC_TGREPO% %PC_PROJ%
 ) ELSE (
-	@echo Updating %PC_PROJ% . . .
-	@cd %PC_PROJ%
-	@call git pull
+    @echo Updating %PC_PROJ% . . .
+    @cd %PC_PROJ%
+    @call git pull
     @cd %ROOT_DIR%
 )
 
@@ -341,7 +344,7 @@
 )
 
 @echo.
-@ECHO Compiling SimGear . . . do cmake %DC_DO_CMAKE%
+@ECHO Compiling SimGear . . . do cmake, -r %DC_DO_CMAKE%
 @echo ##############################
 @echo #########  %DC_PROJ%  ##########
 @echo ##############################
@@ -385,7 +388,7 @@
 @REM Currently fails on PLIB, which does not seem in vcpkg, but can set ENV PLIBDIR to find installed PLIB
 @REM Is 'next', so may fail time to time... like Jenkins...
 @echo.
-@ECHO Compiling FlightGear . . . do cmake %DC_DO_CMAKE%
+@ECHO Compiling FlightGear . . . do cmake, -r %DC_DO_CMAKE%
 @echo ##############################
 @echo #########  %DC_PROJ%  ##########
 @echo ##############################
@@ -427,7 +430,7 @@
 )
 
 @echo.
-@ECHO Compiling TerraGear . . .  do cmake %DC_DO_CMAKE%
+@ECHO Compiling TerraGear . . .  do cmake, -r %DC_DO_CMAKE%
 @echo ##############################
 @echo #########  %DC_PROJ%  ##########
 @echo ##############################
@@ -460,7 +463,7 @@
 @set DC_PROJ=terrageargui
 @for %%i in (%DC_SET_ARGS%) do @(if /I %%i EQU %DC_PROJ% (@set DC_ACT=y))
 @if %DC_ACT% EQU y (
-@echo Doing %DC_PROJ% . . . do cmake %DC_DO_CMAKE%
+@echo Doing %DC_PROJ% . . . do cmake, -r %DC_DO_CMAKE%
 ) else (
 @echo Skip %DC_PROJ%
 @goto :DN_TGGUI_PROJ
@@ -472,10 +475,10 @@
 @REM ########################################################
 @REM ### clone/update source
 @if EXIST %DC_PROJ%\nul (
-	@CALL :_gitUpdate terrageargui
+    @CALL :_gitUpdate terrageargui
 ) ELSE (
     @echo Cloning "%DC_TGGUI_REPO%"...
-	@call git clone -b %DC_TGGUI_BRANCH% %DC_TGGUI_REPO% %DC_PROJ%
+    @call git clone -b %DC_TGGUI_BRANCH% %DC_TGGUI_REPO% %DC_PROJ%
     @if ERRORLEVEL 1 (
         @set /A ERROR_COUNT+=1
         @set FAILED_PROJ=%FAILED_PROJ% %DC_PROJ%
@@ -506,7 +509,7 @@
 
 :DN_TGGUI_CMAKE
 @REM IF %COMPILE% EQU 1 (
-	@CALL "%CMAKE_EXE%" --build . --config Release --target INSTALL
+    @CALL "%CMAKE_EXE%" --build . --config Release --target INSTALL
 @REM )
     @if ERRORLEVEL 1 (
         @set /A ERROR_COUNT+=1
@@ -524,7 +527,7 @@
 @set DC_PROJ=fgdata
 @for %%i in (%DC_SET_ARGS%) do @(if /I %%i EQU %DC_PROJ% (@set DC_ACT=y))
 @if %DC_ACT% EQU y (
-@echo Doing %DC_PROJ% . . . do cmake %DC_DO_CMAKE%
+@echo Doing %DC_PROJ% . . . do cmake, -r %DC_DO_CMAKE%
 ) else (
 @echo Skip %DC_PROJ%
 @goto :DN_FGDATA_PROJ
@@ -536,10 +539,10 @@
 @REM ########################################################
 @REM ### clone/update source
 @if EXIST %DC_PROJ%\nul (
-	@CALL :_gitUpdate fgdata
+    @CALL :_gitUpdate fgdata
 ) ELSE (
     @echo Cloning "%DC_FGDATA_REPO%"...
-	@call git clone -b %DC_FGDATA_BRANCH% %DC_FGDATA_REPO% %DC_PROJ%
+    @call git clone -b %DC_FGDATA_BRANCH% %DC_FGDATA_REPO% %DC_PROJ%
     @if ERRORLEVEL 1 (
         @set /A ERROR_COUNT+=1
         @set FAILED_PROJ=%FAILED_PROJ% %DC_PROJ%
@@ -592,9 +595,18 @@
 
 
 :BUILD_OSG
-@ECHO Compiling OpenSceneGraph . . . cmake %DC_DO_CMAKE%
+@set DC_PROJ=OpenSceneGraph
+@ECHO Compiling OpenSceneGraph . . . cmake, -r %DC_DO_CMAKE%
 @cd openscenegraph-3.4-build
-@if %DC_DO_CMAKE% EQU n goto :DN_OSG_CMAKE
+@if EXIST CMakeCache.txt (
+    @if %DC_DO_CMAKE% EQU y (
+        @del CMakeCache.txt
+        @echo Reconfigure %DC_PROJ% built
+    ) else (
+        @echo Avoiding doing %DC_PROJ% cmake...
+        @goto :DN_OSG_CMAKE
+    )
+)
 cmake ..\openscenegraph-3.4-git -G %CMAKE_TOOLCHAIN% ^
 	-DACTUAL_3RDPARTY_DIR:PATH=%ROOT_DIR%/vcpkg-git/installed/x64-windows ^
 	-DCMAKE_CONFIGURATION_TYPES=Debug;Release ^
@@ -642,25 +654,25 @@ cd %ROOT_DIR%
 :INSTALL_OSG
 @REM TODO: Should be able to switch OSG version
 @IF NOT EXIST openscenegraph-3.4-git/NUL (
-	@mkdir openscenegraph-3.4-build
-	@echo Downloading OpenSceneGraph . . .
-	git clone -b %DC_OSGBRANCH% https://github.com/openscenegraph/OpenSceneGraph.git openscenegraph-3.4-git
+    @mkdir openscenegraph-3.4-build
+    @echo Downloading OpenSceneGraph . . .
+    git clone -b %DC_OSG_BRANCH% %DC_OSG_REPO% openscenegraph-3.4-git
 ) ELSE (
-	@echo Updating OpenSceneGraph . . .
-	@cd openscenegraph-3.4-git
-	@call git pull
+    @echo Updating OpenSceneGraph . . .
+    @cd openscenegraph-3.4-git
+    @call git pull
+    @cd %ROOT_DIR%
 )
-@cd %ROOT_DIR%
 
 @IF NOT EXIST openscenegraph-data-git/NUL (
-	@echo Downloading OpenSceneGraph Test Data . . .
-	git clone https://github.com/openscenegraph/OpenSceneGraph-Data.git openscenegraph-data-git
+    @echo Downloading OpenSceneGraph Test Data . . .
+    git clone https://github.com/openscenegraph/OpenSceneGraph-Data.git openscenegraph-data-git
 ) ELSE (
-	@echo Updating OpenSceneGraph Test Data . . .
-	cd openscenegraph-data-git
-	@call git pull
+    @echo Updating OpenSceneGraph Test Data . . .
+    cd openscenegraph-data-git
+    @call git pull
+    @cd %ROOT_DIR%
 )
-@cd %ROOT_DIR%
 @goto :EOF
 
 :HELP
@@ -688,20 +700,21 @@ cd %ROOT_DIR%
 
 REM ###########################    HELPER FUNCTION    ####################################
 :_gitUpdate
-    @REM @IF %PULL% EQU 1
-    @if %DC_DO_UPDATES% EQU y (
-       @echo Pulling %1...
-		@cd %1
-		@CALL %GIT_EXE% stash
-		REM CALL %GIT_EXE% pull -r - what is this -r???
-		@CALL %GIT_EXE% pull
-		@CALL %GIT_EXE% stash pop
-		@cd ..
-	) else (
+@REM @IF %PULL% EQU 1
+@if %DC_DO_UPDATES% EQU y (
+    @echo Pulling %1...
+    @cd %1
+    @CALL %GIT_EXE% stash
+    @REM CALL %GIT_EXE% pull -r - what is this -r???
+    @CALL %GIT_EXE% pull
+    @CALL %GIT_EXE% stash pop
+    @cd ..
+) else (
 @REM * -a y/n  y=do vcpkg update n=skip vcpkg update            default=y
 @REM if /I "%TMPARG%" == "a" GOTO :SET_DO_UPDATES
-        @echo No update pull configured - -a %DC_DO_UPDATES%
-    )
+    @echo No update pull configured - -a %DC_DO_UPDATES%
+)
+
 @GOTO :EOF
 
 :ISERR
