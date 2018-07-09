@@ -13,8 +13,8 @@
 @REM # presently has some rigid default... lots of work... help needed...
 @REM #======================================================================
 @REM Deal with script version - pre release
-@set DC_VERSION=0.0.13
-@set DC_DATE=20180708
+@set DC_VERSION=0.0.14
+@set DC_DATE=20180709
 @REM Set VERSION dc.v0.2.bat 20180627
 @REM Set VERSION dc.v0.1.bat 20180627
 @REM Set VERSION dc.bat 20180626
@@ -220,13 +220,20 @@
 @if NOT "%DC_WANTS_HELP%x" == "x" goto :HELP
 
 @REM No projects argment given, use default
+@set DC_ACT=n
+@set DC_PROJ=ALL
 @if "%DC_SET_ARGS%x" EQU "x" (
-@set DC_SET_ARGS=%DC_DEFAULT%
-) else (
-    @if "%DC_SET_ARGS%x" EQU "ALLx" (
-       @set DC_SET_ARGS=%DC_ARGUMENTS%
-    )    
+    @set DC_SET_ARGS=%DC_DEFAULT%
+    @goto :DN_SET_ARGS
 )
+@REM echo Testing '%DC_SET_ARGS%' for '%DC_PROJ%'
+for %%i in (%DC_SET_ARGS%) do @(if %%i EQU %DC_PROJ% @(set DC_ACT=y))
+@if %DC_ACT% EQU y (
+    @set DC_SET_ARGS=%DC_ARGUMENTS%
+    @REM echo DC_ACT=%DC_ACT% - Found %DC_PROJ%, so set all %DC_SET_ARGS%
+)
+:DN_SET_ARGS
+
 
 @if %DC_ERRORS% GTR 0 goto ISERR
 @REM if NOT "%DC_ERRORS%x" == "0x" goto ISERR
@@ -350,6 +357,7 @@
 @echo ##############################
 
 @cd simgear-build
+@if NOT EXIST SimGear.sln goto :DO_SG_CMAKE
 @if EXIST CMakeCache.txt (
     @if %DC_DO_CMAKE% EQU y (
         @del CMakeCache.txt
@@ -358,6 +366,7 @@
        @goto :DN_SG_CMAKE
     )
 )
+:DO_SG_CMAKE
 @echo Doing 'cmake ..\simgear -G  %CMAKE_TOOLCHAIN% -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH%  -DCMAKE_INSTALL_PREFIX:PATH=%ROOT_DIR%/Stage'
 @cmake ..\simgear -G  %CMAKE_TOOLCHAIN% ^
 	-DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH% ^
@@ -393,6 +402,7 @@
 @echo #########  %DC_PROJ%  ##########
 @echo ##############################
 @cd flightgear-build
+@if NOT EXIST FlightGear.sln goto :DO_FG_CMAKE
 @if EXIST CMakeCache.txt (
     @if %DC_DO_CMAKE% EQU y (
         @del CMakeCache.txt
@@ -402,6 +412,7 @@
         @goto :DN_FG_CMAKE
     )
 )
+:DO_FG_CMAKE
 @echo Doing 'cmake ..\flightgear -G  %CMAKE_TOOLCHAIN% -DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH%;%QT5x64% -DCMAKE_INSTALL_PREFIX:PATH=%ROOT_DIR%/Stage -DOSG_FSTREAM_EXPORT_FIXED:BOOL=1'
 @cmake ..\flightgear -G  %CMAKE_TOOLCHAIN% ^
     -DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH%;%QT5x64% ^
@@ -435,6 +446,7 @@
 @echo #########  %DC_PROJ%  ##########
 @echo ##############################
 @cd terragear-build
+@if NOT EXIST TerraGear.sln goto :DO_TG_CMAKE
 @if EXIST CMakeCache.txt (
     @if %DC_DO_CMAKE% EQU y (
         @del CMakeCache.txt
@@ -444,6 +456,8 @@
         @goto :DN_TG_CMAKE
     )
 )
+
+:DO_TG_CMAKE
 @echo Doing 'cmake ..\terragear -G  %CMAKE_TOOLCHAIN% -DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH% -DCMAKE_INSTALL_PREFIX:PATH=%ROOT_DIR%/Stage'
 @cmake ..\terragear -G  %CMAKE_TOOLCHAIN% ^
 	-DCMAKE_PREFIX_PATH:PATH=%DC_PREFIX_PATH% ^
