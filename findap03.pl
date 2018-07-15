@@ -1576,7 +1576,7 @@ sub show_airports_found {
             $tmp .= "anno $dlon $dlat $apticao ";
             if ($got_twr) {
                 $tmp .= "Twr: ";
-            } else {
+            } elsif ($rwycnt) {
                 $tmp .= "Rwy: ";
             }
             # $annoxg .= "anno $dlon $dlat $icao $name ";
