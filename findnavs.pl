@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 # NAME: findnavs.pl
 # AIM: Given a lat,lon, search for navaids nearby...
+# 2018-10-21 - Redo some of the navs display...
 # 23/08/2015 - Added to the scripts repo
 # 11/10/2014 - Add -b bounding box, and find/list all navs in that bbox
 # 14/02/2014 - Add -i input file - line separated command
@@ -31,7 +32,8 @@ our ($LF);
 my $outfile = $temp_dir.$PATH_SEP."temp.$pgmname.txt";
 open_log($outfile);
 
-my $VERS = "0.0.5 2015-08-23";
+my $VERS = "0.0.6 2018-10-21";
+###my $VERS = "0.0.5 2015-08-23";
 ###my $VERS = "0.0.4 2014-10-11";
 ###my $VERS = "0.0.3 2014-02-14";
 ###my $VERS = "0.0.2 2014-01-13";
@@ -882,13 +884,19 @@ sub show_nearest_navs() {
     #    @navs = vor_pair_filter(\@navs); 
     #}
     my $rnl = \@navs;
-    my ($typ,$nlat,$nlon,$nalt,$nfrq,$nrng,$nfrq2,$nid,$name,$dist,$az1,$km,$az,$out);
+    my ($typ,$nlat,$nlon,$nalt,$nfrq,$nrng,$nfrq2,$nid,$name,$dist,$az1,$km,$az,$out,$ra);
+    my $vcnt = 0;
+    my $ncnt = 0;
+    my $icnt = 0;
     $out = 0;
     my $msg = '';
     my $max = $max_out;
     if (scalar @{$rnl} < $max) {
         $max = scalar @{$rnl};
     }
+    my @vorlist = ();
+    my @ndblist = ();
+    my @ilslist = ();
     if ($max == 0) {
         pgm_exit(1,"Failed to find any navs suiting criteria!\n");
     }
@@ -898,64 +906,49 @@ sub show_nearest_navs() {
         prt("Listing closest $max, VOR/DME first, then NDB, then ILS...\n");
     }
     for ($i = 0; $i < $max; $i++) {
-        $typ  = ${$rnl}[$i][0];
+        $ra = ${$rnl}[$i];
+        $typ  = ${$ra}[0];
         next if (!is_vor_type($typ));
-        $nlat = ${$rnl}[$i][1];
-        $nlon = ${$rnl}[$i][2];
-        $nalt = ${$rnl}[$i][3];
-        $nfrq = ${$rnl}[$i][4];
-        $nrng = ${$rnl}[$i][5];
-        $nfrq2 = ${$rnl}[$i][6];
-        $nid  = ${$rnl}[$i][7];
-        $name = ${$rnl}[$i][8];
-        $dist = ${$rnl}[$i][9];
-        $az1  = ${$rnl}[$i][10];
-        $km = $dist / 1000;
-        $km = (int(($km + 0.05) * 10) / 10);
-        $az = (int(($az1 + 0.05) * 10) / 10);
-		is_valid_nav($typ);
-        $msg .= prtnav( $actnav, $typ, $nlat, $nlon, $nalt, $nfrq, $nrng, $nid, $name, $km, $az );
-        $out++;
+        push(@vorlist,$ra);
     }
-    prt("Listed $out VOR\n") if ($out);
+    $vcnt = scalar @vorlist;
+    prt("List $vcnt VOR, ") if ($vcnt);
     $done_hdr = 0;
     $out = 0;
     for ($i = 0; $i < $max; $i++) {
-        $typ  = ${$rnl}[$i][0];
+        $ra = ${$rnl}[$i];
+        $typ  = ${$ra}[0];
         next if (!is_ndb_type($typ));
-        $nlat = ${$rnl}[$i][1];
-        $nlon = ${$rnl}[$i][2];
-        $nalt = ${$rnl}[$i][3];
-        $nfrq = ${$rnl}[$i][4];
-        $nrng = ${$rnl}[$i][5];
-        $nfrq2 = ${$rnl}[$i][6];
-        $nid  = ${$rnl}[$i][7];
-        $name = ${$rnl}[$i][8];
-        $dist = ${$rnl}[$i][9];
-        $az1  = ${$rnl}[$i][10];
-        $km = $dist / 1000;
-        $km = (int(($km + 0.05) * 10) / 10);
-        $az = (int(($az1 + 0.05) * 10) / 10);
-		is_valid_nav($typ);
-        $msg .= prtnav( $actnav, $typ, $nlat, $nlon, $nalt, $nfrq, $nrng, $nid, $name, $km, $az );
-        $out++;
+        push(@ndblist,$ra);
     }
-    prt("Listed $out NDB\n") if ($out);
+    $ncnt = scalar @ndblist;
+    prt("List $ncnt NDB, ") if ($ncnt);
     $out = 0;
     $done_hdr = 0;
     for ($i = 0; $i < $max; $i++) {
-        $typ  = ${$rnl}[$i][0];
+        $ra = ${$rnl}[$i];
+        $typ  = ${$ra}[0];
         next if (is_vor_type($typ) || is_ndb_type($typ));
-        $nlat = ${$rnl}[$i][1];
-        $nlon = ${$rnl}[$i][2];
-        $nalt = ${$rnl}[$i][3];
-        $nfrq = ${$rnl}[$i][4];
-        $nrng = ${$rnl}[$i][5];
-        $nfrq2 = ${$rnl}[$i][6];
-        $nid  = ${$rnl}[$i][7];
-        $name = ${$rnl}[$i][8];
-        $dist = ${$rnl}[$i][9];
-        $az1  = ${$rnl}[$i][10];
+        push(@ilslist,$ra);
+    }
+    $icnt = scalar @ilslist;
+    prt("List $icnt ILS and components, ") if ($icnt);
+
+    $done_hdr = 0;
+    $out = 0;
+    foreach $ra (@vorlist) {
+        $typ  = ${$ra}[0];
+        #### next if (!is_vor_type($typ));
+        $nlat = ${$ra}[1];
+        $nlon = ${$ra}[2];
+        $nalt = ${$ra}[3];
+        $nfrq = ${$ra}[4];
+        $nrng = ${$ra}[5];
+        $nfrq2 = ${$ra}[6];
+        $nid  = ${$ra}[7];
+        $name = ${$ra}[8];
+        $dist = ${$ra}[9];
+        $az1  = ${$ra}[10];
         $km = $dist / 1000;
         $km = (int(($km + 0.05) * 10) / 10);
         $az = (int(($az1 + 0.05) * 10) / 10);
@@ -963,17 +956,48 @@ sub show_nearest_navs() {
         $msg .= prtnav( $actnav, $typ, $nlat, $nlon, $nalt, $nfrq, $nrng, $nid, $name, $km, $az );
         $out++;
     }
-    prt("Listed $out ILS and components\n") if ($out);
-    $nlat = ($min_lat + $max_lat) / 2;
-    $nlon = ($min_lon + $max_lon) / 2;
-    $nfrq = $max_lat - $min_lat;
-    $nfrq2 = $max_lon - $min_lon;
-    prt("Range: lat,lon,alt min $min_lat,$min_lon,$min_alt max $max_lat,$max_lon,$max_alt\n");
-    prt("Center: $nlat,$nlon ranges lat/lon $nfrq/$nfrq2\n");
-    if (length($out_file)) {
-        write2file($msg,$out_file);
-        prt("List written to [$out_file]\n");
+    foreach $ra (@ndblist) {
+        $typ  = ${$ra}[0];
+        #### next if (!is_vor_type($typ));
+        $nlat = ${$ra}[1];
+        $nlon = ${$ra}[2];
+        $nalt = ${$ra}[3];
+        $nfrq = ${$ra}[4];
+        $nrng = ${$ra}[5];
+        $nfrq2 = ${$ra}[6];
+        $nid  = ${$ra}[7];
+        $name = ${$ra}[8];
+        $dist = ${$ra}[9];
+        $az1  = ${$ra}[10];
+        $km = $dist / 1000;
+        $km = (int(($km + 0.05) * 10) / 10);
+        $az = (int(($az1 + 0.05) * 10) / 10);
+		is_valid_nav($typ);
+        $msg .= prtnav( $actnav, $typ, $nlat, $nlon, $nalt, $nfrq, $nrng, $nid, $name, $km, $az );
+        $out++;
     }
+    foreach $ra (@ilslist) {
+        $typ  = ${$ra}[0];
+        #### next if (!is_vor_type($typ));
+        $nlat = ${$ra}[1];
+        $nlon = ${$ra}[2];
+        $nalt = ${$ra}[3];
+        $nfrq = ${$ra}[4];
+        $nrng = ${$ra}[5];
+        $nfrq2 = ${$ra}[6];
+        $nid  = ${$ra}[7];
+        $name = ${$ra}[8];
+        $dist = ${$ra}[9];
+        $az1  = ${$ra}[10];
+        $km = $dist / 1000;
+        $km = (int(($km + 0.05) * 10) / 10);
+        $az = (int(($az1 + 0.05) * 10) / 10);
+		is_valid_nav($typ);
+        $msg .= prtnav( $actnav, $typ, $nlat, $nlon, $nalt, $nfrq, $nrng, $nid, $name, $km, $az );
+        $out++;
+    }
+
+
 }
 
 sub process_in_file($) {
