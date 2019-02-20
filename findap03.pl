@@ -83,7 +83,8 @@ my $DAPTROOT = 'D:\Scenery\terrascenery\data\Scenery\Airports';
 my $FGROOT = (exists $ENV{'FG_ROOT'})? $ENV{'FG_ROOT'} : $CDATROOT;
 my $SCENEROOT = (exists $ENV{'FG_SCENERY'})? $ENV{'FG_SCENERY'} : $DSCNROOT;
 #my $TSSCENERY = 'X:\fgsvnts';
-my $TSSCENERY = 'G:\S';
+my $TSSCENERY = '/media/geoff/backup/next/scenery2';
+$TSSCENERY = 'G:\S' if ($os =~ /win/i);
 
 #my $FGROOT = (exists $ENV{'FG_ROOT'})? $ENV{'FG_ROOT'} : "C:/FG/27/data";
 # file spec : http://data.x-plane.com/file_specs/Apt810.htm
