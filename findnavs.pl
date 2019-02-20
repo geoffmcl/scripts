@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 # NAME: findnavs.pl
 # AIM: Given a lat,lon, search for navaids nearby...
+# 2019-01-25 - Apply filters to output lists...
 # 2018-10-21 - Redo some of the navs display...
 # 23/08/2015 - Added to the scripts repo
 # 11/10/2014 - Add -b bounding box, and find/list all navs in that bbox
@@ -32,7 +33,8 @@ our ($LF);
 my $outfile = $temp_dir.$PATH_SEP."temp.$pgmname.txt";
 open_log($outfile);
 
-my $VERS = "0.0.6 2018-10-21";
+my $VERS = "0.0.7 2019-01-25";
+###my $VERS = "0.0.6 2018-10-21";
 ###my $VERS = "0.0.5 2015-08-23";
 ###my $VERS = "0.0.4 2014-10-11";
 ###my $VERS = "0.0.3 2014-02-14";
@@ -46,7 +48,7 @@ my $out_file = '';
 my $m_lat = -1;
 my $m_lon = -1;
 my $m_icao = '';
-my $max_out = 20;
+my $max_out = 30;   # 20;
 my $use_xplane_dat = 0;
 my $nav_name = '';
 my $nav_id = '';
@@ -55,6 +57,7 @@ my @nav_ids = ();
 my $find_vor_only = 1;
 my $search_by_name = 0;
 my $filter_vor_pairs = 1;
+my $add_markers = 0;
 my $add_json_output = 0;
 my $need_only_one = 0;  # accept if id equal, OR name contains find string
 my $out_ils_csv = 0;
@@ -489,7 +492,13 @@ sub search_nav_lines() {
 		$line = trim_all($line);
         $len = length($line);
         next if ($len == 0);
-        next if ($line =~ /\d+\s+Version\s+/i);
+        if ($line =~ /\d+\s+Version\s+/i) {
+            if ($len > 75) {
+                $line = substr($line,0,75);
+            }
+            prt("$line\n");
+            next;
+        }
         next if ($line =~ /^I/);
 		# 0   1 (lat)   2 (lon)        3     4   5           6   7  8++
 		# 2   38.087769 -077.324919  284   396  25       0.000 APH  A P Hill NDB
@@ -591,6 +600,18 @@ sub is_ndb_type($) {
     return 0;
 }
 
+sub is_ilsdme_type($) {
+    my $ra = shift;
+    my $t = ${$ra}[0];
+    if ($t == 12) {
+        my $name = trim_all(${$ra}[8]);
+        if ($name =~ /ILS/) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 #          VDME, 12, 37.61948333, -122.37389167,    7, 11580,  40, SFO , SAN FRANCISCO VOR-DME   ,  17.9, 229.4
 my $hdr = 'type, # , latitude    , longitude    , elev, freq., rng, ID  , Name                    , dist., brng'; 
 my $done_hdr = 0;
@@ -662,70 +683,93 @@ sub ind_in_array($$) {
     return 0;
 }
 
+sub filter_refvor_pairs($) {
+    my ($rfn) = @_;
+    my @navs = ();
+    my ($ra,$ra2,$j,$j2,$typ2,$dist2,$fnd,$i2,$km);
+    my ($i,$typ,$dist);
+    my ($nfrq,$nid,$nfrq2,$nid2,$km2);
+    my $max = scalar @{$rfn};   ### @found_navs;
+    prt("Filter $max for pairs...\n") if (VERB5());
+    my @excu = ();
+    for ($i = 0; $i < $max; $i++) {
+        $i2 = $i + 1;
+        #$ra = $found_navs[$i];
+        $ra = ${$rfn}[$i];
+        $typ = ${$ra}[0];
+        if ($find_vor_only) {
+            next if (is_ndb_type($typ));
+            next if (is_ilsdme_type($ra));
+        }
+        next if (ind_in_array($i,\@excu));
+        $nfrq = ${$ra}[4];
+        $nid  = ${$ra}[7];
+        $dist = ${$ra}[9];
+        $km = $dist / 1000; # m to km
+        $km = (int(($km + 0.05) * 10) / 10);
+        $fnd = 0;
+        for ($j = 0; $j < $max; $j++) {
+            next if ($i == $j);
+            next if (ind_in_array($j,\@excu));
+            $j2 = $j + 1;
+            $ra2 = ${$rfn}[$j];
+            $typ2 = ${$ra2}[0];
+            if ($find_vor_only) {
+                next if (is_ndb_type($typ2));
+                next if (is_ilsdme_type($ra2));
+            }
+            $dist2 = ${$ra2}[9];
+            next if (length($dist2) == 0);
+            $km2 = $dist2 / 1000; # m to km
+            $km2 = (int(($km2 + 0.05) * 10) / 10);
+            # prt("Comparing $dist with $dist2\n");
+            $nfrq2 = ${$ra2}[4];
+            $nid2  = ${$ra2}[7];
+            # ($dist eq $dist2) || 
+            if ( (($nid eq $nid2) && ($nfrq eq $nfrq2)) ) {
+                # same 'id' 'freq' - decide which
+                prt("$i2:$j2: Equal id $dist type $typ/$typ2 id $nid/$nid2") if (VERB9());
+                if (($typ == 3)&&($typ2 == 12)) {
+                    push(@excu,$j);
+                    push(@navs,$ra2);
+                    $fnd = 1;
+                    prt("Stored $typ2\n") if (VERB9());
+                } elsif (($typ == 12)&&($typ2 == 3)) {
+                    push(@navs,$ra);
+                    push(@excu,$i);
+                    $fnd = 1;
+                    prt("Stored $typ\n") if (VERB9());
+                } elsif ((($typ == 13)&&($typ2 == 3))||($typ == 3)&&($typ2 == 13)||
+                    (($typ == $typ2)&&(($typ == 3)||($typ ==13)))) {
+                    push(@navs,$ra);
+                    push(@excu,$i);
+                    $fnd = 1;
+                    prt("Stored $typ\n") if (VERB9());
+                } else {
+                    prtw("WARNING: Presently NO filter of types $typ and $typ2 - ** FIX ME **\n");
+                }
+            }
+        }
+        if ($fnd == 0) {
+            $km = $dist / 1000; # m to km
+            $km = (int(($km + 0.05) * 10) / 10);
+
+            prt("$i2: Dup. not found $typ, $nid, $nfrq, at $km km, ...\n") if (VERB5());
+            push(@navs,$ra);    # so keep this one
+        }
+
+    }
+    $max = scalar @navs;
+    prt("Return $max after filtering.\n") if (VERB5());
+    return @navs;
+}
+
 sub filter_vor_pair() {
     my ($i,$typ,$nlat,$nlon,$nalt,$nfrq,$nrng,$nfrq2,$nid,$name,$dist,$az1,$km,$az,$out,$msg,$clat,$clon,$cfrq);
     my $max = scalar @found_navs;
+    my $rfn = \@found_navs;
     if ($filter_vor_pairs) {
-        my @navs = ();
-        my ($ra,$ra2,$j,$j2,$typ2,$dist2,$fnd,$i2);
-        my $max = scalar @found_navs;
-        prt("Filter $max for pairs...\n") if (VERB5());
-        my @excu = ();
-        for ($i = 0; $i < $max; $i++) {
-            $i2 = $i + 1;
-            $ra = $found_navs[$i];
-            $typ = ${$ra}[0];
-            if ($find_vor_only) {
-                next if (is_ndb_type($typ));
-            }
-            next if (ind_in_array($i,\@excu));
-            $dist = ${$ra}[9];
-            $fnd = 0;
-            for ($j = 0; $j < $max; $j++) {
-                next if ($i == $j);
-                next if (ind_in_array($j,\@excu));
-                $j2 = $j + 1;
-                $ra2 = $found_navs[$j];
-                $typ2 = ${$ra2}[0];
-                if ($find_vor_only) {
-                    next if (is_ndb_type($typ2));
-                }
-                $dist2 = ${$ra2}[9];
-                next if (length($dist2) == 0);
-                # prt("Comparing $dist with $dist2\n");
-                if ($dist eq $dist2) {
-                    # same 'name' - decide which
-                    prt("$i2:$j2: Equal names $dist type $typ and $typ2 ") if (VERB9());
-                    if (($typ == 3)&&($typ2 == 12)) {
-                        push(@excu,$j);
-                        push(@navs,$ra2);
-                        $fnd = 1;
-                        prt("Stored $typ2\n") if (VERB9());
-                    } elsif (($typ == 12)&&($typ2 == 3)) {
-                        push(@navs,$ra);
-                        push(@excu,$i);
-                        $fnd = 1;
-                        prt("Stored $typ\n") if (VERB9());
-                    } elsif ((($typ == 13)&&($typ2 == 3))||($typ == 3)&&($typ2 == 13)||
-                        (($typ == $typ2)&&(($typ == 3)||($typ ==13)))) {
-                        push(@navs,$ra);
-                        push(@excu,$i);
-                        $fnd = 1;
-                        prt("Stored $typ\n") if (VERB9());
-                    } else {
-                        prtw("WARNING: Presently NO filter of types $typ and $typ2 - ** FIX ME **\n");
-                    }
-                }
-            }
-            if ($fnd == 0) {
-                prt("$i2: Not found $dist twice, or more...\n") if (VERB5());
-                push(@navs,$ra);
-            }
-
-        }
-        $max = scalar @navs;
-        prt("Return $max after filtering.\n") if (VERB5());
-        return @navs;
+        return filter_refvor_pairs($rfn);
     } else {
         prt("No filtering of $max found...\n") if (VERB5());
     }
@@ -739,10 +783,12 @@ sub filter_dupes() {
     my %dupes = ();
     for ($i = 0; $i < $max; $i++) {
         $ra = $found_navs[$i];
+        $typ = ${$ra}[0];
         $nfrq = ${$ra}[4];
         $nid  = ${$ra}[7];
         $name = trim_all(${$ra}[8]);
-        $tst = $nfrq.$nid.$name;
+        # $tst = $nfrq.$nid.$name;
+        $tst = $name.$nfrq.$nid.$typ;
         if (defined $dupes{$tst}) {
             $typ = ${$ra}[0];
             prt("Dropping: $typ $nfrq $nid $name\n");
@@ -764,7 +810,7 @@ sub show_found_navs() {
     $i = scalar @nav_list;
     prt("Found $max matching $out navaids");
     if ($i < $max) {
-        prt(", REDUCED to $i after filtering. Use -A to stop filtering ");
+        prt(", REDUCED to $i after filtering. Use -a to stop filtering ");
         $max = $i;
     }
     prt("\n");
@@ -804,6 +850,7 @@ sub show_found_navs() {
     $json .= "\n]\n";
     if ($out) {
         if (length($out_file)) {
+            rename_2_old_bak($out_file);
             write2file($json,$out_file);
             prt("Written json to $out_file\n");
         } elsif ($add_json_output) {
@@ -878,21 +925,21 @@ sub vor_pair_filter($) {
 
 sub show_nearest_navs() {
     my ($i);
-    my @navs = sort mycmp_decend_n9 @navlist; 
-    # TODO - 
+    my @navs = sort mycmp_decend_n9 @navlist; # sort by calculated distance from lat,lon
+    # TODO - See below - some of this now done...
     #if ($filter_vor_pairs) { 
     #    @navs = vor_pair_filter(\@navs); 
     #}
     my $rnl = \@navs;
-    my ($typ,$nlat,$nlon,$nalt,$nfrq,$nrng,$nfrq2,$nid,$name,$dist,$az1,$km,$az,$out,$ra);
+    my ($typ,$nlat,$nlon,$nalt,$nfrq,$nrng,$nfrq2,$nid,$name,$dist,$az1,$km,$az,$out,$ra,@arr);
     my $vcnt = 0;
     my $ncnt = 0;
     my $icnt = 0;
-    $out = 0;
     my $msg = '';
     my $max = $max_out;
-    if (scalar @{$rnl} < $max) {
-        $max = scalar @{$rnl};
+    $out = scalar @{$rnl};
+    if ($out < $max) {
+        $max = $out;
     }
     my @vorlist = ();
     my @ndblist = ();
@@ -903,8 +950,23 @@ sub show_nearest_navs() {
     if ($u_got_bbox) {
         prt("Listing $max in bbox $u_min_lon,$u_min_lat,$u_max_lon,$u_max_lon, VOR/DME first, then NDB, then ILS...\n");
     } else {
-        prt("Listing closest $max, VOR/DME first, then NDB, then ILS...\n");
+        prt("Listing closest $max,...\n");
     }
+    prt("VOR/DME ");
+    if ($filter_vor_pairs || $find_vor_only) {
+        prt("filtered");
+    } else {
+        prt("first");
+    }
+    prt(", ");
+    if ($find_vor_only) {
+        prt("no NDB/ILS - see '-a', '-A'");
+    } else {
+        prt("then NDB, and ILS");
+    }
+
+    prt("\n");
+
     for ($i = 0; $i < $max; $i++) {
         $ra = ${$rnl}[$i];
         $typ  = ${$ra}[0];
@@ -912,9 +974,20 @@ sub show_nearest_navs() {
         push(@vorlist,$ra);
     }
     $vcnt = scalar @vorlist;
-    prt("List $vcnt VOR, ") if ($vcnt);
-    $done_hdr = 0;
-    $out = 0;
+    if ($vcnt) {
+        prt("VOR List $vcnt");
+        if ($filter_vor_pairs) {
+            @arr = filter_refvor_pairs(\@vorlist);
+            $i = scalar @arr;
+            if ($i < $vcnt) {
+                prt("/$i");
+                @vorlist = @arr;
+                $vcnt = $i;
+            }
+        }
+        prt(", ");
+    }
+
     for ($i = 0; $i < $max; $i++) {
         $ra = ${$rnl}[$i];
         $typ  = ${$ra}[0];
@@ -922,9 +995,17 @@ sub show_nearest_navs() {
         push(@ndblist,$ra);
     }
     $ncnt = scalar @ndblist;
-    prt("List $ncnt NDB, ") if ($ncnt);
-    $out = 0;
-    $done_hdr = 0;
+    if ($ncnt) {
+        if ($find_vor_only) {
+            prt("xclud $ncnt NDB, "); 
+            @ndblist = ();
+        } else {
+            prt("List $ncnt NDB, ");
+        }
+    } else {
+        prt("No NDB, ");
+    }
+
     for ($i = 0; $i < $max; $i++) {
         $ra = ${$rnl}[$i];
         $typ  = ${$ra}[0];
@@ -932,8 +1013,19 @@ sub show_nearest_navs() {
         push(@ilslist,$ra);
     }
     $icnt = scalar @ilslist;
-    prt("List $icnt ILS and components, ") if ($icnt);
+    if ($icnt) {
+        if ($find_vor_only) {
+            prt("xclud $icnt ILS, "); 
+            @ilslist = ();
+        } else {
+            prt("List $icnt ILS, ");
+        }
+    } else {
+        prt("No ILS, ");
+    }
+    prt("\n");  # close info line
 
+    # OUTPUT STAGE
     $done_hdr = 0;
     $out = 0;
     foreach $ra (@vorlist) {
@@ -949,7 +1041,7 @@ sub show_nearest_navs() {
         $name = ${$ra}[8];
         $dist = ${$ra}[9];
         $az1  = ${$ra}[10];
-        $km = $dist / 1000;
+        $km = $dist / 1000; # m to km
         $km = (int(($km + 0.05) * 10) / 10);
         $az = (int(($az1 + 0.05) * 10) / 10);
 		is_valid_nav($typ);
@@ -996,6 +1088,15 @@ sub show_nearest_navs() {
         $msg .= prtnav( $actnav, $typ, $nlat, $nlon, $nalt, $nfrq, $nrng, $nid, $name, $km, $az );
         $out++;
     }
+
+    if ($out) {
+        if (length($out_file)) {
+            rename_2_old_bak($out_file);
+            write2file($msg,$out_file);
+            prt("Written list to $out_file\n");
+        }
+    }
+
 
 
 }
@@ -1265,7 +1366,7 @@ sub parse_args {
                 $sarg = $av[0];
                 $out_file = $sarg;
                 prt("Set out file to [$out_file].\n") if ($verb);
-            } elsif ($sarg =~ /^x/) {
+            } elsif ($sarg =~ /^X/) {
                 $use_xplane_dat = 1;
                 prt("Set to use x-plane data [$x_navdat].\n") if ($verb);
             } elsif ($sarg =~ /^i/) {
@@ -1350,16 +1451,16 @@ sub give_help {
     prt(" --verb[n]     (-v) = Bump [or set] verbosity. def=$verbosity\n");
     prt(" --load        (-l) = Load LOG at end. ($outfile)\n");
     prt(" --out <file>  (-o) = Write output to this file.\n");
-    prt(" --xplane      (-x) = Use x-plane data (def=$x_navdat)\n");
     prt(" --name <name> (-n) = Search using a name. Give NAME:ID pair.\n");
     prt(" --in <file>   (-i) = Use file line separated list of inputs.\n");
     prt(" --json        (-j) = Also output in json format.\n");
-    prt(" --all         (-a) = No filtering of found navaids.\n");
-    prt(" --ALL         (-A) = Include ALL navaids. Default is VOR(3) and VOR-DME(12) only.\n");
+    prt(" --all         (-a) = No filtering of found navaids. (def=$filter_vor_pairs)\n");
+    prt(" --ALL         (-A) = Include ALL navaids. Default is VOR(3) and VOR-DME(12) only (def=$find_vor_only).\n");
     prt(" --max <num>   (-m) = Set the maximum output list. (def=$max_out)\n");
     prt(" --bbox <bbox> (-b) = Find all navs within the bounding box.\n");
     prt(" --track <b,e> (-t) = Find all navs along a track, bgn-lat,bgn-lon,end-lat,end-lon.\n");
     prt(" --fudge <deg> (-f) = Expand bbox by this fudge factor. (def=$fudge)\n");
+    prt(" --Xplane      (-X) = Use X-plane data (def=$x_navdat)\n");
     prt(" bbox = min-lon,min-lat,max-lon,max-lat\n");
     prt(" Default nav data file used is [$g_navdat]\n");
     prt(" Given a bear lat,lon pair search for all navaids, sorted by distance, and output closest $max_out,\n");
