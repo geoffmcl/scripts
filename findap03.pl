@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 # NAME: findap03.pl
 # AIM: Read FlightGear apt.dat, and find an airport given the name,
+# 2019-02-20 - Show '/I/C/A/ICAO.threshold.xml', if no groundnet...
 # 2018-06-09 - allow apt.dat, as well as apt.dat.gz, use for ($i = 0; $i < $cnt; $i++), and
 #              fix last apt entry...
 # 2018-06-07 - change fg=<bucket/path> to suit OS
@@ -92,7 +93,8 @@ my $NAVFILE 	  = "$FGROOT/Navaids/nav.dat.gz";	# the NAV, NDB, etc. data file
 my $FIXFILE 	  = "$FGROOT/Navaids/fix.dat.gz";	# the FIX data file
 my $AWYFILE       = "$FGROOT/Navaids/awy.dat.gz";   # Airways data
 # =============================================================================
-my $VERS="2018-06-09 version 1.1.3"; # enhancements...
+my $VERS="2019-02-20 version 1.1.4"; # show 'threshold.xml', if no groundnet...
+###my $VERS="2018-06-09 version 1.1.3"; # enhancements...
 ###my $VERS="2018-06-07 version 1.1.2"; # small changes
 ###my $VERS="Mar 10, 2018. version 1.1.1"; # very stable
 ###my $VERS="Nov 24, 2016. version 1.1.0"; # very stable
@@ -702,6 +704,50 @@ sub check_ground_net($$) {
     ${$rt} = $dir;
     return 1;
 }
+
+# repeat of the above... maybe this is more important... but show one, for now...
+sub check_threshold($$) {
+    my ($icao,$rt) = @_;
+    return 0 if (length($icao) < 3);
+    my $scene = $TSSCENERY;
+    $scene = $SCENEROOT if (! -d $scene);
+    if (! -d $scene) {
+        prt("check_threshold: Directory $scene NOT found!\n") if (VERB9());
+        return 0;
+    }
+    my $dir = $scene.$PATH_SEP."Airports";
+    if (! -d $dir) {
+        prt("check_threshold: Directory $dir NOT found!\n") if (VERB9());
+        return 0;
+    }
+    $dir .= $PATH_SEP.substr($icao,0,1);
+    $dir .= $PATH_SEP.substr($icao,1,1);
+    $dir .= $PATH_SEP.substr($icao,2,1);
+    $dir .= $PATH_SEP.$icao.".threshold.xml";
+    if (! -f $dir) {
+        if ($scene eq $TSSCENERY) {
+            $scene = $SCENEROOT;
+            $dir = $scene.$PATH_SEP."Airports";
+            if (! -d $dir) {
+                prt("check_threshold: Directory $dir NOT found!\n") if (VERB9());
+                return 0;
+            }
+            $dir .= $PATH_SEP.substr($icao,0,1);
+            $dir .= $PATH_SEP.substr($icao,1,1);
+            $dir .= $PATH_SEP.substr($icao,2,1);
+            $dir .= $PATH_SEP.$icao.".threshold.xml";
+            if ( -f $dir) {
+                ${$rt} = $dir;
+                return 1;
+            }
+        }
+        prt("check_threshold: File $dir NOT found!\n") if (VERB9());
+        return 0;
+    }
+    ${$rt} = $dir;
+    return 1;
+}
+
 
 sub get_ll_stg($$) {
     my ($lat,$lon) = @_;
@@ -1528,6 +1574,8 @@ sub show_airports_found {
         if (check_ground_net($oicao,\$tmp)) {
             prt("See $tmp\n");
             #show_ground_net($tmp);
+        } elsif (check_threshold($oicao,\$tmp)) {
+            prt("See $tmp\n");
         }
         ############################
 		add_2_tiles($tile);
