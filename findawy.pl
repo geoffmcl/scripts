@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 # NAME: findawy.pl
 # AIM: Given an airport ICAO, or a lat,lon, find all airways, hi and low within a given radius
+# 2019-08-17 - Fix dup @narr; add set range, -r km; set max. output, -m NUM; -LA lat -LO lon
 # 2018-02-25 - Review, and change to x:\fgdata
 # 16/08/2015 geoff mclane http://geoffair.net/mperl
 use strict;
@@ -32,7 +33,8 @@ open_log($outfile);
 # with a defined lower base, usually FL070–FL100, extending to FL195.
 
 # user variables
-my $VERS = "0.0.5 2015-08-16";
+my $VERS = "0.0.6 2017-08-17";
+# $VERS = "0.0.5 2015-08-16";
 my $load_log = 0;
 my $in_icao = '';
 my $in_lat = 400;
@@ -63,7 +65,7 @@ my $apts_csv = $perl_dir.'circuits'.$PATH_SEP.'airports2.csv';
 my $rwys_csv = $perl_dir.'circuits'.$PATH_SEP.'runways.csv';
 
 # ### DEBUG ###
-my $debug_on = 1;
+my $debug_on = 0;
 ##my $def_file = 'LFPO';
 #my $def_file = 'KSFO';
 #my $def_file = 'YSSY';
@@ -128,15 +130,17 @@ sub find_apt_gz($) {
     my $ficao = shift;
     my ($cnt,$msg);
     my $aptdat = $apt_file;
+    my ($n,$d) =  fileparse($aptdat); 
     #### pgm_exit(1,"TEMP EXIT\n");
-    prt("[v9] Loading $aptdat file ... moment..\n"); # if (VERB9());
+    $msg = "Loading $aptdat file... ";
+    prt("$msg ... moment...\n"); # if (VERB9());
     mydie("ERROR: Can NOT locate $aptdat ...$!...\n") if ( !( -f $aptdat) );
     ###open IF, "<$aptdat" or mydie("OOPS, failed to open [$aptdat] ... check name and location ...\n");
     open IF, "gzip -d -c $aptdat|" or mydie( "ERROR: CAN NOT OPEN $aptdat...$!...\n" );
     my @lines = <IF>;
     close IF;
-    $cnt = scalar @lines;
-    prt("[v9] Got $cnt lines to scan for ICAO $ficao...\n"); # if (VERB9());
+    my $lncnt = scalar @lines;
+    prt("[v9] Got $lncnt lines to scan for ICAO $ficao...\n") if (VERB9());
     my ($line,$len,$type,@arr);
     my $g_version = 0;
     foreach $line (@lines) {
@@ -163,6 +167,8 @@ sub find_apt_gz($) {
     $got_twr = 0;
     $aptln = '';
     my $csv = "lat,lon,altft,type,rwys,icao,name\n";
+    my $csvlines = 1;
+    prt("Processing $lncnt lines of '$n', seeking ICAO $ficao...\n");
     foreach $line (@lines) {
         chomp $line;
         $lnn++;
@@ -204,8 +210,9 @@ sub find_apt_gz($) {
                     $icao = $arr2[4]; # ICAO
                     $name = join(' ', splice(@arr2,5)); # Name
                     $csv .= "$alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n";
+                    $csvlines++;
                     if ($ficao eq $icao) {
-                        prt("Found $alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n");
+                        prt("$lnn: Found $alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n");
                         $apt_icao = $icao;
                         $in_lat = $alat;
                         $in_lon = $alon;
@@ -376,8 +383,9 @@ sub find_apt_gz($) {
             $icao = $arr2[4]; # ICAO
             $name = join(' ', splice(@arr2,5)); # Name
             $csv .= "$alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n";
+            $csvlines++;
             if ($ficao eq $icao) {
-                prt("Found $alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n");
+                prt("$lnn: Found $alat,$alon,$aalt,$type,$rwycnt,$icao,$name\n");
                 $apt_icao = $icao;
                 $in_lat = $alat;
                 $in_lon = $alon;
@@ -389,7 +397,7 @@ sub find_apt_gz($) {
     }
     rename_2_old_bak($out_file);
     write2file($csv,$out_file);
-    prt("Scanned $lnn lines... written csv to $out_file\n");
+    prt("Scanned $lnn lines... written $csvlines CSV to '$out_file'...\n");
 }
 
 sub find_apt_csv($$) {
@@ -400,7 +408,7 @@ sub find_apt_csv($$) {
     my @lines = <INF>;
     close INF;
     my $lncnt = scalar @lines;
-    prt("Processing $lncnt lines, from [$inf]...\n");
+    prt("Processing $lncnt lines, from CSV [$inf]...\n");
     my ($line,$inc,$lnn,@arr);
     $lnn = 0;
     my ($alat,$alon,$aalt,$type,$rwycnt,$icao,$name);
@@ -439,7 +447,7 @@ sub find_apt($) {
 
 sub load_gzip_file($) {
     my ($fil) = shift;
-	prt("[v2] Loading [$fil] file... moment...\n"); # if (VERB2());
+	prt("[v2] Loading [$fil] file... moment...\n") if (VERB2());
 	mydie("ERROR: Can NOT locate [$fil]!\n") if ( !( -f $fil) );
 	open NIF, "gzip -d -c $fil|" or mydie( "ERROR: CAN NOT OPEN $fil...$!...\n" );
 	my @arr = <NIF>;
@@ -646,7 +654,7 @@ sub search_awys_near($$$) {
     my %h = ();
     $lnn = 0;
     $hadver = 0;
-    my @narr = ();
+    my @narr1 = ();
     foreach $line (@{$raa}) {
         $lnn++;
         chomp $line;
@@ -689,18 +697,22 @@ sub search_awys_near($$$) {
             ## $h{$to} = [ ] if (!defined $h{$to});
             ## $ra = $h{$to};
             ## push(@{$ra}, [ $tlat, $tlon, $from, $flat, $flon, $cat, $bfl, $efl, $name ]);
-            push(@narr, [$dist, $from, $flat, $flon, $to, $tlat, $tlon, $cat, $bfl, $efl, $name ]);
+            push(@narr1, [$dist, $from, $flat, $flon, $to, $tlat, $tlon, $cat, $bfl, $efl, $name ]);
+        } else {
+            pgm_exit(1,"$lnn: WHAT not 10:$cnt: $line\n");
         }
     }
 
     #################################################################
     # sort by distance
-    my @sarr = sort mycmp_decend_n0 @narr;
-    $cnt = 0;
-    my @narr = ();
+    my @sarr = sort mycmp_decend_n0 @narr1;
+    my $fcnt = scalar @sarr;
+    my @narrs = ();
     my ($ft,$cnt2,$off,$ra2);
     my %hash = ();
+    my $dups = 0;
     $cnt2 = 0;
+    $cnt = 0;
     foreach $ra (@sarr) {
 		#              0      1      2      3      4    5      6      7     8     9     10
         # push(@narr, [$dist, $from, $flat, $flon, $to, $tlat, $tlon, $cat, $bfl, $efl, $name ]);
@@ -727,17 +739,18 @@ sub search_awys_near($$$) {
         $ft = "$from:$to";
         if (defined $hash{$ft}) {
             $off = ($hash{$ft} - 1);
-            $ra2 = $narr[$off];
+            $ra2 = $narrs[$off];
             ${$ra2}[7] = 3;
+            $dups++;
             next;
         }
-        push(@narr,$ra);
+        push(@narrs,$ra);
         ##$hash{$ft} = $ra;
-        $hash{$ft} = scalar @narr;
+        $hash{$ft} = scalar @narrs;
         $cnt++;
 		last if ($max_count && ($cnt > $max_count));
     }
-    prt("Got $cnt of $cnt2 airways...\n");
+    prt("Extracted airways $cnt of $cnt2, $dups dups... of total $fcnt...\n");
     ##pgm_exit(1,"TEMP EXIT\n");
 
     #################################################################
@@ -748,7 +761,7 @@ sub search_awys_near($$$) {
         $xg .= "# $apt_xg\n";
     }
     ##foreach $ra (@sarr) {
-    foreach $ra (@narr) {
+    foreach $ra (@narrs) {
 		#              0      1      2      3      4    5      6      7     8     9     10
         # push(@narr, [$dist, $from, $flat, $flon, $to, $tlat, $tlon, $cat, $bfl, $efl, $name ]);
         $dist = ${$ra}[0];
@@ -794,10 +807,11 @@ sub search_awys_near($$$) {
 		set_lat_lon(\$flon);
 		set_lat_lon(\$tlat);
 		set_lat_lon(\$tlon);
+
+        $cnt++;
 		$ccnt = sprintf("%2d",$cnt);
         prt("$ccnt: $dist, $from, $flat, $flon, $to, $tlat, $tlon, $cat, $bfl, $efl, $name\n");
 
-        $cnt++;
         ###last if ($cnt > 10);
 		last if ($max_count && ($cnt > $max_count));
     }
@@ -821,7 +835,7 @@ sub search_awys_near($$$) {
 	# write xg file
 	rename_2_old_bak($xg_out);
 	write2file($xg,$xg_out);
-	$line = "Airways near ";
+	$line = "Airways within $search_rad_km km ";
 	$line .= "$in_icao " if (length($in_icao));
 	$line .= "$lat,$lon ";
 	prt("$line, written to $xg_out\n");
@@ -836,7 +850,7 @@ sub process_lat_lon() {
     }
     my $rla = load_gzip_file($awy_file);
     my $lncnt = scalar @{$rla};
-    prt("Got $lncnt lines to process from $awy_file...\n");
+    prt("Got $lncnt lines to process from $awy_file... $search_rad_km km of $lat,$lon...\n");
     search_awys_near($rla,$lat,$lon);
     prt("Done...\n");
 }
@@ -909,6 +923,30 @@ sub parse_args {
 				if (! -f $apt_file) {
 					pgm_exit(1,"Error: can NOT locate $apt_file!\n");
 				}
+            } elsif ($sarg =~ /^r/) {
+                need_arg(@av);
+                shift @av;
+                $sarg = $av[0];
+                $search_rad_km = $sarg;
+                prt("Set search radius to [$search_rad_km].\n") if ($verb);
+            } elsif ($sarg =~ /^m/) {
+                need_arg(@av);
+                shift @av;
+                $sarg = $av[0];
+                $max_count = $sarg;
+                prt("Set maximum output to [$max_count].\n") if ($verb);
+            } elsif ($sarg =~ /^LA/) {
+                need_arg(@av);
+                shift @av;
+                $sarg = $av[0];
+                $in_lat = $sarg;
+                prt("Set input degs latitude to [$in_lat].\n") if ($verb);
+            } elsif ($sarg =~ /^LO/) {
+                need_arg(@av);
+                shift @av;
+                $sarg = $av[0];
+                $in_lon = $sarg;
+                prt("Set input degs longitude to [$in_lon].\n") if ($verb);
             } else {
                 pgm_exit(1,"ERROR:$cnt: Invalid argument [$arg]! Try -?\n");
             }
@@ -927,7 +965,7 @@ sub parse_args {
         }
     }
     if (length($in_icao)) {
-        find_apt($in_icao);
+        find_apt($in_icao); # used to set $in_lat, $in_lon ...
         if (($in_lat == 400) || ($in_lon == 400)) {
             pgm_exit(1,"ERROR: input ICAO $in_icao NOT found!\n");
         }
@@ -947,6 +985,9 @@ sub give_help {
     prt(" --verb[n]     (-v) = Bump [or set] verbosity. def=$verbosity\n");
     prt(" --load        (-l) = Load LOG at end. ($outfile)\n");
     prt(" --out <file>  (-o) = Write output to this file.\n");
+    prt(" --LAT DEGS   (-LA) = Set the input latitude (def=$in_lat)\n");
+    prt(" --LON DEGS   (-LO) = Set the input longitude (def=$in_lon)\n");
+
     $msg = 'ok';
     if (! -f $awy_file) {
         $msg = '**NF**';
@@ -957,6 +998,12 @@ sub give_help {
         $msg = '**NF**';
     }
     prt(" --Apt <file>  (-A) = Set the apt.dat.gz file. (def=$apt_file $msg)\n");
+    prt(" --rad INTkm   (-r) = Set km. search radius. (def=$search_rad_km km).\n");
+    prt(" --max NUM     (-m) = Set max. output count. 0 to disable. (def=$max_count).\n");
+    prt("\n");
+    prt("Given an airport ICAO, or a lat,lon, find all airways, hi and low, within a given radius,\n");
+    prt("default $search_rad_km km.\n");
+
 }
 
-# eof - template.pl
+# eof - findawy.pl
