@@ -1384,6 +1384,10 @@ sub parse_args {
                 $sarg = $av[0];
                 if ($sarg =~ /^\d+$/) {
                     $max_out = $sarg;
+                    if ($max_out == 0) {
+                        pgm_exit(1,"Error: command $arg must be followed by an integer, not ZERO!\n");
+                    }
+                    prt("Set max. output to [$max_out].\n") if ($verb);
                 } else {
                     pgm_exit(1,"Error: command $arg must be followed by an integer, not $sarg!\n");
                 }
