@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 # NAME: findap03.pl
 # AIM: Read FlightGear apt.dat, and find an airport given the name,
+# 2019-11-16 - Small fix of spread, when searchin by lat,lon...
 # 2019-02-20 - Show '/I/C/A/ICAO.threshold.xml', if no groundnet...
 # 2018-06-09 - allow apt.dat, as well as apt.dat.gz, use for ($i = 0; $i < $cnt; $i++), and
 #              fix last apt entry...
@@ -94,7 +95,8 @@ my $NAVFILE 	  = "$FGROOT/Navaids/nav.dat.gz";	# the NAV, NDB, etc. data file
 my $FIXFILE 	  = "$FGROOT/Navaids/fix.dat.gz";	# the FIX data file
 my $AWYFILE       = "$FGROOT/Navaids/awy.dat.gz";   # Airways data
 # =============================================================================
-my $VERS="2019-02-20 version 1.1.4"; # show 'threshold.xml', if no groundnet...
+my $VERS="2019-11-16 version 1.1.5"; # small fix of spead shown, when searchin by lat,lon...
+###my $VERS="2019-02-20 version 1.1.4"; # show 'threshold.xml', if no groundnet...
 ###my $VERS="2018-06-09 version 1.1.3"; # enhancements...
 ###my $VERS="2018-06-07 version 1.1.2"; # small changes
 ###my $VERS="Mar 10, 2018. version 1.1.1"; # very stable
@@ -4355,7 +4357,7 @@ sub parse_args {
         } elsif ($SRCHNAME) {
             prt("Searching for NAME=$aptname\n");
         } else {
-            prt("Searching by lat,lon=$g_center_lat,$g_center_lon, spread $nmaxlatd,$nmaxlond degs\n");
+            prt("Searching by lat,lon=$g_center_lat,$g_center_lon, spread $maxlatd,$maxlond degs\n");
         }
         prt("[v1] $pgmname, $VERS\n") if (VERB1());
     }
