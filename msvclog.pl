@@ -1018,7 +1018,8 @@ sub process_in_file($) {
                         $linkwarn{$val} = 1;
                         push(@warns,$trline);
                     }
-                # } elsif ($trline =~/\s+warning\s+/) {
+                } elsif ($trline =~/^CUSTOMBUILD\s*:\s+warning\s+/) {
+                    push(@warns,$trline);
                 } else {
                     pgm_exit(1,"ERROR:$lnn: warning regex failed [$trline]! ** FIX ME **\nLine:$lnn: '$line'\n");
                     push(@warns,$tline);
