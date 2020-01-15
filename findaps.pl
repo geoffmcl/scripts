@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 # NAME: findaps.pl
 # AIM: There is a BIG findap[nn].pl - This is a SIMPLER version
+# 2020-01-08 - review - maybe add xg output...
 # 25/08/2015 - add to scripts repo
 # 17/10/2014 - Change -i -c = no case change on name
 # 16/10/2014 - Use later fgdata 3.3, thus add typ=100
@@ -480,7 +481,7 @@ sub load_apt_data {
             $glat = 0;
             $glon = 0;
             $totaptcnt++;	# count another AIRPORT
-        } elsif ($line =~ /^$rln\s+/) {
+        } elsif ($line =~ /^$rln\s+/) { # my $rln =    '10';	# runways/taxiways line
             # 10  36.962213  127.031071 14x 131.52  8208 1595.0620 0000.0000   150 321321  1 0 3 0.25 0 0300.0300
             # 10  36.969145  127.020106 xxx 221.51   329 0.0 0.0    75 161161  1 0 0 0.25 0 
             $rlat = $arr[1];
@@ -568,7 +569,8 @@ sub load_apt_data {
             #        0  1     2     3     4    5
             $rwy2 = [10,$rlat,$rlon,$rwy2,$az1,$s,6,7,8,9,$surf,11,12,13,14,15];
             #  push(@runways, \@arr);
-            push(@runways,$rwy2);
+            push(@runways,$rwy2); # even though NEW style, store only in OLD 10 style
+            $totrwycnt++;
         } elsif ($type == 101) {	# Water runways
             # Water runways
             # 0   1      2 3  4           5             6  7           8
@@ -755,11 +757,13 @@ sub cased_name($) { # if (!$name_as_is);
 sub get_runways_stg($) {
     my $rrwys = shift;
     my $cnt = scalar @{$rrwys};
-    my ($i,$ra,$max,$rlen,$hdg);
+    my ($i,$ra,$max,$rlen,$hdg,$type,$tmp);
     $max = 0;
     $hdg = 0;
     for ($i = 0; $i < $cnt; $i++) {
         $ra = ${$rrwys}[$i];
+        $tmp = scalar @{$ra};
+        $type = ${$ra}[0];  # get first 'type' entry
         $rlen = ${$ra}[5];
         if ($rlen > $max) {
             $max = $rlen;
@@ -767,9 +771,14 @@ sub get_runways_stg($) {
             ##$hdg  = ${$ra}[3];
             ##$hdg =~ s/x$//;
         }
+        if ($type == 10) {
+
+        } else {
+            pgm_exit(1,"Un-code type $type - *** FIX ME ***");
+        }
     }
     $hdg = int($hdg);
-    my $txt = "rw:$cnt:$max:$hdg";
+    my $txt = "RW:$cnt:$max:$hdg";
     return $txt;
 }
 
@@ -786,6 +795,7 @@ sub get_runways_stg($) {
 sub get_ils_cnt($) {
     my ($icao) = shift;
     my $icnt = 0;
+    return 0 if (! defined $rnavaids);
     my $max = scalar @{$rnavaids};
     my ($i,$typ,$ra,$name,$tmp,@arr);
     # prt("Finding ILS for [$icao] in $max navaids...\n");
@@ -1006,7 +1016,15 @@ sub process_in_icao($) {
             $g_maxalt = $aalt if ($aalt > $g_maxalt);
 
             $name = cased_name($name) if (!$name_as_is);
-            prt("Found $icao, $name, $alat, $alon, $aalt ft, $rwycnt runways\n"); # if (VERB1());
+            my $rwystg = get_runways_stg($rrwys);
+            # NEEDS     $rnavaids = load_nav_file();
+            #my $ilscnt = get_ils_cnt($icao);
+            #if ($ilscnt) {
+            #    $rwystg .= ":ils:".$ilscnt;
+            #} else {
+                ### $arwys .= ":ni";
+            #}
+            prt("Found $icao, $name, $alat, $alon, $aalt ft, $rwystg ($rwycnt)\n"); # if (VERB1());
             push(@found, $i);
             $fndcnt++;
         }
