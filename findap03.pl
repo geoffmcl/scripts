@@ -778,13 +778,14 @@ my $SG_NM_TO_METER = 1852;
 my $SG_METER_TO_NM = 0.0005399568034557235;
 my $use_full_msg = 0;
 
-sub get_mid_point($$$$$$) {
-    my ($elat1,$elon1,$elat2,$elon2,$rclat,$rclon) = @_;
+sub get_mid_point($$$$$$$) {
+    my ($elat1,$elon1,$elat2,$elon2,$rclat,$rclon,$rm_az) = @_;
     my ($az1,$az2,$s,$az5,$clat,$clon);
     my $res = fg_geo_inverse_wgs_84($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$s);
-    $res = fg_geo_direct_wgs_84($elat1,$elon1, $az1, ($s / 2), \$clat, \$clon, \$az5);
+    $res = fg_geo_direct_wgs_84($elat2,$elon2, $az2, ($s / 2), \$clat, \$clon, \$az5);
     ${$rclat} = $clat;
     ${$rclon} = $clon;
+    ${$rm_az} = $az5;
 }
 
 my $x_min_lat = 400;
@@ -942,7 +943,7 @@ sub rwy_xg_stg($$$$$$$$) {
 
     my ($l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon);
     my ($r_tl_lat,$r_tl_lon,$r_bl_lat,$r_bl_lon,$r_br_lat,$r_br_lon,$r_tr_lat,$r_tr_lon);
-    my ($m_lat,$m_lon);
+    my ($m_lat,$m_lon,$m_az);
 
     #################################################
     # RIGHT CIRCUIT
@@ -968,13 +969,14 @@ sub rwy_xg_stg($$$$$$$$) {
 
         add_to_bbox($r_tr_lon,$r_tr_lat);
 
-        get_mid_point($r_tr_lat,$r_tr_lon,$r_tl_lat,$r_tl_lon,\$m_lat,\$m_lon); # TR->TL - cross
+        get_mid_point($r_tr_lat,$r_tr_lon,$r_tl_lat,$r_tl_lon,\$m_lat,\$m_lon,\$m_az); # TR->TL - cross
 
         if ($add_anno) {
+            $m_az = sprintf("%03u", int($m_az + 0.5));
             if ($use_full_msg) {
                 $xg .= "anno $m_lon $m_lat cross TR->TL\n";
             } else {
-                $xg .= "anno $m_lon $m_lat cross\n";
+                $xg .= "anno $m_lon $m_lat cross $m_az\n";
             }
 
             $xg .= "anno $r_tl_lon $r_tl_lat R-TL\n";
@@ -984,13 +986,14 @@ sub rwy_xg_stg($$$$$$$$) {
 
         add_to_bbox($r_tl_lon,$r_tl_lat);
 
-        get_mid_point($r_tl_lat,$r_tl_lon,$r_bl_lat,$r_bl_lon,\$m_lat,\$m_lon); # TL->BL - downwind
+        get_mid_point($r_tl_lat,$r_tl_lon,$r_bl_lat,$r_bl_lon,\$m_lat,\$m_lon,\$m_az); # TL->BL - downwind
 
         if ($add_anno) {
+            $m_az = sprintf("%03u", int($m_az + 0.5));
             if ($use_full_msg) {
                 $xg .= "anno $m_lon $m_lat downwind TL->BL\n";
             } else {
-                $xg .= "anno $m_lon $m_lat downwind\n";
+                $xg .= "anno $m_lon $m_lat downwind $m_az\n";
             }
 
             $xg .= "anno $r_bl_lon $r_bl_lat R-BL\n";
@@ -1000,13 +1003,14 @@ sub rwy_xg_stg($$$$$$$$) {
 
         add_to_bbox($r_bl_lon,$r_bl_lat);
 
-        get_mid_point($r_bl_lat,$r_bl_lon,$r_br_lat,$r_br_lon,\$m_lat,\$m_lon); # BL->BR - base
+        get_mid_point($r_bl_lat,$r_bl_lon,$r_br_lat,$r_br_lon,\$m_lat,\$m_lon,\$m_az); # BL->BR - base
 
         if ($add_anno) {
+            $m_az = sprintf("%03u", int($m_az + 0.5));
             if ($use_full_msg) {
                 $xg .= "anno $m_lon $m_lat base BL->BR\n";
             } else {
-                $xg .= "anno $m_lon $m_lat base\n";
+                $xg .= "anno $m_lon $m_lat base $m_az\n";
             } 
 
             $xg .= "anno $r_br_lon $r_br_lat ____ R-BR\n";
@@ -1018,10 +1022,11 @@ sub rwy_xg_stg($$$$$$$$) {
 
         # on final
         # get_mid_point($r_br_lat,$r_br_lon,$r_tr_lat,$r_tr_lon,\$m_lat,\$m_lon); # BR->TR - runway
-        get_mid_point($r_br_lat,$r_br_lon,$elat2,$elon2,\$m_lat,\$m_lon); # BR->RWY - final
+        get_mid_point($r_br_lat,$r_br_lon,$elat2,$elon2,\$m_lat,\$m_lon,\$m_az); # BR->RWY - final
 
         if ($add_anno) {
-            $xg .= "anno $m_lon $m_lat final $rwy1\n";
+            $m_az = sprintf("%03u", int($m_az + 0.5));
+            $xg .= "anno $m_lon $m_lat final $m_az $rwy1\n";
         }
 
         $xg .= "$r_tr_lon $r_tr_lat\n";
@@ -1050,13 +1055,14 @@ sub rwy_xg_stg($$$$$$$$) {
             $xg .= "anno $l_tr_lon $l_tr_lat L-TR\n";
         }
 
-        get_mid_point($l_tr_lat,$l_tr_lon,$l_tl_lat,$l_tl_lon,\$m_lat,\$m_lon); # TR->TL - cross
+        get_mid_point($l_tr_lat,$l_tr_lon,$l_tl_lat,$l_tl_lon,\$m_lat,\$m_lon,\$m_az); # TR->TL - cross
 
         if ($add_anno) {
+            $m_az = sprintf("%03u", int($m_az + 0.5));
             if ($use_full_msg) {
                 $xg .= "anno $m_lon $m_lat cross TR->TL\n";
             } else {
-                $xg .= "anno $m_lon $m_lat cross\n";
+                $xg .= "anno $m_lon $m_lat cross $m_az\n";
             }
             $xg .= "anno $l_tl_lon $l_tl_lat L-TL\n";
         }
@@ -1066,13 +1072,14 @@ sub rwy_xg_stg($$$$$$$$) {
         add_to_bbox($l_tr_lon,$l_tr_lat);   # L-TR
         add_to_bbox($l_tl_lon,$l_tl_lat);   # L-TL
 
-        get_mid_point($l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,\$m_lat,\$m_lon); # TL->BL - downwind
+        get_mid_point($l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,\$m_lat,\$m_lon,\$m_az); # TL->BL - downwind
 
         if ($add_anno) {
+            $m_az = sprintf("%03u", int($m_az + 0.5));
             if ($use_full_msg) {
                 $xg .= "anno $m_lon $m_lat downwind TL->BL\n";
             } else {
-                $xg .= "anno $m_lon $m_lat downwind\n";
+                $xg .= "anno $m_lon $m_lat downwind $m_az\n";
             } 
 
             $xg .= "anno $l_bl_lon $l_bl_lat L-BL\n";
@@ -1081,13 +1088,14 @@ sub rwy_xg_stg($$$$$$$$) {
         $xg .= "$l_bl_lon $l_bl_lat\n";
         add_to_bbox($l_bl_lon,$l_bl_lat);   # L-BL
 
-        get_mid_point($l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,\$m_lat,\$m_lon); # BL->BR - base
+        get_mid_point($l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,\$m_lat,\$m_lon,\$m_az); # BL->BR - base
 
         if ($add_anno) {
+            $m_az = sprintf("%03u", int($m_az + 0.5));
             if ($use_full_msg) {
                 $xg .= "anno $m_lon $m_lat base BL->BR\n";
             } else {
-                $xg .= "anno $m_lon $m_lat base\n";
+                $xg .= "anno $m_lon $m_lat base $m_az\n";
             } 
 
             $xg .= "anno $l_br_lon $l_br_lat L-BR\n";
@@ -1097,11 +1105,12 @@ sub rwy_xg_stg($$$$$$$$) {
         add_to_bbox($l_br_lon,$l_br_lat);   # L-BR
 
         # on final
-        # get_mid_point($l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon,\$m_lat,\$m_lon); # BR->TR - runway
-        get_mid_point($l_br_lat,$l_br_lon,$elat1,$elon1,\$m_lat,\$m_lon); # BR->RWY - final
+        # get_mid_point($l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon,\$m_lat,\$m_lon,\$m_az); # BR->TR - runway
+        get_mid_point($l_br_lat,$l_br_lon,$elat1,$elon1,\$m_lat,\$m_lon,\$m_az); # BR->RWY - final
 
         if ($add_anno) {
-            $xg .= "anno $m_lon $m_lat final $rwy2\n";
+            $m_az = sprintf("%03u", int($m_az + 0.5));
+            $xg .= "anno $m_lon $m_lat final $m_az $rwy2\n";
         }
 
         $xg .= "$l_tr_lon $l_tr_lat\n";
