@@ -268,6 +268,61 @@ sub fg_geo_direct_wgs_84 {
     } 
 }
 
+########################################################
+# 2019-03-06 - These look good - see testing in lla2xyz.pl
+# from: https://ea4eoz.blogspot.com/2015/11/simple-wgs-84-ecef-conversion-functions.html
+#% WGS84 Lon-Lat-Alt coordinates to earth centered X-Y-Z
+#function xyz = lla2xyz(lla)
+#  lon=lla(1);
+#  lat=lla(2);
+#  alt=lla(3);
+sub lla2xyz($$$) {
+    # lon,lat in radians
+    my ($lon,$lat,$alt) = @_;
+    my $a = 6378137; # % radius
+    my $e = 8.1819190842622e-2; #% eccentricity
+    my $asq = $a * $a;
+    my $esq = $e * $e;
+    my $N = $a / sqrt( 1 - $esq * sin($lat) * sin($lat) ); #^2);
+    my $x = ($N + $alt) * cos($lat) * cos($lon);
+    my $y = ($N + $alt) * cos($lat) * sin($lon);
+    my $z = ( ( 1 - $esq ) * $N + $alt ) * sin($lat);
+    #xyz=[x y z];
+    return ($x, $y, $z);
+} # endfunction;
+
+# % Earth centered X-Y-Z coordinates to WGS84 Lon-Lat-Asl
+#function lla=xyz2lla(xyz)
+#  x=xyz(1);
+#  y=xyz(2);
+#  z=xyz(3);
+sub xyz2lla($$$) {
+    my ($x,$y,$z) = @_;
+    my $a = 6378137; #   % radius
+    my $e = 8.1819190842622e-2; #% eccentricity
+    my $asq = $a * $a;
+    my $esq = $e * $e;
+    my $b = sqrt($asq * (1 - $esq));
+    my $bsq = $b * $b;
+    my $ep = sqrt(($asq-$bsq)/$bsq);
+    my $p = sqrt($x * $x + $y * $y);
+    my $th = atan2($a * $z, $b * $p);
+    my $lon = atan2($y,$x);
+    my $lat = atan2(($z + $ep * $ep * $b * (sin($th)**3)),($p - $esq * $a * (cos($th)**3)));
+    my $N = $a / (sqrt( 1 - $esq * (sin($lat)**2)) );
+    #my $lat = atan2(($z + $ep * $ep * $b * (sin($th)^3)),($p - $esq * $a * (cos($th)^3)));
+    #my $N = $a / (sqrt( 1 - $esq * (sin($lat)^2)) );
+    #%alt=p/cos(lat)-N; % Not needed here
+    my ($gx,$gy,$gz) = lla2xyz( $lon, $lat, 0 );
+    my $gm = sqrt($gx * $gx + $gy * $gy + $gz * $gz);
+    my $am = sqrt($x * $x + $y * $y + $z * $z);
+    my $alt = $am - $gm;
+    #  lla=[lon lat alt];
+    return ($lon, $lat, $alt);
+} # endfunction;
+
+########################################################
+
 ####################################################
 ######## SOME VERY ROUGH CALCULATIONS ########
 # NOT VERY ACCUTATE DISTANCE WISE,
@@ -278,7 +333,7 @@ sub fg_geo_direct_wgs_84 {
 # The $FG_FACTOR used is only a GUESS???
 ####################################################
 
-sub fg_ll2xyz($$) {
+sub fg_ll2xyz_BAD($$) {
 	my $lon = (shift) * $FG_D2R;
 	my $lat = (shift) * $FG_D2R;
 	my $cosphi = cos $lat;
@@ -288,6 +343,41 @@ sub fg_ll2xyz($$) {
 	return ($di, $dj, $dk);
 }
 
+# ###################################################################
+# https://stackoverflow.com/questions/18759601/converting-lla-to-xyz
+# test: http://www.apsalin.com/convert-geodetic-to-cartesian.aspx
+# ll 53.3188 -60.42388 = 1884627.26999523 -3320765.80049198 5091816.37002576
+# also: https://www.oc.nps.edu/oc2902w/coord/llhxyz.htm
+# and: https://www.oc.nps.edu/oc2902w/coord/geodesy.js
+# see lla2xyz() replacement - more accurate
+sub fg_ll2xyz($$) {
+	my $lon = (shift) * $FG_D2R;
+	my $lat = (shift) * $FG_D2R;
+    my $alt = 0;
+
+    my $cosLat = cos $lat;
+    my $sinLat = sin $lat;
+
+    my $cosLon = cos $lon;
+    my $sinLon = sin $lon;
+
+    my $R = 6378137;
+    my $f_inv = 298.257223563; # was 298.257224;
+    my $f = 1.0 / $f_inv;
+    my $e2 = 1 - (1 - $f) * (1 - $f);
+
+    my $c = 1 / sqrt($cosLat * $cosLat + (1 - $f) * (1 - $f) * $sinLat * $sinLat);
+    my $s = (1 - $f) * (1 - $f) * $c;
+
+    my $x = ($R * $c + $alt) * $cosLat * $cosLon;
+    my $y = ($R * $c + $alt) * $cosLat * $sinLon;
+    my $z = ($R * $s + $alt) * $sinLat;
+
+	return ($x, $y, $z);
+
+}
+
+# see xyz2lla() replacement - more accurate
 sub fg_xyz2ll($$$) {
 	my ($di, $dj, $dk) = @_;
 	my $aux = $di * $di + $dj * $dj;
@@ -295,6 +385,8 @@ sub fg_xyz2ll($$$) {
 	my $lon = atan2($dj, $di) * $FG_R2D;
 	return ($lon, $lat);
 }
+
+############################################################
 
 sub fg_coord_dist_sq($$$$$$) {
 	my ($xa, $ya, $za, $xb, $yb, $zb) = @_;
