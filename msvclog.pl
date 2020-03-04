@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 # NAME: msvclog.pl
 # AIM: Read a MSVC build log output, and report success and failed projects
+# 2020-03-04 - Accept 'CPack: ...' messages...
 # 2018-06-22 - Accept cmake out message(STATUS "messages...") better, before 'Configuring done' 
 # 2018-05-21 - Add show of 'error' lines
 # 2018-04-12 - Show 'begin' line if date or time...
@@ -430,6 +431,9 @@ sub process_in_file($) {
             next;
         } elsif ($line =~ /^\s+Compiling\.\.\.$/) {
             # '  Compiling...'
+            next;
+        } elsif ($line =~ /^\s*CPack:/) {
+            # like '32:WARNING: UNPARSED '  CPack: Create package using ZIP''
             next;
         }
         @lnarr = space_split($tline);
