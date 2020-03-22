@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 # NAME: msvclog.pl
 # AIM: Read a MSVC build log output, and report success and failed projects
+# 2020-03-22 - Small adj for VS 2017 ouptut...
 # 2020-03-04 - Accept 'CPack: ...' messages...
 # 2018-06-22 - Accept cmake out message(STATUS "messages...") better, before 'Configuring done' 
 # 2018-05-21 - Add show of 'error' lines
@@ -36,7 +37,8 @@ my $outfile = $temp_dir."/temp.$pgmname.txt";
 open_log($outfile);
 
 # user variables
-my $VERS = "0.1.1 2018-06-22";  # move to 'scripts'...
+my $VERS = "0.1.2 2020-03-22";  # adj for VS 2017 ouptut...
+##my $VERS = "0.1.1 2018-06-22";  # move to 'scripts'...
 ##my $VERS = "0.1.0 2018-05-21";
 ##my $VERS = "0.0.9 2018-01-24";
 ##my $VERS = "0.0.8 2017-10-13";
@@ -1118,7 +1120,8 @@ sub process_in_file($) {
                 # 96:WARNING: UNPARSED '  Building Custom Rule F:/Projects/gshhg/CMakeLists.txt' *** FIX ME **
             } elsif ($line =~ /^\s+CMake\s+does\s+not\s+need\s+to\s+re-run\s+because\s+/) {
                 # 97:WARNING: UNPARSED '  CMake does not need to re-run because F:\Projects\gshhg\build\CMakeFiles\generate.stamp is up-to-date.' *** FIX ME **
-            } elsif ($line =~ /^\s+(\w+)\.vcxproj\s+->\s+(.+)$/) {
+            } elsif ($line =~ /^\s+([-\w]+)\.vcxproj\s+->\s+(.+)$/) {
+                # 20:WARNING: UNPARSED '  test-hid.vcxproj -> C:\GTools\ConApps\tests\test-hid\build\Debug\test-hidd.exe'
                 # 66: UNPARSED '  bmp_utils.vcxproj -> F:\Projects\gshhg\build\Debug\bmp_utilsd.lib'
                 # 84: UNPARSED '  png_utils.vcxproj -> F:\Projects\gshhg\build\Debug\png_utilsd.lib'
                 # 102: UNPARSED '  utils.vcxproj -> F:\Projects\gshhg\build\Debug\utilsd.lib'
@@ -1131,6 +1134,17 @@ sub process_in_file($) {
                     $curr_conf = "Release";
                 } elsif ($curr_out =~ /(\\|\/)RelWithDebInfo(\\|\/)/i) {
                     $curr_conf = "RelWithDebInfo";
+                }
+                my @ta = space_split($curr_out);
+                my $to = $ta[0];
+                my ($tn,$td,$te) = fileparse($to, qr/\.[^.]*/ );
+                if (!defined $projects{$curr_proj}) {
+                    $projects{$curr_proj} = $lnn;
+                    prt("$lnn: Project: $curr_proj $curr_conf out=${tn}$te\n") if (VERB1());
+                    $projcnt++;
+                    push(@projs,$curr_proj);
+                } else {
+                    prt("$lnn: Project: $curr_proj $curr_conf out=${tn}$te RPT\n") if (VERB2());
                 }
             } elsif ($line =~ /^Build\s+succeeded.$/) {
                 # is usually followed by the follwowing lines...
