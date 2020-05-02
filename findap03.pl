@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 # NAME: findap03.pl
 # AIM: Read FlightGear apt.dat, and find an airport given the name,
+# 28/04/2020 - Adjust for aptdat for Dell03 machine
 # 2019-11-16 - Small fix of spread, when searchin by lat,lon...
 # 2019-02-20 - Show '/I/C/A/ICAO.threshold.xml', if no groundnet...
 # 2018-06-09 - allow apt.dat, as well as apt.dat.gz, use for ($i = 0; $i < $cnt; $i++), and
@@ -65,8 +66,10 @@ if ($os =~ /win/i) {
     $PATH_SEP = "\\";
     if (-d "X:\\fgdata") {
         $CDATROOT="X:\\fgdata"; # 20170114 - 2017.1
+	} elsif (-d "F:/fgdata" ) {
+        $CDATROOT="F:\\fgdata"; # 20140127 - 3.1
     } else {
-        $CDATROOT="F:/fgdata"; # 20140127 - 3.1
+        $CDATROOT="D:\\FG\\next\\fgdata"; # 20200428 - 2019.2.0
     }
 }
 unshift(@INC, $perl_dir);
@@ -85,8 +88,13 @@ my $FGROOT = (exists $ENV{'FG_ROOT'})? $ENV{'FG_ROOT'} : $CDATROOT;
 my $SCENEROOT = (exists $ENV{'FG_SCENERY'})? $ENV{'FG_SCENERY'} : $DSCNROOT;
 #my $TSSCENERY = 'X:\fgsvnts';
 my $TSSCENERY = '/media/geoff/backup/next/scenery2';
-$TSSCENERY = 'G:\S' if ($os =~ /win/i);
-
+if ($os =~ /win/i) {
+	if (-d "G:\\S") {
+		$TSSCENERY = 'G:\S';
+	} else {
+		$TSSCENERY = 'D:\FG\S';
+	}
+}
 #my $FGROOT = (exists $ENV{'FG_ROOT'})? $ENV{'FG_ROOT'} : "C:/FG/27/data";
 # file spec : http://data.x-plane.com/file_specs/Apt810.htm
 my $APTFILE 	  = "$FGROOT/Airports/apt.dat.gz";	# the airports data file
@@ -95,7 +103,8 @@ my $NAVFILE 	  = "$FGROOT/Navaids/nav.dat.gz";	# the NAV, NDB, etc. data file
 my $FIXFILE 	  = "$FGROOT/Navaids/fix.dat.gz";	# the FIX data file
 my $AWYFILE       = "$FGROOT/Navaids/awy.dat.gz";   # Airways data
 # =============================================================================
-my $VERS="2019-11-16 version 1.1.5"; # small fix of spead shown, when searchin by lat,lon...
+my $VERS="2020-04-28 version 1.1.6"; # adj FGROOT for DELL03 machine
+###my $VERS="2019-11-16 version 1.1.5"; # small fix of spead shown, when searchin by lat,lon...
 ###my $VERS="2019-02-20 version 1.1.4"; # show 'threshold.xml', if no groundnet...
 ###my $VERS="2018-06-09 version 1.1.3"; # enhancements...
 ###my $VERS="2018-06-07 version 1.1.2"; # small changes
