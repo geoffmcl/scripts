@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 # NAME: msvclog.pl
 # AIM: Read a MSVC build log output, and report success and failed projects
+# 03/05/2020 - Adj for VS 2019 output
 # 2020-03-22 - Small adj for VS 2017 ouptut...
 # 2020-03-04 - Accept 'CPack: ...' messages...
 # 2018-06-22 - Accept cmake out message(STATUS "messages...") better, before 'Configuring done' 
@@ -37,7 +38,8 @@ my $outfile = $temp_dir."/temp.$pgmname.txt";
 open_log($outfile);
 
 # user variables
-my $VERS = "0.1.2 2020-03-22";  # adj for VS 2017 ouptut...
+my $VERS = "0.1.3 2020-05-03";  # adj for VS 2019 ouptut...
+##my $VERS = "0.1.2 2020-03-22";  # adj for VS 2017 ouptut...
 ##my $VERS = "0.1.1 2018-06-22";  # move to 'scripts'...
 ##my $VERS = "0.1.0 2018-05-21";
 ##my $VERS = "0.0.9 2018-01-24";
@@ -1038,6 +1040,7 @@ sub process_in_file($) {
             for ($j = $lnn; $j < $lncnt; $j++) {
                 $tmp = $lines[$j];
                 last if ($tmp =~ /^\w/);
+                last if ($tmp =~ /\.vcxproj\s+->\s+/);
                 $tmp =~ s/^\s+//;
                 $linklin .= " $tmp";
             }
@@ -1077,6 +1080,9 @@ sub process_in_file($) {
             #pgm_exit(1,"$lnn: $line\n$linklin\nTEMP EXIT\n");
             prt("$lnn:$line:\n$linklin\n") if (VERB9());
             $i = $j - 1;    # update position
+        } elsif ($line =~ /:\s+message\s+:\s+see\s+/) {
+			# 437:WARNING: UNPARSED 'D:\Projects\readline-8.0\compat.c : message : see previous definition of 'READLINE_LIBRARY' 
+			# ignore, for now...
         } else {
             if ($line =~ /^ClCompile:$/) {
                 # could collect compile lines
@@ -1120,7 +1126,9 @@ sub process_in_file($) {
                 # 96:WARNING: UNPARSED '  Building Custom Rule F:/Projects/gshhg/CMakeLists.txt' *** FIX ME **
             } elsif ($line =~ /^\s+CMake\s+does\s+not\s+need\s+to\s+re-run\s+because\s+/) {
                 # 97:WARNING: UNPARSED '  CMake does not need to re-run because F:\Projects\gshhg\build\CMakeFiles\generate.stamp is up-to-date.' *** FIX ME **
-            } elsif ($line =~ /^\s+([-\w]+)\.vcxproj\s+->\s+(.+)$/) {
+            # } elsif ($line =~ /^\s+([-\w]+)\.vcxproj\s+->\s+(.+)$/) {
+            } elsif ($line =~ /^\s+(.+)\.vcxproj\s+->\s+(.+)$/) {
+				#  rltest.vcxproj -> D:\Projects\readline-8.0\build\Debug\rltestd.exe
                 # 20:WARNING: UNPARSED '  test-hid.vcxproj -> C:\GTools\ConApps\tests\test-hid\build\Debug\test-hidd.exe'
                 # 66: UNPARSED '  bmp_utils.vcxproj -> F:\Projects\gshhg\build\Debug\bmp_utilsd.lib'
                 # 84: UNPARSED '  png_utils.vcxproj -> F:\Projects\gshhg\build\Debug\png_utilsd.lib'
@@ -1144,7 +1152,7 @@ sub process_in_file($) {
                     $projcnt++;
                     push(@projs,$curr_proj);
                 } else {
-                    prt("$lnn: Project: $curr_proj $curr_conf out=${tn}$te RPT\n") if (VERB2());
+                    prt("$lnn: Project: $curr_proj $curr_conf out=${tn}$te RPT\n") if (VERB1());
                 }
             } elsif ($line =~ /^Build\s+succeeded.$/) {
                 # is usually followed by the follwowing lines...
@@ -1495,9 +1503,9 @@ sub give_help {
     prt(" --verb[n]     (-v) = Bump [or set] verbosity. def=$verbosity\n");
     prt(" --load        (-l) = Load LOG at end. ($outfile)\n");
     prt(" --out <file>  (-o) = Write output to this file.\n");
-    prt(" --fatal       (-f) = Skip fatal (def=$show_fatal).\n");
-    prt(" --errors      (-e) = Skip fatal (def=$show_errors).\n");
-    prt(" --warnings    (-w) = Skip warnings (def=$show_warnings).\n");
+    prt(" --fatal       (-f) = No show fatal (def=$show_fatal).\n");
+    prt(" --errors      (-e) = No show errors (def=$show_errors).\n");
+    prt(" --warnings    (-w) = No show warnings (def=$show_warnings).\n");
     prt(" --cmake       (-c) = Show cmake messages beginning with '--'.\n");
     prt(" --Flags       (-F) = Show CLCompile flags.\n");
     prt("\n");
