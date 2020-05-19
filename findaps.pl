@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 # NAME: findaps.pl
 # AIM: There is a BIG findap[nn].pl - This is a SIMPLER version
+# 19/05/2020 - Adjust for aptdat for Dell03 machine
 # 2020-01-08 - review - maybe add xg output...
 # 25/08/2015 - add to scripts repo
 # 17/10/2014 - Change -i -c = no case change on name
@@ -23,7 +24,7 @@ my $PATH_SEP = '/';
 my $CDATROOT="/media/Disk2/FG/fg22/fgdata"; # 20150716 - 3.5++
 if ($os =~ /win/i) {
     $PATH_SEP = "\\";
-    $CDATROOT="F:/fgdata"; # 20140127 - 3.1
+    $CDATROOT="D:/FG/next/fgdata"; # 20100519 - 20140127 - 3.1
 }
 my $XDROOT="X:\\fgdata";
 unshift(@INC, $perl_dir);
@@ -56,8 +57,9 @@ my $outfile = $temp_dir.$PATH_SEP."temp.$pgmname.txt";
 open_log($outfile);
 
 # user variables
-my $VERS = "0.0.5 2015-08-28";  # adapt to use in scripts repo
-#my $VERS = "0.0.4 2014-10-16";  # output nicely cased airport names, and add nav, fixes and airways
+my $VERS = "0.0.6 2020-05-19"; # adj FGROOT for DELL03 machine
+# $VERS = "0.0.5 2015-08-28";  # adapt to use in scripts repo
+# $VERS = "0.0.4 2014-10-16";  # output nicely cased airport names, and add nav, fixes and airways
 # $VERS = "0.0.3 2012-01-20";  # output nicely cased airport names, and add nav, fixes and airways
 # $VERS = "0.0.2 2011-12-12";
 my $load_log = 0;
