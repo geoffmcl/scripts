@@ -1039,7 +1039,13 @@ sub process_in_file($) {
             # start at NEXT line
             for ($j = $lnn; $j < $lncnt; $j++) {
                 $tmp = $lines[$j];
-                last if ($tmp =~ /^\w/);
+                if ($tmp =~ /^\w/) {
+                    if ($tmp =~ /:\s+message\s+:/) {
+                        # skip a message line aftre a warning
+                    } else {
+                        last;
+                    }
+                }
                 last if ($tmp =~ /\.vcxproj\s+->\s+/);
                 $tmp =~ s/^\s+//;
                 $linklin .= " $tmp";
@@ -1108,6 +1114,13 @@ sub process_in_file($) {
                 # note: type is 'unknown-type'' *** FIX ME **
             } elsif ($line =~ /^\s+Checking\s+Build\s+System$/) {
                 # 74:WARNING: UNPARSED '  Checking Build System' *** FIX ME **
+                # Deal with multiple lines start at NEXT line
+                for ($j = $lnn; $j < $lncnt; $j++) {
+                    $tmp = $lines[$j];
+                    last if ($tmp =~ /^\w/);
+                }
+                $i = $j - 1;    # update position
+                prt("$lnn:$i: Skipped lines\n") if (VERB9());
             # } elsif ($line =~ /^Lib:$/) {
                 # could collect link lines - DONE ABOVE
             } elsif ($line =~ /^\s+Deleting\s+file\s+\"(.+)\".$/) {
@@ -1124,6 +1137,13 @@ sub process_in_file($) {
                 #   Creating directory "Win32\Debug\ZERO_CHECK\".
             } elsif ($line =~ /^\s+Building\s+Custom\s+Rule\s+(.+)$/) {
                 # 96:WARNING: UNPARSED '  Building Custom Rule F:/Projects/gshhg/CMakeLists.txt' *** FIX ME **
+                # Deal with multiple lines start at NEXT line
+                for ($j = $lnn; $j < $lncnt; $j++) {
+                    $tmp = $lines[$j];
+                    last if ($tmp =~ /^\w/);
+                }
+                $i = $j - 1;    # update position
+                prt("$lnn:$i: Skipped lines\n") if (VERB9());
             } elsif ($line =~ /^\s+CMake\s+does\s+not\s+need\s+to\s+re-run\s+because\s+/) {
                 # 97:WARNING: UNPARSED '  CMake does not need to re-run because F:\Projects\gshhg\build\CMakeFiles\generate.stamp is up-to-date.' *** FIX ME **
             # } elsif ($line =~ /^\s+([-\w]+)\.vcxproj\s+->\s+(.+)$/) {
@@ -1276,6 +1296,10 @@ sub process_in_file($) {
                     # 'All done!'
                 } elsif ($line =~ /^No\s+pause/i) {
                     # 'No pause reqested'
+                } elsif ($line =~ /^\s+--\s+/i) {
+                    # skip indented lines '  -- '
+                } elsif ($line =~ /^\s{2}/) {
+                    # skip indented lines '  '
                 } else {
                     if ($had_end_cmake) {
                         prtw("$lnn:WARNING: UNPARSED '$line' *** FIX ME **\n");
