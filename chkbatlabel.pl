@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 # NAME: chkbatlabels.pl
 # AIM: Given a batch file check each 'goto' statement has a corresponding label
+# 01/09/2020 - Deal with some more UNPROCESSED lines
 # 2018-06-29 - Move to public 'scripts'
 # 27/02/2016 - More tidy up of missed call targets
 # 13/08/2014 - Fix some missed 'goto' statements
@@ -22,7 +23,8 @@ my $outfile = $temp_dir."/temp.$pgmname.txt";
 open_log($outfile);
 
 # user variables
-my $VERS = "0.0.4 2018-06-29";  # move to public scripts
+my $VERS = "0.0.5 2020-09-01";  # deal with some more UNPROCESSED commands
+###my $VERS = "0.0.4 2018-06-29";  # move to public scripts
 ###my $VERS = "0.0.3 2016-02-27";
 ###my $VERS = "0.0.2 2014-03-11";
 ###my $VERS = "0.0.1 2012-05-20";
@@ -153,6 +155,7 @@ sub process_in_file($) {
         #}
         $len = length($line);
         next if ($len == 0);
+        prt("[v9] $i2: $line\n") if (VERB9());
         next if ($line =~ /^\s*\@*\s*REM\b/i);
         next if ($line =~ /^\s*\@*\s*ECHO\b/i);
         next if ($line =~ /^\s*\@*\s*SET\b/i);
@@ -161,7 +164,6 @@ sub process_in_file($) {
         next if ($line =~ /^\s*\@*\s*ENDLOCAL\b/i);
         next if ($line =~ /^\s*\@*\s*PAUSE\b/i);
         next if ($line =~ /^\s*\@*\s*CD\b/i);
-        prt("[v9] $i2: $line\n") if (VERB9());
         if ($line =~ /\bgoto\b/i) {
         ### if ($line =~ /^\s*\@*\s*goto\b/i) {
             $inc = get_goto_label($line);
@@ -206,17 +208,29 @@ sub process_in_file($) {
             }
             $ra = $g_labels{$label};
             push(@{$ra}, [$lnn, $line, $inc]);
+        } elsif ($line =~ /^\s*\@*exit\s+/i) {
+            # ignore exit command
+        } elsif ($line =~ /^\s*\@*cmake\s+/i) {
+            # ignore cmake command
+        } elsif ($line =~ /^\s*\@*call\s+/i) {
+            # ignore call command
+        } elsif ($line =~ /^\s*\@*rd\s+/i) {
+            # ignore rd command
+        } elsif ($line =~ /^\s*\@*if\s+/i) {
+            # ignore if command
+        } elsif ($line =~ /^\s*\)/) {
+            # ignore closing brackets
         } else {
-            prt("[v9] $lnn: UNPROCESSED [$line]! *** FIX ME ***\n") if (VERB9());
+            prtw("[v2] WARNING $lnn: UNPROCESSED [$line]! *** FIX ME ***\n") if (VERB2());
         }
     }
 
     # get lists of LABELS and GOTO or CALL targets
     my @larr = keys %g_labels;
     my @garr = keys %g_gotos;
-    if (VERB9()) {
-        prt("LABELS: ".join(" ",@larr)."\n");
-        prt("GOorCA: ".join(" ",@garr)."\n");
+    if (VERB5()) {
+        prt("[v5] LABELS: ".join(" ",sort @larr)."\n");
+        prt("[v5] GOorCA: ".join(" ",sort @garr)."\n");
     }
     # CHECK LABELS HAVE AT LEAST ONE GOTO
     $cnt = scalar @larr;
@@ -257,11 +271,12 @@ sub process_in_file($) {
             $missed++;
         }
     }
+    $cnt = scalar @larr;
     if ($missed) {
-        prt("Appear to $missed target labels without 'goto' or 'call' statement!\n");
+        prt("Of $cnt labels, appears $missed target labels without 'goto' or 'call' statement!\n");
         prt("These are no problems, but it is not very tidy...\n");
     } else {
-        prt("There appear to be NO target labels without 'goto' or 'call'.\n");
+        prt("Of $cnt labels, there appears to be NO target labels without 'goto' or 'call'.\n");
     }
 
     # CHECK GOTO HAS A TARGET LABEL
@@ -322,10 +337,10 @@ sub process_in_file($) {
         }
     }
     if ($missed) {
-        prt("Appear to be missing $missed target labels!\n");
-        prt("These MUST be fixed in the file [$inf]\n");
+        prt("Of $kcnt keys, appear to be $missed missing target labels!\n");
+        prt("These **MUST** be fixed in the file [$inf]\n");
     } else {
-        prt("There appear to be NO missing target labels in [$inf]!\n");
+        prt("Of $kcnt keys, there appears to be NO missing target labels in [$inf]!\n");
     }
 }
 
