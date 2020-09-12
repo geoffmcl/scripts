@@ -1118,9 +1118,10 @@ sub process_in_file($) {
                 for ($j = $lnn; $j < $lncnt; $j++) {
                     $tmp = $lines[$j];
                     last if ($tmp =~ /^\w/);
+                    last if ($tmp =~ /\.vcxproj/);
                 }
                 $i = $j - 1;    # update position
-                prt("$lnn:$i: Skipped lines\n") if (VERB9());
+                prt("[v9] $lnn:$i: Skipped lines\n") if (VERB9());
             # } elsif ($line =~ /^Lib:$/) {
                 # could collect link lines - DONE ABOVE
             } elsif ($line =~ /^\s+Deleting\s+file\s+\"(.+)\".$/) {
@@ -1141,13 +1142,15 @@ sub process_in_file($) {
                 for ($j = $lnn; $j < $lncnt; $j++) {
                     $tmp = $lines[$j];
                     last if ($tmp =~ /^\w/);
+                    last if ($tmp =~ /\.vcxproj/);
                 }
                 $i = $j - 1;    # update position
-                prt("$lnn:$i: Skipped lines\n") if (VERB9());
+                prt("[v9] $lnn:$i: Skipped lines\n") if (VERB9());
             } elsif ($line =~ /^\s+CMake\s+does\s+not\s+need\s+to\s+re-run\s+because\s+/) {
                 # 97:WARNING: UNPARSED '  CMake does not need to re-run because F:\Projects\gshhg\build\CMakeFiles\generate.stamp is up-to-date.' *** FIX ME **
             # } elsif ($line =~ /^\s+([-\w]+)\.vcxproj\s+->\s+(.+)$/) {
             } elsif ($line =~ /^\s+(.+)\.vcxproj\s+->\s+(.+)$/) {
+                prt("[v9] $lnn: $line\n") if (VERB9());
 				#  rltest.vcxproj -> D:\Projects\readline-8.0\build\Debug\rltestd.exe
                 # 20:WARNING: UNPARSED '  test-hid.vcxproj -> C:\GTools\ConApps\tests\test-hid\build\Debug\test-hidd.exe'
                 # 66: UNPARSED '  bmp_utils.vcxproj -> F:\Projects\gshhg\build\Debug\bmp_utilsd.lib'
@@ -1168,11 +1171,11 @@ sub process_in_file($) {
                 my ($tn,$td,$te) = fileparse($to, qr/\.[^.]*/ );
                 if (!defined $projects{$curr_proj}) {
                     $projects{$curr_proj} = $lnn;
-                    prt("$lnn: Project: $curr_proj $curr_conf out=${tn}$te\n") if (VERB1());
+                    prt("[v1] $lnn: Project: $curr_proj $curr_conf out=${tn}$te\n") if (VERB1());
                     $projcnt++;
                     push(@projs,$curr_proj);
                 } else {
-                    prt("$lnn: Project: $curr_proj $curr_conf out=${tn}$te RPT\n") if (VERB1());
+                    prt("[v1] $lnn: Project: $curr_proj $curr_conf out=${tn}$te RPT\n") if (VERB1());
                 }
             } elsif ($line =~ /^Build\s+succeeded.$/) {
                 # is usually followed by the follwowing lines...
