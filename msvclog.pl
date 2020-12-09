@@ -1245,6 +1245,9 @@ sub process_in_file($) {
                         $tmp = $1;
                         # Begin 17/06/2016 14:18:43.90 
                         prt("$lnn: $line\n");
+                    } else {
+                        # 20201209: well it started with 'Begin '
+                        prt("$lnn: $line\n");
                     }
                 } elsif ($line =~ /^Build\s+/) {
                     if ($line =~ /(\d{4}-\d{2}-\d{2})/) {
@@ -1327,10 +1330,11 @@ sub process_in_file($) {
     ### sumary
     ####################################################
     $cnt = $fatalcnt + $errorcnt + $warningcnt + $cmakewcnt + $cmakeecnt;
+    prt("Summary: ");
     if ($cnt) {
-        prt("$projcnt projects: Had $fatalcnt fatal, errors $errorcnt, warnings $warningcnt, cmake e=$cmakeecnt, w=$cmakewcnt, total $cnt\n");
+        prt("Projects:$projcnt: Had $fatalcnt fatal, errors $errorcnt, warnings $warningcnt, cmake e=$cmakeecnt, w=$cmakewcnt, total $cnt\n");
     } else {
-        prt("$projcnt projects: Had no errors or warnings... clean build...\n");
+        prt("Projects:$projcnt: Had no errors or warnings... clean build...\n");
     }
     @arr = sort keys %warn_disabled;
     $len = scalar @arr;
