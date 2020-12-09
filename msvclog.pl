@@ -1306,6 +1306,8 @@ sub process_in_file($) {
                     # skip indented lines '  -- '
                 } elsif ($line =~ /^\s{2}/) {
                     # skip indented lines '  '
+                } elsif ($line =~ /Re-run\s+cmake\s+/) { # no build system arguments
+                    #skip
                 } else {
                     if ($had_end_cmake) {
                         prtw("$lnn:WARNING: UNPARSED '$line' *** FIX ME **\n");
