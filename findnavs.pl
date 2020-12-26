@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 # NAME: findnavs.pl
 # AIM: Given a lat,lon, search for navaids nearby...
+# 2020/12/26 - Review in Dell03
 # 2019-01-25 - Apply filters to output lists...
 # 2018-10-21 - Redo some of the navs display...
 # 23/08/2015 - Added to the scripts repo
@@ -21,7 +22,7 @@ my $PATH_SEP = '/';
 my $CDATROOT="/media/Disk2/FG/fg22/fgdata"; # 20150716 - 3.5++
 if ($os =~ /win/i) {
     $PATH_SEP = "\\";
-    $CDATROOT="F:/fgdata"; # 20140127 - 3.1
+    $CDATROOT='D:\FG\next\fgdata'; # 20201226 F:/fgdata"; # 20140127 - 3.1
 }
 unshift(@INC, $perl_dir);
 require 'lib_utils.pl' or die "Unable to load 'lib_utils.pl' Check paths in \@INC...\n";
@@ -33,7 +34,8 @@ our ($LF);
 my $outfile = $temp_dir.$PATH_SEP."temp.$pgmname.txt";
 open_log($outfile);
 
-my $VERS = "0.0.7 2019-01-25";
+my $VERS = "0.0.8 2020-12-26";
+###my $VERS = "0.0.7 2019-01-25";
 ###my $VERS = "0.0.6 2018-10-21";
 ###my $VERS = "0.0.5 2015-08-23";
 ###my $VERS = "0.0.4 2014-10-11";
@@ -1289,7 +1291,12 @@ sub parse_args {
     my %dupes = ();
     while (@av) {
         $arg = $av[0];
-        if ( ($arg =~ /^-/) && (!is_a_double($arg)) ) {
+        $sarg = $arg;
+        if ($arg =~ /,/) {
+            @arr = split(",",$arg);
+            $sarg = $arr[0];
+        }
+        if ( ($arg =~ /^-/) && (!is_a_double($sarg)) ) {
             $sarg = substr($arg,1);
             $sarg = substr($sarg,1) while ($sarg =~ /^-/);
             if (($sarg =~ /^h/i)||($sarg eq '?')) {
