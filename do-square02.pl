@@ -12,6 +12,7 @@
 # If information known, also align with the runway after turn final... 
 # drop engine rpm, slow to flaps speed, lower flaps, commence decent... never completed
 #
+# 2021/01/08 - Adjust to Dell03 - DEF 5556
 # 30/06/2015 - Much more refinement
 # 03/04/2012 - More changes
 # 16/07/2011 - Try to add flying a course around YGIL, using the autopilot
@@ -84,7 +85,13 @@ my ($fgfs_io,$HOST,$PORT,$CONMSG,$TIMEOUT,$DELAY);
 my $connect_win7 = 0;
 my $connect_dell01 = 0;
 if (defined $ENV{'COMPUTERNAME'}) {
-    if (!$connect_win7 && $ENV{'COMPUTERNAME'} eq 'WIN7-PC') {
+    my $cn = $ENV{'COMPUTERNAME'};
+    if ($cn eq 'DELL03') {
+        # connect to Win 10 in DELL03
+        $HOST = "localhost"; # DELL03 machine
+        $PORT = 5556;
+        $CONMSG = "Assumed in DELL03, Windows 10 ";
+    } elsif (!$connect_win7 && ($cn eq 'WIN7-PC')) {
         # connect to Ubuntu in DELL02
         $HOST = "192.168.1.34"; # DELL02 machine
         $PORT = 5556;
@@ -92,7 +99,7 @@ if (defined $ENV{'COMPUTERNAME'}) {
     } else {
         # assumed in DELL01 - connect to WIN7-PC
         $HOST = "192.168.1.33"; # WIN7-PC machine
-        $PORT = 5557;
+        $PORT = 5556; # 5557;
         $CONMSG = "Assumed in DELL01 connection to WIN7-PC ";
     }
 } else {
@@ -2946,6 +2953,8 @@ sub head_for_home($$) {
 
 }
 
+my $help = "ESC/q=exit, c/C=circuit/off, h=home, ?=this";
+
 sub main_loop() {
 
     prtt("Get 'sim' information...\n");
@@ -3000,6 +3009,10 @@ sub main_loop() {
                 prtt("Head for home...\n");
                 clear_circuit_mode($rch);
                 head_for_home($rch,$rp);
+            } elsif ($char eq '?') {
+                prtt("$help\n");
+            } else {
+                prtt("Unhandled key val=$val, '$char'! $help\n");
             }
         }
         process_circuit($rp) if ($circuit_mode);
