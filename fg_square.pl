@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 # NAME: fg_square.pl
 # AIM: Through a TELNET connection, fly the aircraft on a course
+# 2021/01/11 - Adj def to DELL03
 # 2016-08-23 - Review, of where are we...
 # 30/06/2015 - Much more refinement
 # 03/04/2012 - More changes
@@ -18,17 +19,18 @@ my $cwd = cwd();
 my $os = $^O;
 my ($pgmname,$perl_dir) = fileparse($0);
 $perl_dir .= s/(\\|\/)$//;
-$perl_dir .= "/temp";
-# unshift(@INC, $perl_dir);
+my $temp_dir = $perl_dir . "/temp";
+unshift(@INC, $perl_dir);
 require 'lib_utils.pl' or die "Unable to load 'lib_utils.pl'! Check location and \@INC content.\n";
 require 'fg_wsg84.pl' or die "Unable to load fg_wsg84.pl ...\n";
 require "Bucket2.pm" or die "Unable to load Bucket2.pm ...\n";
 # log file stuff
 my ($LF);
-my $outfile = $perl_dir."/temp.$pgmname.txt";
+my $outfile = $temp_dir."/temp.$pgmname.txt";
 open_log($outfile);
 
-my $VERS = "0.0.5 2016-08-23";
+my $VERS = "0.0.6 2021-01-11";
+# my $VERS = "0.0.5 2016-08-23";
 # my $VERS = "0.0.4 2015-07-04";
 # my $VERS = "0.0.3 2015-06-30";
 # my $VERS = "0.0.2 2012-04-03";
@@ -38,22 +40,28 @@ my $VERS = "0.0.5 2016-08-23";
 my ($HOST,$PORT,$CONMSG);
 my $connect_win7 = 0;
 if (defined $ENV{'COMPUTERNAME'}) {
-    if (!$connect_win7 && $ENV{'COMPUTERNAME'} eq 'WIN7-PC') {
-        # connect to Ubuntu in DELL02
-        $HOST = "192.168.1.34"; # DELL02 machine
+    my $cn = $ENV{'COMPUTERNAME'};
+    if ($cn eq 'DELL03') {
+        # connect to Win 10 in DELL03
+        $HOST = "localhost"; # DELL03 machine
         $PORT = 5556;
-        $CONMSG = "Assumed in WIN7-PC connection to Ubuntu DELL02 ";
+        $CONMSG = "Assumed in DELL03, Windows 10 ";
+    } elsif (!$connect_win7 && ($cn eq 'WIN7-PC')) {
+        # connect to Ubuntu in DELL02
+        $HOST = "localhost"; # WIN7-PC machine
+        $PORT = 5556;
+        $CONMSG = "Assumed in WIN7-PC, Windows 10 ";
     } else {
         # assumed in DELL01 - connect to WIN7-PC
         $HOST = "192.168.1.33"; # WIN7-PC machine
-        $PORT = 5557;
+        $PORT = 5556;
         $CONMSG = "Assumed in DELL01 connection to WIN7-PC ";
     }
 } else {
     # assumed in Ubuntu - connect to DELL01
     # $HOST = "192.168.34"; # DELL01
     # assumed in Ubuntu - connect to WIN7-PC
-    $HOST = "192.168.33"; # WIN07-PC
+    $HOST = "192.168.1.33"; # WIN7-PC
     $PORT = 5556;
     $CONMSG = "Assumed in Ubuntu DELL02 connection to WIN7-PC host $HOST port $PORT";
 }
