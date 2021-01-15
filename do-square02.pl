@@ -1279,7 +1279,7 @@ sub show_takeoff($) {
 ################################################################
 # Show 1 (or 2) motors values
 # 20210115  - copied from old fg_square.pl
-sub show_engines() {
+sub local_show_engines() {
     my ($running,$rpm,$magn,$mixt,$cmag);
     my ($run2,$rpm2);
     my ($throt,$thpc,$throt2,$thpc2);
@@ -3126,7 +3126,8 @@ sub main_loop() {
                 head_for_home($rch,$rp);
             } elsif ($char eq 'e') {
                 prtt("Show engine(s)...\n");
-                show_engines(); # add 20210115...
+                # show_engines(); # add 20210115, but better...
+                show_engines_and_fuel(); # show fuel plus...
             } elsif ($char eq '?') {
                 keyboard_help();
                 # prtt("$help\n");

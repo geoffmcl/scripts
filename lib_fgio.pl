@@ -950,7 +950,7 @@ sub fgfs_get_engines() {
     # $ctl_eng_mix_prop = "/control/engines/engine/mixture";  # double 0=0% FULL Lean, 1=100% FULL Rich
     fgfs_get_eng_mix(\$mix); # double 1 to 0
     ${$re}{'magn'} = $magn;   # int 3=BOTH 2=LEFT 1=RIGHT 0=OFF
-    ${$re}{'mix'}  = $mix;
+    ${$re}{'mix'}  = $mix; # double 0=0% FULL Lean, 1=100% FULL Rich
 
     ${$re}{'time'} = time();
     if ($engine_count == 2) {
@@ -2178,15 +2178,28 @@ sub show_K_locks() {
 }
 
 sub show_engines() {
-    my ($running,$rpm,$crpm);
+    my ($running,$rpm,$crpm,$magn,$mixt,$cmag,$cmix);
     my ($run2,$rpm2,$crpm2);
     my ($throt,$thpc,$throt2,$thpc2);
     my $re = fgfs_get_engines();
     $running = ${$re}{'running'};
     $rpm     = ${$re}{'rpm'};
     $throt   = ${$re}{'throttle'};
+    $magn    = ${$re}{'magn'};
+    $mixt    = ${$re}{'mix'}; # double 0=0% FULL Lean, 1=100% FULL Rich (for TO/LD)
+
     # ONE engine
-    $thpc = (int($throt * 100) / 10);
+    $cmag = 'BOTH';
+    if ($magn == 0) {
+        $cmag = 'NONE';
+    } elsif ($magn == 1) {
+        $cmag = 'LEFT';
+    } elsif ($magn == 2) {
+        $cmag = 'RIGHT';
+    }
+
+    $thpc = int(($throt + 0.005) * 100);
+    $cmix = int($mixt * 100);
     $crpm = "rpm=";
     $crpm = "n1=" if ($is_jet_engine);
     if (defined $rpm && length($rpm)) {
@@ -2204,7 +2217,7 @@ sub show_engines() {
         $run2   = ${$re}{'running2'};
         $rpm2   = ${$re}{'rpm2'};
         $throt2 = ${$re}{'throttle2'};
-        $thpc = (int($throt * 100) / 10);
+        $thpc2 = int(($throt2 + 0.005) * 100);
         $crpm2 = "rpm=";
         $crpm2 = "n1=" if ($is_jet_engine);
         if (defined $rpm && length($rpm)) {
@@ -2216,11 +2229,10 @@ sub show_engines() {
         } else {
             $crpm2 .= "N/A";
         }
-        $thpc2 = (int($throt2 * 100) / 10);
         prtt("Eng1=$running, $crpm, throt=$thpc\% ...\n");
         prtt("Eng2=$run2, $crpm2, throt=$thpc2\% ...\n");
     } else {
-        prtt("Eng=$running, $crpm, throt=$thpc\% ...\n");
+        prtt("Eng=$running, $crpm, throt=$thpc\%, mags $cmag, mix $cmix.. ...\n");
     }
 }
 
