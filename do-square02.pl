@@ -12,6 +12,7 @@
 # If information known, also align with the runway after turn final... 
 # drop engine rpm, slow to flaps speed, lower flaps, commence decent... never completed
 #
+# 2021/01/13 - Add circuit names, Upwind, Crosswind, Downwind,..., Final to XG output
 # 2021/01/08 - Adjust to Dell03 - DEF 5556
 # 30/06/2015 - Much more refinement
 # 03/04/2012 - More changes
@@ -60,7 +61,8 @@ $outfile = ($os =~ /win/i) ? path_u2d($outfile) : path_d2u($outfile);
 open_log($outfile);
 
 # user variables
-my $VERS = "0.0.7 2015-07-20"; # start an 02 verison
+my $VERS = "0.0.8 2021-01-13"; # some small enhancements... 
+### my $VERS = "0.0.7 2015-07-20"; # start an 02 verison
 ### = "0.0.6 2015-07-16"; # begin tracker xg function
 ### "0.0.5 2015-07-06";
 my $load_log = 0;
@@ -257,6 +259,7 @@ sub get_runway_center($$) {
     my ($rlat,$rlon) = @_;
     my ($az1,$az2,$distm);
     my $ret = 0;
+    # if (defined $g_elat1 && defined $g_elon1 && defined $g_elat2 && defined $g_elon2) {
     if (got_runway_coords()) {
         my ($clat,$clon);
         my $res = fg_geo_inverse_wgs_84 ($g_elat1,$g_elon1,$g_elat2,$g_elon2,\$az1,\$az2,\$distm);
@@ -413,6 +416,7 @@ sub get_circuit_xg() {
     return $xg;
 }
 
+# $rcx = $xg_circuits{$key} 
 sub get_circuit_xg2($) {
     my $rcx = shift;
     my $xg = "annon $a_gil_lon $a_gil_lat ICAO $g_icao, circuit $g_circuit\n";
@@ -420,14 +424,19 @@ sub get_circuit_xg2($) {
     my ($rca,$rends);
     my ($tllat,$tllon,$bllat,$bllon,$brlat,$brlon,$trlat,$trlon);
     my ($elat1,$elon1,$elat2,$elon2);
+    my ($az1,$az2,$dist,$d2,$clat,$clon,$az3);
+    my ($rwy);
+    my $rwyLR = 'LR';
     if (${$rcx}{'rwy_left'}) {
         #                0         1         2         3          4        5         6         7
         # $h1{'left'} = [$l_tl_lat,$l_tl_lon,$l_bl_lat,$l_bl_lon,$l_br_lat,$l_br_lon,$l_tr_lat,$l_tr_lon];
         $rca = ${$rcx}{'left'};
         $g_rwy_left = 1;
+        $rwyLR = 'L';
     } else {
         $rca = ${$rcx}{'right'};
         $g_rwy_left = 0;
+        $rwyLR = 'R';
     }
     # set the appropriate circuit
     $tllat = ${$rca}[0];
@@ -445,6 +454,46 @@ sub get_circuit_xg2($) {
     $elat2 = ${$rends}[2];
     $elon2 = ${$rends}[3];
 
+    # Upwind - from takeoff to TR
+    fg_geo_inverse_wgs_84 ($elat2,$elon2,$trlat,$trlon,\$az1,\$az2,\$dist);
+    $d2 = $dist / 2;    # mid
+    fg_geo_direct_wgs_84($elat2,$elon2,$az1,$d2,\$clat,\$clon,\$az3);
+    $xg .= "anno $clon $clat Upwind\n"; # to TR
+
+    # $xg .= "anno $trlon $trlat TR\n";
+    # $xg .= "$trlon $trlat\n";
+    # Crosswind - from TR to TL
+    fg_geo_inverse_wgs_84 ($trlat,$trlon,$tllat,$tllon,\$az1,\$az2,\$dist);
+    $d2 = $dist / 2;    # mid
+    fg_geo_direct_wgs_84($trlat,$trlon,$az1,$d2,\$clat,\$clon,\$az3);
+    $xg .= "anno $clon $clat Crosswind\n"; # to TL
+
+    # $xg .= "anno $tllon $tllat TL\n";
+    # $xg .= "$tllon $tllat\n";
+
+    # Downwind - from TL to BL
+    fg_geo_inverse_wgs_84 ($tllat,$tllon,$bllat,$bllon,\$az1,\$az2,\$dist);
+    $d2 = $dist / 2;    # mid
+    fg_geo_direct_wgs_84($tllat,$tllon,$az1,$d2,\$clat,\$clon,\$az3);
+    $xg .= "anno $clon $clat Downwind\n"; # to BL
+
+    # $xg .= "anno $bllon $bllat BL\n";
+    # $xg .= "$bllon $bllat\n";
+
+    # Base - from BL to BR
+    fg_geo_inverse_wgs_84 ($bllat,$bllon,$brlat,$brlon,\$az1,\$az2,\$dist);
+    $d2 = $dist / 2;    # mid
+    fg_geo_direct_wgs_84($bllat,$bllon,$az1,$d2,\$clat,\$clon,\$az3);
+    $xg .= "anno $clon $clat Base\n";
+
+    # $xg .= "anno $brlon $brlat BR\n";
+    # Final - BR to runway
+    fg_geo_inverse_wgs_84 ($brlat,$brlon,$elat1,$elon1,\$az1,\$az2,\$dist);
+    $d2 = $dist / 2;    # mid
+    fg_geo_direct_wgs_84($brlat,$brlon,$az1,$d2,\$clat,\$clon,\$az3);
+    $xg .= "anno $clon $clat Final\n";
+
+
     $xg .= "color white\n";
     $xg .= "anno $trlon $trlat TR\n";
     $xg .= "$trlon $trlat\n";
@@ -460,10 +509,30 @@ sub get_circuit_xg2($) {
     $xg .= "$elon1 $elat1\n";
     $xg .= "$elon2 $elat2\n";
     $xg .= "NEXT\n";
+
+    # put ICAO - center runway
+    fg_geo_inverse_wgs_84 ($elat1,$elon1,$elat2,$elon2,\$az1,\$az2,\$dist);
+    $d2 = $dist / 2;    # mid
+    fg_geo_direct_wgs_84($elat1,$elon1,$az1,$d2,\$clat,\$clon,\$az3);
+    $xg .= "anno $clon $clat $g_icao $rwyLR\n"; # $rwy
+
+    # put runway IDs
+    # $h2{'rwy_id'}      = $rwy2;
+    if (defined ${$rcx}{'rwy_id'}) {
+        $rwy = ${$rcx}{'rwy_id'};
+        $xg .= "anno $elon1 $elat1 $rwy\n";
+    }
+
+    # $h2{'rwy_id2'}     = $rwy;
+    if (defined ${$rcx}{'rwy_id2'}) {
+        $rwy = ${$rcx}{'rwy_id2'};
+        $xg .= "anno $elon2 $elat2 $rwy\n";
+    }
+
     return $xg;
 }
 
-
+# $rcx = $xg_circuits{$key} 
 sub write_circuit_xg2($$) {
     my ($rcx,$file) = @_;
     my $xg = get_circuit_xg2($rcx);
@@ -1206,6 +1275,50 @@ sub show_takeoff($) {
         }
     }
 }
+
+################################################################
+# Show 1 (or 2) motors values
+# 20210115  - copied from old fg_square.pl
+sub show_engines() {
+    my ($running,$rpm,$magn,$mixt,$cmag);
+    my ($run2,$rpm2);
+    my ($throt,$thpc,$throt2,$thpc2);
+    my $re = fgfs_get_engines();
+    $running = ${$re}{'running'};
+    $rpm     = ${$re}{'rpm'};
+    $throt   = ${$re}{'throttle'};
+    $magn    = ${$re}{'magn'};
+    $mixt    = ${$re}{'mix'};   # 0 = 100% - Full rich (for TO/LD)
+    $cmag = 'BOTH';
+    if ($magn == 0) {
+        $cmag = 'NONE';
+    } elsif ($magn == 1) {
+        $cmag = 'LEFT';
+    } elsif ($magn == 2) {
+        $cmag = 'RIGHT';
+    }
+
+    # prt("run = [$running] rpm = [$rpm]\n");
+    if ($engine_count == 2) {
+        # TWO engines
+        $run2   = ${$re}{'running2'};
+        $rpm2   = ${$re}{'rpm2'};
+        $throt2 = ${$re}{'throttle2'};
+        $thpc = (int($throt * 100) / 10);
+        $rpm = int($rpm + 0.5);
+        $thpc2 = (int($throt2 * 100) / 10);
+        $rpm2 = int($rpm2 + 0.5);
+        ### prtt("Run1=$running, rpm=$rpm, throt=$thpc\% ...\n");
+        prtt("Run1=$running, rpm=$rpm, throt=$thpc\%, mags $cmag, mix $mixt...\n");
+        prtt("Run2=$run2, rpm=$rpm2, throt=$thpc2\% ...\n");
+    } else {
+        # ONE engine
+        $thpc = int(($throt + 0.005) * 100); # 0.000 - 1.000
+        $rpm = int($rpm + 0.5);
+        prtt("Run=$running, rpm=$rpm, throt=$thpc pct, mags $cmag, mix $mixt...\n");
+    }
+}
+
 
 #################################################################
 ### Given a heading, select a RUNWAY, from %xg_circuits
@@ -2872,19 +2985,21 @@ sub process_circuit($) {
 
 my $do_init_pset = 0;
 
+my $help = "ESC/q=exit, c/C=circuit/off, h=home, ?=this";
+
 sub keyboard_help() {
     prt("Keyboard Help\n");
     prt(" ?      This HELP output\n");
-    prt(" ESC    Exit program.\n");
+    prt(" ESC(q) Exit program.\n");
     prt(" h      Head home - centre of active runway\n");
 #    prt(" a      Get autopilot (KAP140) locks\n");
 #    prt(" B/b    Increase/Decrease heading bug 1 degreee\n");
-#    prt(" c/C    Circuit mode. C cancel.\n");
+    prt(" c/C    Circuit mode. C cancel.\n");
 #    prt(" +/-    Increase/Decrease position delay check. Current $DELAY secs\n");
 #    prt(" 9/(    Increase/Decrease heading bug 90 degrees\n");
     #prt(" 1      Set heading target to Gil (YGIL)\n");
     #prt(" 2      Set heading target to Dubbo (YSDU)\n");
-#    prt(" e      Show Engine(s)\n");
+    prt(" e      Show Engine(s)\n"); # add 20210115
 #    prt(" g/1    Head for target YGIL\n");
 #    prt(" d/2    Head for target YSDU\n");
 #    prt(" o/O    Commence a 360 degree orbit. O will repeat. If in orbit, cancel orbitting.\n");
@@ -2901,6 +3016,8 @@ sub clear_circuit_mode($) {
     ${$rch}{'suggest_chg'} = 0;
 }
 
+# $rp = fgfs_get_position();
+# $rch = $ref_circuit_hash;
 sub head_for_home($$) {
     my ($rch,$rp) = @_;
     my ($lon,$lat,$alt,$hdg,$agl,$hb,$mag,$aspd,$gspd,$tlat,$tlon);
@@ -2952,8 +3069,6 @@ sub head_for_home($$) {
     # other things on choosing a target???
 
 }
-
-my $help = "ESC/q=exit, c/C=circuit/off, h=home, ?=this";
 
 sub main_loop() {
 
@@ -3009,8 +3124,12 @@ sub main_loop() {
                 prtt("Head for home...\n");
                 clear_circuit_mode($rch);
                 head_for_home($rch,$rp);
+            } elsif ($char eq 'e') {
+                prtt("Show engine(s)...\n");
+                show_engines(); # add 20210115...
             } elsif ($char eq '?') {
-                prtt("$help\n");
+                keyboard_help();
+                # prtt("$help\n");
             } else {
                 prtt("Unhandled key val=$val, '$char'! $help\n");
             }
