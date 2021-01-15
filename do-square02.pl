@@ -1276,49 +1276,6 @@ sub show_takeoff($) {
     }
 }
 
-################################################################
-# Show 1 (or 2) motors values
-# 20210115  - copied from old fg_square.pl
-sub local_show_engines() {
-    my ($running,$rpm,$magn,$mixt,$cmag);
-    my ($run2,$rpm2);
-    my ($throt,$thpc,$throt2,$thpc2);
-    my $re = fgfs_get_engines();
-    $running = ${$re}{'running'};
-    $rpm     = ${$re}{'rpm'};
-    $throt   = ${$re}{'throttle'};
-    $magn    = ${$re}{'magn'};
-    $mixt    = ${$re}{'mix'};   # 0 = 100% - Full rich (for TO/LD)
-    $cmag = 'BOTH';
-    if ($magn == 0) {
-        $cmag = 'NONE';
-    } elsif ($magn == 1) {
-        $cmag = 'LEFT';
-    } elsif ($magn == 2) {
-        $cmag = 'RIGHT';
-    }
-
-    # prt("run = [$running] rpm = [$rpm]\n");
-    if ($engine_count == 2) {
-        # TWO engines
-        $run2   = ${$re}{'running2'};
-        $rpm2   = ${$re}{'rpm2'};
-        $throt2 = ${$re}{'throttle2'};
-        $thpc = (int($throt * 100) / 10);
-        $rpm = int($rpm + 0.5);
-        $thpc2 = (int($throt2 * 100) / 10);
-        $rpm2 = int($rpm2 + 0.5);
-        ### prtt("Run1=$running, rpm=$rpm, throt=$thpc\% ...\n");
-        prtt("Run1=$running, rpm=$rpm, throt=$thpc\%, mags $cmag, mix $mixt...\n");
-        prtt("Run2=$run2, rpm=$rpm2, throt=$thpc2\% ...\n");
-    } else {
-        # ONE engine
-        $thpc = int(($throt + 0.005) * 100); # 0.000 - 1.000
-        $rpm = int($rpm + 0.5);
-        prtt("Run=$running, rpm=$rpm, throt=$thpc pct, mags $cmag, mix $mixt...\n");
-    }
-}
-
 
 #################################################################
 ### Given a heading, select a RUNWAY, from %xg_circuits
@@ -2983,6 +2940,23 @@ sub process_circuit($) {
     }
 }
 
+sub show_winds_radio_fuel() {
+
+    # check the WINDS, weather
+    my $renv = fgfs_get_environ();
+    show_environ($renv);
+
+    # get the RADIO stack
+    my $rcomms = fgfs_get_comms();
+    show_comms($rcomms);   # show current comms
+
+    # headed for new target - SHOW consumables, and maybe warnings, if any
+    my $rcs = fgfs_get_consumables();
+    show_consumables($rcs);
+    # other things on choosing a target???
+
+}
+
 my $do_init_pset = 0;
 
 my $help = "ESC/q=exit, c/C=circuit/off, h=home, ?=this";
@@ -3004,6 +2978,7 @@ sub keyboard_help() {
 #    prt(" d/2    Head for target YSDU\n");
 #    prt(" o/O    Commence a 360 degree orbit. O will repeat. If in orbit, cancel orbitting.\n");
 #    prt(" Any keyboard input exits the keyboard loop, and continues the main loop, except ESC!\n");
+    prt(" W      Show weather, radio, fuel info\n");
 }
 
 sub clear_circuit_mode($) {
@@ -3055,18 +3030,7 @@ sub head_for_home($$) {
     my $distkm = get_dist_stg_km($distm);
     prtt("Turning to heading $whdg, target $distkm, $eta\n");
 
-    # check the WINDS, weather
-    my $renv = fgfs_get_environ();
-    show_environ($renv);
-
-    # get the RADIO stack
-    my $rcomms = fgfs_get_comms();
-    show_comms($rcomms);   # show current comms
-
-    # headed for new target - SHOW consumables, and maybe warnings, if any
-    my $rcs = fgfs_get_consumables();
-    show_consumables($rcs);
-    # other things on choosing a target???
+    show_winds_radio_fuel();
 
 }
 
@@ -3128,6 +3092,9 @@ sub main_loop() {
                 prtt("Show engine(s)...\n");
                 # show_engines(); # add 20210115, but better...
                 show_engines_and_fuel(); # show fuel plus...
+            } elsif ($char eq 'W') {
+                prtt("Show Weather, radios, fuel...\n");
+                show_winds_radio_fuel();
             } elsif ($char eq '?') {
                 keyboard_help();
                 # prtt("$help\n");
