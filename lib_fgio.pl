@@ -1739,6 +1739,11 @@ sub fgfs_get_consumables() {
     return $rc;
 }
 
+sub fgfs_get_aircraft($) {
+    my $ref = shift;    # \$aero
+    fgfs_get("/sim/aircraft", $ref) or get_exit(-2); # string
+    return 1;
+}
 sub fgfs_get_aero($) {
     my $ref = shift;    # \$aero
     fgfs_get("/sim/aero", $ref) or get_exit(-2); # string
@@ -1761,12 +1766,14 @@ sub fgfs_get_desc($) {
 }
 
 sub fgfs_get_sim_info() {
-    my ($aero,$fdm,$root,$desc);
+    my ($ac,$aero,$fdm,$root,$desc);
+    fgfs_get_aircraft(\$ac);
     fgfs_get_aero(\$aero);
     fgfs_get_fdm(\$fdm);
     fgfs_get_root(\$root);
     fgfs_get_desc(\$desc);
     my $rs = get_curr_sim();
+    ${$rs}{'aircraft'} = $ac;
     ${$rs}{'aero'} = $aero;
     ${$rs}{'fdm'} = $fdm;
     ${$rs}{'root'} = $root;
@@ -1779,6 +1786,41 @@ sub fgfs_get_sim_info() {
     }
     return $rs;
 }
+
+#############################################################################
+sub fgfs_get_prop($$) {
+    my ($prop,$ref) = @_;
+    fgfs_get($prop, $ref) or get_exit(-2); # string
+    return 1;
+}
+
+sub fgfs_get_versions() { # Versions properties
+    my ($vfg,$vsg,$vosg,$vgit,$glvend,$glrend,$glvers,$glshad,$glts,$gldep);
+    fgfs_get_prop("/sim/version/flightgear",\$vfg);   #: 2020.4.0
+    fgfs_get_prop("/sim/version/simgear",\$vsg);    #: 2020.4.0
+    fgfs_get_prop("/sim/version/openscenegraph",\$vosg); # : 3.4.1
+    fgfs_get_prop("/sim/version/revision",\$vgit);  # : 1f5a84df0c9195ef5363a93daaac0e619480f060
+    fgfs_get_prop("/sim/rendering/gl-vendor",\$glvend); # : NVIDIA Corporation
+    fgfs_get_prop("/sim/rendering/gl-renderer",\$glrend);    #: GeForce GTX 1660/PCIe/SSE2
+    fgfs_get_prop("/sim/rendering/gl-version",\$glvers);    #: 4.6.0 NVIDIA 450.102.04
+    fgfs_get_prop("/sim/rendering/gl-shading-language-version",\$glshad);   #: 4.60 NVIDIA
+    fgfs_get_prop("/sim/rendering/max-texture-size",\$glts);    #: 32768
+    fgfs_get_prop("/sim/rendering/depth-buffer-bits",\$gldep);  # : 24
+
+    my $txt = "Versions properties:-\n";
+    $txt .= "/sim/version/flightgear: $vfg\n";
+    $txt .= "/sim/version/simgear: $vsg\n";
+    $txt .= "/sim/version/openscenegraph: $vosg\n";
+    $txt .= "/sim/version/revision: $vgit\n";
+    $txt .= "/sim/rendering/gl-vendor: $glvend\n";
+    $txt .= "/sim/rendering/gl-renderer: $glrend\n";
+    $txt .= "/sim/rendering/gl-version: $glvers\n";
+    $txt .= "/sim/rendering/gl-shading-language-version: $glshad\n";
+    $txt .= "/sim/rendering/max-texture-size: $glts\n";
+    $txt .= "/sim/rendering/depth-buffer-bits: $gldep\n";
+    return $txt;
+}
+
 
 #############################################################################
 ### Flight Controls
@@ -2243,15 +2285,17 @@ sub show_engines_and_fuel() {
 
 
 sub show_sim_info($) {
-    my $rs = shift;
-    my ($ctm,$aero,$fdm,$root,$desc);
+    my $rs = shift; # fgfs_get_sim_info();
+    my ($ac,$ctm,$aero,$fdm,$root,$desc);
+    $ac = ${$rs}{'aircraft'};
     $aero = ${$rs}{'aero'};
     $fdm = ${$rs}{'fdm'};
     $root = ${$rs}{'root'};
     $desc = ${$rs}{'desc'};
     $ctm = lu_get_hhmmss_UTC(${$rs}{'time'});
-    prt("$ctm: FDM=[$fdm] aero=[$aero] fg-root=[$root]\n");
+    prt("$ctm: ac=[$ac] FDM=[$fdm] aero=[$aero] fg-root=[$root]\n");
     prt("$ctm: Desc=$desc\n") if ((defined $desc) && length($desc));
+    return $rs;
 }
 
 
