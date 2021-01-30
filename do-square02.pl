@@ -148,6 +148,10 @@ my @warnings = ();
 # circuits read from input xg file
 my %xg_circuits = ();
 
+my $g_ac = ''; # ${$rs}{'aircraft'};
+my $g_fdm = ''; # ${$rs}{'fdm'};
+my $g_aero = ''; # ${$rs}{'aero'};
+
 # forward
 
 sub VERB1() { return $verbosity >= 1; }
@@ -845,7 +849,7 @@ sub check_keyboard() {
     if (got_keyboard(\$char)) {
         $val = ord($char);
         $pmsg = sprintf( "%02X", $val );
-        if ($val == 27) {
+        if (($val == 27) || (lc($char) eq 'q')) {
             prtt("ESC key... Exiting loop...\n");
             return 1;
         } elsif ($char eq '+') {
@@ -1412,7 +1416,11 @@ sub wait_for_engine() {
     my $showstart = 1;
     my $last_msg = '';
     my $show_msg = 0;
-
+    if ($g_ac eq 'ufo') {
+        my $rp = fgfs_get_position();
+        position_on_got_engine($rp);
+        return 0;
+    }
     prtt("Checking $engine_count engine(s) running...\n");
     $btm = time();
     $ctm = 0;
@@ -3037,7 +3045,11 @@ sub head_for_home($$) {
 sub main_loop() {
 
     prtt("Get 'sim' information...\n");
-    show_sim_info(fgfs_get_sim_info());
+    my $rs = show_sim_info(fgfs_get_sim_info());
+    $g_ac = ${$rs}{'aircraft'};
+    $g_fdm = ${$rs}{'fdm'};
+    $g_aero = ${$rs}{'aero'};
+    prtt(fgfs_get_versions());
     prtt("Get Fuel - comsumables...\n");
     show_consumables(fgfs_get_consumables());
     prtt("Getting current environment...\n");
@@ -3068,7 +3080,7 @@ sub main_loop() {
         show_position($rp);
         if ( got_keyboard(\$char) ) {
             $val = ord($char);
-            if (($val == 27)||($char eq 'q')) {
+            if (($val == 27)||(lc($char) eq 'q')) {
                 prtt("Quit key... Exiting...\n");
                 $ok = 0;
                 return 0;
