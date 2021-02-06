@@ -3057,6 +3057,10 @@ sub main_loop() {
     show_environ(fgfs_get_environ());
     prtt("Getting current COMMS...\n");
     show_comms(fgfs_get_comms());
+    if ($g_ac eq 'ufo') {
+        prtt("Aircraft is '$g_ac'! Script FAILS with this ac...\nWritten mainly for 'c172' default...sorry...\n");
+        return 1;
+    }
 
     # ### FOREVER - NOTHING happens without an ENGINE ###
     if ( wait_for_engine() ) {
