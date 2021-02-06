@@ -937,19 +937,21 @@ sub fgfs_get_eng_throttle2($) {  # range 0 to 1
 
 sub fgfs_get_engines() {
     my $re = get_curr_engine();
-    my ($running);
-    fgfs_get_eng_running(\$running);
-    ${$re}{'running'} = $running;
-    my ($rpm);
-    fgfs_get_eng_rpm(\$rpm);
-    ${$re}{'rpm'} = $rpm;
-    my ($throt);
+    my ($running,$rpm,$throt,$magn,$mix);
+    if ($aircraft eq 'ufo') {
+        $running = 'true';
+        $rpm = 0;
+    } else {
+        fgfs_get_eng_running(\$running);
+        fgfs_get_eng_rpm(\$rpm);
+    }
     fgfs_get_eng_throttle(\$throt);
-    ${$re}{'throttle'} = $throt;
-    my ($magn,$mix);
     fgfs_get_eng_mag(\$magn);    # # int 3=BOTH 2=LEFT 1=RIGHT 0=OFF
     # $ctl_eng_mix_prop = "/control/engines/engine/mixture";  # double 0=0% FULL Lean, 1=100% FULL Rich
     fgfs_get_eng_mix(\$mix); # double 1 to 0
+    ${$re}{'running'} = $running;
+    ${$re}{'rpm'} = $rpm;
+    ${$re}{'throttle'} = $throt;
     ${$re}{'magn'} = $magn;   # int 3=BOTH 2=LEFT 1=RIGHT 0=OFF
     ${$re}{'mix'}  = $mix; # double 0=0% FULL Lean, 1=100% FULL Rich
 
