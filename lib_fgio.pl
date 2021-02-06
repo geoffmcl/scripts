@@ -43,6 +43,7 @@ my $M_PI = 3.141592653589793;
 my $M_D2R = $M_PI / 180;    # degree to radian
 my $M_R2D = 180.0 / $M_PI;
 
+my $aircraft = '';
 my $engine_count = 1;
 my $is_jet_engine = 0;
 my $keep_av_time = 0;
@@ -1773,7 +1774,7 @@ sub fgfs_get_sim_info() {
     fgfs_get_root(\$root);
     fgfs_get_desc(\$desc);
     my $rs = get_curr_sim();
-    ${$rs}{'aircraft'} = $ac;
+    ${$rs}{'aircraft'} = $aircraft = $ac;
     ${$rs}{'aero'} = $aero;
     ${$rs}{'fdm'} = $fdm;
     ${$rs}{'root'} = $root;

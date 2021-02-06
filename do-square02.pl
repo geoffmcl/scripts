@@ -1417,6 +1417,7 @@ sub wait_for_engine() {
     my $last_msg = '';
     my $show_msg = 0;
     if ($g_ac eq 'ufo') {
+        prtt("Aircraft is $g_ac - Always engine running...\n");
         my $rp = fgfs_get_position();
         position_on_got_engine($rp);
         return 0;
