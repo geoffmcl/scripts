@@ -33,7 +33,7 @@ use Term::ReadKey;
 use Time::HiRes qw( usleep gettimeofday tv_interval );
 use Math::Trig;
 
-my $FGFS_IO; # Telnet IO handle
+my $FGFS_IO = undef; # Telnet IO handle
 my $DELAY = 5;    # delay between getting a/c position
 my $MSDELAY = 200; # max wait before keyboard sampling
 my $gps_next_time = 5 * 60; # gps update each ?? minutes
