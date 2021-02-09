@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 # NAME: msvclog.pl
 # AIM: Read a MSVC build log output, and report success and failed projects
+# 2021/02/07 - Show warning,error,... line -v5 show all, -v2 1 sample of each value
 # 03/05/2020 - Adj for VS 2019 output
 # 2020-03-22 - Small adj for VS 2017 ouptut...
 # 2020-03-04 - Accept 'CPack: ...' messages...
@@ -38,7 +39,8 @@ my $outfile = $temp_dir."/temp.$pgmname.txt";
 open_log($outfile);
 
 # user variables
-my $VERS = "0.1.3 2020-05-03";  # adj for VS 2019 ouptut...
+my $VERS = "0.1.4 2021-02-07";  # show warnings, errors, ... list if VERB2
+##my $VERS = "0.1.3 2020-05-03";  # adj for VS 2019 ouptut...
 ##my $VERS = "0.1.2 2020-03-22";  # adj for VS 2017 ouptut...
 ##my $VERS = "0.1.1 2018-06-22";  # move to 'scripts'...
 ##my $VERS = "0.1.0 2018-05-21";
@@ -79,6 +81,8 @@ my $curr_out = '';
 my %warn_disabled = ();
 my %flags_seen = ();
 my $had_end_cmake = 0;
+my @sample_warns = ();
+my @sample_errors = ();
 
 sub VERB1() { return $verbosity >= 1; }
 sub VERB2() { return $verbosity >= 2; }
@@ -863,6 +867,7 @@ sub process_in_file($) {
                 $hadprj = 1;
             }
         } elsif ($line =~ /Time\s+Elapsed\s+(.+)$/) {
+            # NOTE: This line ONLY output, if -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON is issued
             ###########################################
             #### TERMINATION OF 1 OR MORE PROJECTS ####
             ###########################################
@@ -911,6 +916,9 @@ sub process_in_file($) {
                 }
                 prt("\n$msg\n") if (length($msg) && VERB1());  # 2016-11-04
             }
+            push(@sample_warns, @warns) if (@warns);
+            push(@sample_errors, @error) if (@error);
+            push(@sample_errors, @fatal) if (@fatal);
             @warns = ();
             @error = ();
             @fatal = ();
@@ -1326,8 +1334,11 @@ sub process_in_file($) {
            push(@arr,$line);
         }
         $had_blank = 0;
-    }
+    } # for each line in file
     prt("\n");
+    push(@sample_warns, @warns) if (@warns);
+    push(@sample_errors, @error) if (@error);
+    push(@sample_errors, @fatal) if (@fatal);
     ####################################################
     ### sumary
     ####################################################
@@ -1405,6 +1416,39 @@ sub process_in_file($) {
     if ($cnt) {
         prt("Got $cnt MISSING FILES! ".join(" ",@arr)."\n");
     }
+    if (VERB5()) {
+        @arr = sort keys %warn_lines;
+        $cnt = scalar @arr;
+        if ($cnt) {
+            prt("\n[v5] Total $cnt warning lines...\n");
+            prt( join("\n",@arr)."\n\n" );
+        }
+        @arr = sort keys %error_lines;
+        $cnt = scalar @arr;
+        if ($cnt) {
+            prt("\n[v5] Total $cnt error lines...\n");
+            prt( join("\n",@arr)."\n\n" );
+        }
+    } elsif (VERB2()) {
+        @arr = keys %warn_lines;
+        $val = scalar @arr;
+        @arr = @sample_warns;
+        $cnt = scalar @arr;
+        if ($cnt) {
+            prt("\n[v2] Sample $cnt warning lines... Add -v5 to see all $val.\n");
+            prt( join("\n",@arr)."\n\n" );
+        }
+        @arr = keys %error_lines;
+        $val = scalar @arr;
+        @arr = @sample_errors;
+        $cnt = scalar @arr;
+        if ($cnt) {
+            prt("\n[v2] Sample $cnt error lines... Add -v5 to see all $val.\n");
+            prt( join("\n",@arr)."\n\n" );
+        }
+    }
+    prt("Done $lncnt lines, from [$inf]...\n"); # added 2021-02-07
+
 }
 
 sub show_flags_seen() {
