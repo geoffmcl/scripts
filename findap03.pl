@@ -882,12 +882,16 @@ sub rwy_xg_stg($$$$$$$$) {
     $az4 += 360 if ($az4 < 0);
     $res = fg_geo_direct_wgs_84($elat1,$elon1, $az3, $hwidm, \$lat1, \$lon1, \$az5);
     $xg .= "$lon1 $lat1\n";
+    add_to_bbox($lon1,$lat1);
     $res = fg_geo_direct_wgs_84($elat1,$elon1, $az4, $hwidm, \$lat2, \$lon2, \$az5);
     $xg .= "$lon2 $lat2\n";
+    add_to_bbox($lon2,$lat2);
     $res = fg_geo_direct_wgs_84($elat2,$elon2, $az4, $hwidm, \$lat3, \$lon3, \$az5);
     $xg .= "$lon3 $lat3\n";
+    add_to_bbox($lon3,$lat3);
     $res = fg_geo_direct_wgs_84($elat2,$elon2, $az3, $hwidm, \$lat4, \$lon4, \$az5);
     $xg .= "$lon4 $lat4\n";
+    add_to_bbox($lon4,$lat4);
     $xg .= "$lon1 $lat1\n";
     $xg .= "NEXT\n";
 
