@@ -1258,7 +1258,7 @@ sub process_in_file($) {
                         prt("$lnn: $line\n");
                     }
                 } elsif ($line =~ /^Build\s+/) {
-                    if ($line =~ /(\d{4}-\d{2}-\d{2})/) {
+                    if ($line =~ /(\d{4}(-|\/)\d{2}(-|\/)\d{2})/) {
                         $tmp = $1;
                         # 'Begin 2016-10-16 19:22:23.88 '
                         prt("$lnn: $line\n");
@@ -1266,6 +1266,8 @@ sub process_in_file($) {
                         $tmp = $1;
                         # Begin 17/06/2016 14:18:43.90 
                         prt("$lnn: $line\n");
+                    } else {
+                        prtw("WARNING:$lnn: $line ** CHECK DATE FORMAT ***\n");
                     }
                 } elsif ($line =~ /^(debug|release)\s+build\s+error/) {
                     # batch error exit
